@@ -6,7 +6,8 @@ python:
   - "3.6"
 # command to install dependencies
 install:
-  - pip install -r pycryptodome
+  - pip install pycryptodome
+
 # command to run tests
 script:
   - python test.py
