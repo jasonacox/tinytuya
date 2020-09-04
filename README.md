@@ -6,7 +6,7 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module to control and monitor WiFi [Tuya](https://en.tuya.com/) compatible Smart Devices (Plugs, Switches, Lights, Window Covers, etc.).
+This python module to control and monitor WiFi [Tuya](https://en.tuya.com/) compatible Smart Devices (Plugs, Switches, Lights, Window Covers, etc.).  This is a compatible replacement for the `pytuya` PyPi module.
 
 NOTE This module requires the devices to have already been **activated** by Smart Life App (or similar).
 
