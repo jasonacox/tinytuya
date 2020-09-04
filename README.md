@@ -1,5 +1,7 @@
 # TinyTuya
 
+[![Build Status](https://travis-ci.org/jasonacox/tinytuya.svg?branch=master)](https://travis-ci.org/jasonacox/tinytuya)
+
 Python module to interface with Tuya WiFi smart devices
 
 ## Description
