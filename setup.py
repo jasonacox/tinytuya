@@ -2,7 +2,7 @@ import setuptools
 
 from tinytuya import __version__
 
-with open("tuyapower/README.md", "r") as fh:
+with open("tinytuya/README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
