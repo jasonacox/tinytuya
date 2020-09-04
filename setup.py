@@ -1,63 +1,27 @@
-import codecs
-import os
-import sys
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+import setuptools
 
-from pytuya.const import __author__, __version__
+from tinytuya import __version__
 
+with open("tuyapower/README.md", "r") as fh:
+    long_description = fh.read()
 
-if len(sys.argv) <= 1:
-    print("""
-Suggested setup.py parameters:
-    * build
-    * install
-    * sdist  --formats=zip
-    * sdist  # NOTE requires tar/gzip commands
-
-PyPi:
-
-    twine upload dist/*
-
-""")
-
-here = os.path.abspath(os.path.dirname(__file__))
-
-readme_filename = os.path.join(here, 'README.md')
-if os.path.exists(readme_filename):
-    with codecs.open(readme_filename, encoding='utf-8') as f:
-        long_description = f.read()
-else:
-    long_description = None
-
-
-setup(
-    name='pytuya',
-    author=__author__,
+setuptools.setup(
+    name="tinytuya",
     version=__version__,
-    description='Python interface to ESP8266MOD WiFi smart devices from Shenzhen Xenon',
+    author="Jason Cox",
+    author_email="jason@jasonacox.com",
+    description="Python module to interface with Tuya WiFi smart devices",
     long_description=long_description,
-    long_description_content_type='text/markdown',
-    url='https://github.com/clach04/python-tuya',
-    author_email='',
-    license='MIT',
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Topic :: Home Automation',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
-        'Topic :: Home Automation',
-    ],
-    keywords='home automation',
-    packages=['pytuya'],
-    platforms='any',
+    long_description_content_type="text/markdown",
+    url='https://github.com/jasonacox/tinytuya',
+    packages=setuptools.find_packages(),
     install_requires=[
-          'pyaes',  # NOTE this is optional, AES can be provided via PyCrypto or PyCryptodome
-      ],
+        'pyaes',  # NOTE this is optional, AES can be provided via PyCrypto or PyCryptodome
+    ],
+    classifiers=[
+        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
 )
