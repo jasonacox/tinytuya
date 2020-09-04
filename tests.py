@@ -16,7 +16,7 @@ import struct
 log = logging.getLogger('tinytuya')
 logging.basicConfig()  # TODO include function name/line numbers in log
 log.setLevel(level=logging.INFO)
-#log.setLevel(level=logging.DEBUG)  # Debug hack!
+log.setLevel(level=logging.DEBUG)  # Debug hack!
 
 import tinytuya
 
@@ -135,6 +135,7 @@ def mock_send_receive_set_white(data):
 class TestXenonDevice(unittest.TestCase):
     def test_set_timer(self):
         d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
         d._send_receive = MagicMock(side_effect=mock_send_receive_set_timer)
 
         # Reset call_counter and start test
@@ -149,6 +150,7 @@ class TestXenonDevice(unittest.TestCase):
 
     def test_set_status(self):
         d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
         d._send_receive = MagicMock(side_effect=mock_send_receive_set_status)
 
         result = d.set_status(True, 1)
@@ -160,6 +162,7 @@ class TestXenonDevice(unittest.TestCase):
 
     def test_status(self):
         d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
         d._send_receive = MagicMock(side_effect=mock_send_receive_status)
 
         result = d.status()
@@ -169,6 +172,7 @@ class TestXenonDevice(unittest.TestCase):
         
     def test_set_colour(self):
         d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
         d._send_receive = MagicMock(side_effect=mock_send_receive_set_colour)
 
         result = d.set_colour(255,255,255)
@@ -179,6 +183,7 @@ class TestXenonDevice(unittest.TestCase):
 
     def test_set_white(self):
         d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
         d._send_receive = MagicMock(side_effect=mock_send_receive_set_white)
 
         result = d.set_white(255, 255)

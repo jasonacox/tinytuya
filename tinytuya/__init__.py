@@ -46,7 +46,7 @@
     For protocol reverse engineering 
   * PyTuya https://github.com/clach04/python-tuya by clach04
     The origin of this python module (now abandoned)
-  * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
+  * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
     
 """
@@ -135,7 +135,6 @@ class AESCipher(object):
     def _unpad(s):
         return s[:-ord(s[len(s)-1:])]
 
-
 def bin2hex(x, pretty=False):
     if pretty:
         space = ' '
@@ -146,7 +145,6 @@ def bin2hex(x, pretty=False):
     else:
         result = ''.join('%02X%s' % (y, space) for y in x)
     return result
-
 
 def hex2bin(x):
     if IS_PY2:
@@ -220,32 +218,12 @@ class XenonDevice(object):
         Args:
             payload(bytes): Data to send.
         """
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            s.settimeout(self.connection_timeout)
-            s.connect((self.address, self.port))
-        except Exception as e:
-            print('Failed to connect to %s. Raising Exception.' % (self.address)) 
-            raise e   
-        try:
-            s.send(payload)
-        except Exception as e:
-            print('Failed to send payload to %s. Raising Exception.' % (self.address)) 
-            raise e   
-
-        try:
-            data = s.recv(1024)
-            # sometimes the first packet does not contain data (typically 28 bytes): need to read again
-            if len(data) < 40:
-                time.sleep(0.1)
-                data = s.recv(1024)
-
-        except Exception as e:
-            print('Failed to receive data from %s. Raising Exception.' % (self.address)) 
-            #s.close()
-            raise e   
-
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.settimeout(self.connection_timeout)
+        s.connect((self.address, self.port))
+        s.send(payload)
+        data = s.recv(1024)
         s.close()
         return data
 

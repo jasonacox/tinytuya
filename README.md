@@ -49,7 +49,7 @@ For a helpful video walk-through of getting the KEYS you can also watch this gre
 ## Programming with TinyTuya
 
 ### TinyTuya Module Classes and Functions 
-
+```
  Classes
     OutletDevice(dev_id, address, local_key=None)
     CoverDevice(dev_id, address, local_key=None)
@@ -84,15 +84,22 @@ For a helpful video walk-through of getting the KEYS you can also watch this gre
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
+```
 
 ### Example Usage
+
+See the sample python script [test.py](test.py) for an OutletDevice example.
+
 ```python
     import tinytuya
 
     d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    data = d.status()  # NOTE this does NOT require a valid key
+    d.set_version(3.3)
+    data = d.status()  # NOTE this does NOT require a valid key vor version 3.1
+
+    # Show status of first controlled switch on device
     print('Dictionary %r' % data)
-    print('state (bool, true is ON) %r' % data['dps']['1'])  # Show status of first controlled switch on device
+    print('State (bool, true is ON) %r' % data['dps']['1'])  
 
     # Toggle switch state
     switch_state = data['dps']['1']
@@ -100,11 +107,11 @@ For a helpful video walk-through of getting the KEYS you can also watch this gre
     if data:
         print('set_status() result %r' % data)
 
-    # on a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
+    # On a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
     data = d.set_status(False, 4)
     if data:
         print('set_status() result %r' % data)
-        print('set_status() extrat %r' % data[20:-8])
+        print('set_status() extra %r' % data[20:-8])
 ```
 
 ### Encryption notes

@@ -9,4 +9,4 @@ install:
   - pip install -r pycryptodome
 # command to run tests
 script:
-  - python tests.py
+  - python test.py

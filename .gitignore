@@ -99,3 +99,8 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# local testing
+test.sh
+tests.py
+.vscode/settings.json
