@@ -64,8 +64,9 @@ For a helpful video walk-through of getting the KEYS you can also watch this gre
 
  Functions 
     json = status()          # returns json payload
-    set_version(version)     #  3.1 [default] or 3.3
-    set_dpsUsed(dpsUsed)     
+    set_version(version)     # 3.1 [default] or 3.3
+    set_dpsUsed(dpsUsed)     # set data points (DPs)
+    set_retry(retry=True)    # retry if response payload is truncated
     set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)  # Set int value of any index.
     turn_on(switch=1):

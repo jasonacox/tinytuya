@@ -18,7 +18,8 @@
  Functions 
     json = status()          # returns json payload
     set_version(version)     #  3.1 [default] or 3.3
-    set_dpsUsed(dpsUsed)     
+    set_dpsUsed(dpsUsed)     # set data points (DPs)
+    set_retry(retry=True)    # retry if response payload is truncated
     set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)  # Set int value of any index.
     turn_on(switch=1):
@@ -69,7 +70,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 0)
+version_tuple = (1, 0, 1)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -201,6 +202,7 @@ class XenonDevice(object):
         self.local_key = local_key.encode('latin1')
         self.connection_timeout = connection_timeout
         self.version = 3.1
+        self.retry = True
         if len(dev_id) == 22:
             self.dev_type = 'device22'
         else:
@@ -224,6 +226,10 @@ class XenonDevice(object):
         s.connect((self.address, self.port))
         s.send(payload)
         data = s.recv(1024)
+        # Some devices fail to send full payload in first response
+        if self.retry and len(data) < 40:  
+            time.sleep(0.1)
+            data = s.recv(1024)  # try again
         s.close()
         return data
 
@@ -232,6 +238,9 @@ class XenonDevice(object):
 
     def set_dpsUsed(self, dpsUsed):
         self.dpsUsed = dpsUsed
+        
+    def set_retry(self, retry):
+        self.retry = retry
 
     def generate_payload(self, command, data=None):
         """
