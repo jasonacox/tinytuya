@@ -36,13 +36,13 @@ Pulling data from Tuya devices on your network requires that you know the Device
     ```
 3. For Device KEY: If your device is running the latest protocol version 3.3 (often seen with Firmware 1.0.5 or above), you will need to obtain the Device Key. This is used to connect with the device and decrypt the response data. The following are instructions to do this and are based on <https://github.com/codetheweb/tuyapi/blob/master/docs/SETUP.md>:
 
-* **From iot.tuya.com**
+  * **From iot.tuya.com**
     * Create a Tuya developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
     * Go to Cloud Development -> Create a project  (note the Authorization Key: *ID* & *Secret* for below)
     * Go to Cloud Development -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
     * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
     * Verify under Cloud Development -> select your project -> API Setting that the following API groups have status "Open": Authorization management, Device Management and Device Control ([see here](https://user-images.githubusercontent.com/5875512/92361673-15864000-f132-11ea-9a01-9c715116456f.png))
-    * **From your Local Workstation**
+  * **From your Local Workstation**
     * From your PC/Mac run this to install the Tuya CLI: `npm i @tuyapi/cli -g`
     * Next run: `tuya-cli wizard` and it will prompt you for the API *ID* key and *Secret* from your Tuya IoT project we noted above.  The Virtual ID is the Device ID from step 2 above or in the Device List on your Tuya IoT project.
     * The wizard will take a while but eventually print a JSON looking output that contains the name, id and key of the registered device(s).  This is the KEY (PLUGKEY) you will use to poll your device.
@@ -56,18 +56,19 @@ For a helpful video walk-through of getting the KEYS you can also watch this gre
 
 ### TinyTuya Module Classes and Functions 
 ```
- Classes
-    OutletDevice(dev_id, address, local_key=None)
-    CoverDevice(dev_id, address, local_key=None)
-    BulbDevice(dev_id, address, local_key=None)
+Classes
+    OutletDevice(dev_id, address, local_key=None, dev_type='default')
+    CoverDevice(dev_id, address, local_key=None, dev_type='default')
+    BulbDevice(dev_id, address, local_key=None, dev_type='default')
 
         dev_id (str): Device ID e.g. 01234567891234567890
         address (str): Device Network IP Address e.g. 10.0.1.99
         local_key (str, optional): The encryption key. Defaults to None.
+        dev_type (str): Device type for payload options (see below)
 
  Functions 
     json = status()          # returns json payload
-    set_version(version)     # 3.1 [default] or 3.3
+    set_version(version)     #  3.1 [default] or 3.3
     set_dpsUsed(dpsUsed)     # set data points (DPs)
     set_retry(retry=True)    # retry if response payload is truncated
     set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
