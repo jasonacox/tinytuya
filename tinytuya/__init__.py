@@ -7,13 +7,14 @@
  For more information see https://github.com/jasonacox/tinytuya
 
  Classes
-    OutletDevice(dev_id, address, local_key=None)
-    CoverDevice(dev_id, address, local_key=None)
-    BulbDevice(dev_id, address, local_key=None)
+    OutletDevice(dev_id, address, local_key=None, dev_type='default')
+    CoverDevice(dev_id, address, local_key=None, dev_type='default')
+    BulbDevice(dev_id, address, local_key=None, dev_type='default')
 
         dev_id (str): Device ID e.g. 01234567891234567890
         address (str): Device Network IP Address e.g. 10.0.1.99
         local_key (str, optional): The encryption key. Defaults to None.
+        dev_type (str): Device type for payload options (see below)
 
  Functions 
     json = status()          # returns json payload
@@ -70,12 +71,12 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 1)
+version_tuple = (1, 0, 2)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
 log = logging.getLogger(__name__)
-#log.setLevel(level=logging.DEBUG)  # Uncomment to Debug 
+#logging.basicConfig(level=logging.DEBUG) # Uncomment to Debug 
 
 log.debug('%s version %s', __name__, __version__)
 log.debug('Python %s on %s', sys.version, sys.platform)
@@ -86,14 +87,48 @@ else:
     log.debug('Using PyCrypto %r', Crypto.version_info)
     log.debug('Using PyCrypto from %r', Crypto.__file__)
 
-SET = 'set'
-STATUS = 'status'
+## Tuya Command Types
+UDP = 0
+AP_CONFIG = 1
+ACTIVE = 2
+BIND = 3
+RENAME_GW = 4
+RENAME_DEVICE = 5
+UNBIND = 6
+CONTROL = 7         # set values
+STATUS = 8
+HEART_BEAT = 9
+DP_QUERY = 10       # get data points
+QUERY_WIFI = 11
+TOKEN_BIND = 12
+CONTROL_NEW = 13
+ENABLE_WIFI = 14
+DP_QUERY_NEW = 16
+SCENE_EXECUTE = 17
+UDP_NEW = 19
+AP_CONFIG_NEW = 20
+LAN_GW_ACTIVE = 240
+LAN_SUB_DEV_REQUEST = 241
+LAN_DELETE_SUB_DEV = 242
+LAN_REPORT_SUB_DEV = 243
+LAN_SCENE = 244
+LAN_PUBLISH_CLOUD_CONFIG = 245
+LAN_PUBLISH_APP_CONFIG = 246
+LAN_EXPORT_APP_CONFIG = 247
+LAN_PUBLISH_SCENE_PANEL = 248
+LAN_REMOVE_GW = 249
+LAN_CHECK_GW_UPDATE = 250
+LAN_GW_UPDATE = 251
+LAN_SET_GW_CHANNEL = 252
 
+## Protocol Versions
 PROTOCOL_VERSION_BYTES_31 = b'3.1'
 PROTOCOL_VERSION_BYTES_33 = b'3.3'
 
+## Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
 
+## Cryptography Helpers
 class AESCipher(object):
     def __init__(self, key):
         self.bs = 16
@@ -153,37 +188,59 @@ def hex2bin(x):
     else:
         return bytes.fromhex(x)
 
-# This is intended to match requests.json payload at https://github.com/codetheweb/tuyapi
-# Items device20 and device22 are to be used depending on the length of dev_id (20 or 22 chars)
+# Tuya Device Dictionary - Commands and Payload Template
+# See requests.json payload at https://github.com/codetheweb/tuyapi
+
 payload_dict = {
-  "device20": {
-    "status": {
-      "hexByte": "0a",
-      "command": {"gwId": "", "devId": ""}
-    },
-    "set": {
+  # Default Device
+  "default": {
+    CONTROL: {   # Set Control Values on Device
       "hexByte": "07",
       "command": {"devId": "", "uid": "", "t": ""}
     },
-    "prefix": "000055aa00000000000000",    # Next byte is command byte ("hexByte") some zero padding, then length of remaining payload, i.e. command + suffix (unclear if multiple bytes used for length, zero padding implies could be more than one byte)
-    "suffix": "000000000000aa55"
-  },
-  "device22": {
-    "status": {
+    STATUS: {    # Get Status from Device
+      "hexByte": "08",
+      "command": {"gwId": "", "devId": ""}
+    },    
+    HEART_BEAT: {
+      "hexByte": "09",
+      "command": {}
+    },
+    DP_QUERY: {  # Get Data Points from Device
+      "hexByte": "0a",
+      "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
+    },
+    CONTROL_NEW: {
       "hexByte": "0d",
       "command": {"devId": "", "uid": "", "t": ""}
     },
-    "set": {
+    DP_QUERY_NEW: {
+      "hexByte": "0f",
+      "command": {"devId": "", "uid": "", "t": ""}
+    },
+    "prefix": "000055aa00000000000000",    
+        # Next byte is command "hexByte" + length of remaining payload + command + suffix 
+        # (unclear if multiple bytes used for length, zero padding implies could be more 
+        # than one byte)
+    "suffix": "000000000000aa55"
+  },
+  # Special Case Device 
+  "device22": {
+    DP_QUERY: {  # Get Data Points from Device
+      "hexByte": "0d",  # Uses CONTROL_NEW command for some reason
+      "command": {"devId": "", "uid": "", "t": ""}
+    },
+    CONTROL: {   # Set Control Values on Device
       "hexByte": "07",
       "command": {"devId": "", "uid": "", "t": ""}
     },
-    "prefix": "000055aa00000000000000",    # Next byte is command byte ("hexByte") some zero padding, then length of remaining payload, i.e. command + suffix (unclear if multiple bytes used for length, zero padding implies could be more than one byte)
+    "prefix": "000055aa00000000000000", 
     "suffix": "000000000000aa55"
   }
 }
 
 class XenonDevice(object):
-    def __init__(self, dev_id, address, local_key=None, connection_timeout=10):
+    def __init__(self, dev_id, address, local_key=None, dev_type="default", connection_timeout=10):
         """
         Represents a Tuya device.
         
@@ -203,11 +260,7 @@ class XenonDevice(object):
         self.connection_timeout = connection_timeout
         self.version = 3.1
         self.retry = True
-        if len(dev_id) == 22:
-            self.dev_type = 'device22'
-        else:
-            self.dev_type = 'device20'
-
+        self.dev_type = dev_type
         self.port = 6668  # default - do not expect caller to pass in
 
     def __repr__(self):
@@ -249,7 +302,7 @@ class XenonDevice(object):
         Args:
             command(str): The type of command.
                 This is one of the entries from payload_dict
-            data(dict, optional): The data to be send.
+            data(dict, optional): The data to send.
                 This is what will be passed via the 'dps' entry
         """
         json_data = payload_dict[self.dev_type][command]['command']
@@ -260,13 +313,13 @@ class XenonDevice(object):
         if 'devId' in json_data:
             json_data['devId'] = self.id
         if 'uid' in json_data:
-            json_data['uid'] = self.id  # still use id, no seperate uid
+            json_data['uid'] = self.id  # use device ID
         if 't' in json_data:
             json_data['t'] = str(int(time.time()))
 
         if data is not None:
             json_data['dps'] = data
-        if command_hb == '0d':
+        if command_hb == '0d':   # CONTROL_NEW
             json_data['dps'] = self.dpsUsed
 
         # Create byte buffer from hex data
@@ -282,7 +335,7 @@ class XenonDevice(object):
             if command_hb != '0a':
                 # add the 3.3 header
                 json_payload = PROTOCOL_VERSION_BYTES_33 + b"\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
-        elif command == SET:
+        elif command == CONTROL:  
             # need to encrypt
             self.cipher = AESCipher(self.local_key)  # expect to connect and then disconnect to set new
             json_payload = self.cipher.encrypt(json_payload)
@@ -308,19 +361,19 @@ class XenonDevice(object):
         return buffer
     
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key=None, dev_type=None):
+    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
         super(Device, self).__init__(dev_id, address, local_key, dev_type)
     
     def status(self):
         log.debug('status() entry (dev_type is %s)', self.dev_type)
         # open device, send request, then close connection
-        payload = self.generate_payload('status')
+        payload = self.generate_payload(DP_QUERY)
 
         data = self._send_receive(payload)
         log.debug('status received data=%r', data)
 
         result = data[20:-8]  # hard coded offsets
-        if self.dev_type != 'device20':
+        if self.dev_type != 'default':
             result = result[15:]
 
         log.debug('result=%r', result)
@@ -429,12 +482,12 @@ class OutletDevice(Device):
         address (str): The network address.
         local_key (str, optional): The encryption key. Defaults to None.
     """
-    def __init__(self, dev_id, address, local_key=None):
-        super(OutletDevice, self).__init__(dev_id, address, local_key)
+    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+        super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type)
 
 class CoverDevice(Device):
     """
-    Represents a Tuya based Smart Powered Windows Cover.
+    Represents a Tuya based Smart Window Cover.
     
     Args:
         dev_id (str): The device id.
@@ -449,16 +502,8 @@ class CoverDevice(Device):
                 '101':'backlight',
                 }
 
-    def __init__(self, dev_id, address, local_key=None):
-        print('%s version %s' % ( __name__, version))
-        print('Python %s on %s' % (sys.version, sys.platform))
-        if Crypto is None:
-            print('Using pyaes version ', pyaes.VERSION)
-            print('Using pyaes from ', pyaes.__file__)
-        else:
-            print('Using PyCrypto ', Crypto.version_info)
-            print('Using PyCrypto from ', Crypto.__file__)
-        super(CoverDevice, self).__init__(dev_id, address, local_key)
+    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+        super(CoverDevice, self).__init__(dev_id, address, local_key, dev_type)
     
     def open_cover(self, switch=1):
         """Open the cover"""
@@ -499,8 +544,8 @@ class BulbDevice(Device):
                 '5':'colour',
                 }
 
-    def __init__(self, dev_id, address, local_key=None):
-        super(BulbDevice, self).__init__(dev_id, address, local_key)
+    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+        super(BulbDevice, self).__init____init__(dev_id, address, local_key, dev_type)
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b):
