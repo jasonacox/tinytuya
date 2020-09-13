@@ -759,13 +759,13 @@ def appenddevice(newdevice, devices):
 
 # Scan function shortcut
 def scan(maxretry = MAXCOUNT):
-    """Sans your network for smart plug devices with output to stdout
+    """Scans your network for Tuya devices with output to stdout
     """
     d = deviceScan(True,maxretry)
 
 # Scan function
 def deviceScan(verbose = False,maxretry = MAXCOUNT):
-    """Scans your network for smart plug devices
+    """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
     Parameters:
