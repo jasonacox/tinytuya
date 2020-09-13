@@ -23,18 +23,18 @@ Install pip and python libraries if you haven't already.
 
 ## Tuya Device Preparation
 
-Pulling data from Tuya devices on your network requires that you know the Device *IP*, *ID*, *VERSION* and *KEY* (for 3.3 devices). You can use the `tuyapower` module which includes a scanner function to find Smart Devices on your network.  This will scan the network and identify Device's *IP*, *ID* and *VERSION*.  It will _not_ be able to get the local *KEY*.  Since newer 3.3 devices will require the *KEY*, the following steps will help you determine the *KEY*s for your devices:
+Pulling data from Tuya devices on your network requires that you know the Device *IP*, *ID*, *VERSION* and *KEY* (for 3.3 devices). You can use the built in scanner in the `tinytuya` module to find Tuya Devices on your network.  This will scan the network and identify Device's *IP*, *ID* and *VERSION*.  It will _not_ be able to get the local *KEY*.  Since newer 3.3 devices will require the *KEY*, the following steps will help you determine the *KEY*s for your devices:
 
-### Get the Tuya Device KEY
+### Get the Tuya Device Local KEY
 
 1. Download the "Smart Life" - Smart Living app for iPhone or Android. Pair with your smart plug (this is important as you cannot monitor a plug that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
     * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
-2. For Device IP, ID and VERSION: Run the tuyapower scan to get a list of Tuya devices on your network along with their device IP, ID and VERSION number (3.1 or 3.3):
+2. For Device IP, ID and VERSION: Run the tinytuya scan to get a list of Tuya devices on your network along with their device IP, ID and VERSION number (3.1 or 3.3):
     ```bash
-    python3 -m tuyapower
+    python3 -m tinytuya
     ```
-3. For Device KEY: If your device is running the latest protocol version 3.3 (often seen with Firmware 1.0.5 or above), you will need to obtain the Device Key. This is used to connect with the device and decrypt the response data. The following are instructions to do this and are based on <https://github.com/codetheweb/tuyapi/blob/master/docs/SETUP.md>:
+3. Device Local KEY: Devices running the latest protocol version 3.3 (often seen with Firmware 1.0.5 or above) will require a _Device Local KEY_ to read the status. Both 3.1 and 3.3 devices will require a _Device Local KEY_ to control the device. The _Device Local KEY_ is used to connect with the device and decrypt the response data. Follow these instructions to get the _Device Local KEY_:
 
   * **From iot.tuya.com**
     * Create a Tuya developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
@@ -45,9 +45,9 @@ Pulling data from Tuya devices on your network requires that you know the Device
   * **From your Local Workstation**
     * From your PC/Mac run this to install the Tuya CLI: `npm i @tuyapi/cli -g`
     * Next run: `tuya-cli wizard` and it will prompt you for the API *ID* key and *Secret* from your Tuya IoT project we noted above.  The Virtual ID is the Device ID from step 2 above or in the Device List on your Tuya IoT project.
-    * The wizard will take a while but eventually print a JSON looking output that contains the name, id and key of the registered device(s).  This is the KEY (PLUGKEY) you will use to poll your device.
+    * The wizard will take a while but eventually print a JSON looking output that contains the name, id and key of the registered device(s).  This is the _Device Local KEY_ (also called LOCAL_KEY) you will use to poll your device.
 
-Note: If you reset or re-pair your smart devices, they will reset their local KEY and you will need to repeat these steps above.
+Note: If you ever reset or re-pair your smart devices, they will reset their _Device Local KEY_ and you will need to repeat these steps above.
 
 For a helpful video walk-through of getting the KEYS you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
 
@@ -129,6 +129,30 @@ These devices uses AES encryption, this is not available in Python standard libr
  1) PyCryptodome
  2) PyCrypto
  3) pyaes (note Python 2.x support requires https://github.com/ricmoo/pyaes/pull/13)
+
+
+### Scan Tool 
+The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their IP, Device ID, ProductID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
+
+You can run the scanner from the command line using this:
+```bash
+python -m tinytuya
+```
+
+By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
+
+```bash
+# command line
+python -m tinytuya 50
+```
+
+```python
+# invoke verbose interactive scan
+tinytuya.scan(50)
+
+# return payload of devices
+devices = tinytuya.deviceScan(false, 50)
+```
 
 ## Credits
 

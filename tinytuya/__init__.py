@@ -53,6 +53,7 @@
     
 """
 
+from __future__ import print_function   # python 2.7 support
 import base64
 from hashlib import md5
 import json
@@ -71,7 +72,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 3)
+version_tuple = (1, 0, 4)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -240,7 +241,7 @@ payload_dict = {
 }
 
 class XenonDevice(object):
-    def __init__(self, dev_id, address, local_key=None, dev_type="default", connection_timeout=10):
+    def __init__(self, dev_id, address, local_key="", dev_type="default", connection_timeout=10):
         """
         Represents a Tuya device.
         
@@ -361,7 +362,7 @@ class XenonDevice(object):
         return buffer
     
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+    def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(Device, self).__init__(dev_id, address, local_key, dev_type)
     
     def status(self):
@@ -482,7 +483,7 @@ class OutletDevice(Device):
         address (str): The network address.
         local_key (str, optional): The encryption key. Defaults to None.
     """
-    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+    def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type)
 
 class CoverDevice(Device):
@@ -502,7 +503,7 @@ class CoverDevice(Device):
                 '101':'backlight',
                 }
 
-    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+    def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(CoverDevice, self).__init__(dev_id, address, local_key, dev_type)
     
     def open_cover(self, switch=1):
@@ -544,7 +545,7 @@ class BulbDevice(Device):
                 '5':'colour',
                 }
 
-    def __init__(self, dev_id, address, local_key=None, dev_type="default"):
+    def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type)
 
     @staticmethod
@@ -720,3 +721,166 @@ class BulbDevice(Device):
                 state[self.DPS_2_STATE[key]]=status[self.DPS][key]
 
         return state
+
+
+# Utility Functions
+
+# SCAN network for Tuya devices
+MAXCOUNT = 15       # How many tries before stopping
+UDPPORT = 6666      # Tuya 3.1 UDP Port
+UDPPORTS = 6667     # Tuya 3.3 encrypted UDP Port
+TIMEOUT = 3.0       # Seconds to wait for a broadcast
+
+# UDP packet payload decryption - credit to tuya-convert 
+pad = lambda s: s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
+unpad = lambda s: s[:-ord(s[len(s) - 1:])]
+encrypt = lambda msg, key: AES.new(key, AES.MODE_ECB).encrypt(pad(msg).encode())
+decrypt = lambda msg, key: unpad(AES.new(key, AES.MODE_ECB).decrypt(msg)).decode()
+udpkey = md5(b"yGAdlopoPVldABfn").digest()
+decrypt_udp = lambda msg: decrypt(msg, udpkey)
+
+# Return positive number or zero
+def floor(x):
+    if x > 0:
+            return x
+    else:
+            return 0
+
+def appenddevice(newdevice, devices):
+    if(newdevice['ip'] in devices):
+        return True
+    """
+    for i in devices:
+        if i['ip'] == newdevice['ip']:
+                return True
+    """
+    devices[newdevice['ip']] = newdevice
+    return False
+
+# Scan function shortcut
+def scan(maxretry = MAXCOUNT):
+    """Sans your network for smart plug devices with output to stdout
+    """
+    d = deviceScan(True,maxretry)
+
+# Scan function
+def deviceScan(verbose = False,maxretry = MAXCOUNT):
+    """Scans your network for smart plug devices
+        devices = tinytuya.deviceScan(verbose)
+
+    Parameters:
+        verbose = True or False, print formatted output to stdout
+
+    Response: 
+        devices = Dictionary of all devices found
+
+    To unpack data, you can do something like this:
+
+        devices = tinytuya.deviceScan()
+        for ip in devices:
+            id = devices[ip]['gwId']
+            key = devices[ip]['productKey']
+            vers = devices[ip]['version']
+            dps = devices[ip]['dps']
+
+    """
+    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) 
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    client.bind(("", UDPPORT))
+    client.settimeout(TIMEOUT) 
+    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) 
+    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    clients.bind(("", UDPPORTS))
+    clients.settimeout(TIMEOUT)
+
+    if(verbose):
+        print("Scanning on UDP ports %s and %s for devices (%s retries)...\n"%(UDPPORT,UDPPORTS,maxretry))
+
+    # globals
+    devices={}
+    count = 0
+    counts = 0
+    spinnerx = 0
+    spinner = "|/-\\|"
+
+    while (count + counts) <= maxretry:
+        note = 'invalid'
+        if(verbose):
+            print("Scanning... %s\r" % (spinner[spinnerx]), end = '')
+            spinnerx = (spinnerx + 1) % 4
+
+        if (count <= counts):  # alternate between 6666 and 6667 ports
+            try:
+                data, addr = client.recvfrom(4048)
+            except:
+                # Timeout
+                count = count + 1
+                continue
+        else:
+            try:
+                data, addr = clients.recvfrom(4048)
+            except:
+                # Timeout
+                counts = counts + 1
+                continue
+        ip = addr[0]
+        gwId = productKey = version = ""
+        result = data
+        try: 
+            result = data[20:-8]
+            try:
+                result = decrypt_udp(result)
+            except:
+                result = result.decode()
+
+            result = json.loads(result)
+
+            note = 'Valid'
+            ip = result['ip']
+            gwId = result['gwId']
+            productKey = result['productKey']
+            version = result['version']
+        except:
+            print("*  Unexpected payload=%r\n", result)
+            result = {"ip": ip}
+            note = "Unknown"
+
+        # check to see if we have seen this device before and add to devices array
+        if appenddevice(result, devices) == False:
+            # new device found - back off count if we keep getting new devices
+            if(version=='3.1'):
+                count = floor(count - 1)
+            else:
+                counts = floor(counts - 1)
+            if(verbose):
+                print("FOUND Device [%s payload]: %s\n    ID = %s, product = %s, Version = %s" % (note,ip,gwId,productKey,version))
+            try:
+                if(version == '3.1'):
+                    # Version 3.1 - no device key requires - poll for status data points
+                    d = OutletDevice(gwId, ip)
+                    d.set_version(3.1)
+                    dpsdata = d.status()
+                    devices[ip]['dps'] = dpsdata
+                    if(verbose):
+                        print("    Status = %s" % dpsdata)
+                else:
+                    # Version 3.3+ requires device key
+                    if(verbose):
+                        print("    No Stats - Device Key required to poll for status")
+            except:
+                if(verbose):
+                    print("    No Stats for %s: Unable to poll"%ip)
+                devices[ip]['err'] = 'Unable to poll'
+        else:
+            if(version=='3.1'):
+                count = count + 1
+            else:
+                counts = counts + 1
+
+    if(verbose):
+        print("                    \nScan Complete!  Found %s devices.\n"%len(devices))
+        
+    return(devices)
+    
