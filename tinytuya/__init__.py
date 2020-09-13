@@ -71,7 +71,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 2)
+version_tuple = (1, 0, 3)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -418,7 +418,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
-        payload = self.generate_payload(SET, {switch:on})
+        payload = self.generate_payload(CONTROL, {switch:on})
 
         data = self._send_receive(payload)
         log.debug('set_status received data=%r', data)
@@ -437,7 +437,7 @@ class Device(XenonDevice):
         if isinstance(index, int):
             index = str(index)  # index and payload is a string
 
-        payload = self.generate_payload(SET, {
+        payload = self.generate_payload(CONTROL, {
             index: value})
         
         data = self._send_receive(payload)
@@ -467,7 +467,7 @@ class Device(XenonDevice):
         devices_numbers.sort()
         dps_id = devices_numbers[-1]
 
-        payload = self.generate_payload(SET, {dps_id:num_secs})
+        payload = self.generate_payload(CONTROL, {dps_id:num_secs})
 
         data = self._send_receive(payload)
         log.debug('set_timer received data=%r', data)
@@ -637,7 +637,7 @@ class BulbDevice(Device):
         #print(BulbDevice)
         hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b)
 
-        payload = self.generate_payload(SET, {
+        payload = self.generate_payload(CONTROL, {
             self.DPS_INDEX_MODE: self.DPS_MODE_COLOUR,
             self.DPS_INDEX_COLOUR: hexvalue})
         data = self._send_receive(payload)
@@ -656,7 +656,7 @@ class BulbDevice(Device):
         if not 0 <= colourtemp <= 255:
             raise ValueError("The colour temperature needs to be between 0 and 255.")
 
-        payload = self.generate_payload(SET, {
+        payload = self.generate_payload(CONTROL, {
             self.DPS_INDEX_MODE: self.DPS_MODE_WHITE,
             self.DPS_INDEX_BRIGHTNESS: brightness,
             self.DPS_INDEX_COLOURTEMP: colourtemp})
@@ -674,7 +674,7 @@ class BulbDevice(Device):
         if not 25 <= brightness <= 255:
             raise ValueError("The brightness needs to be between 25 and 255.")
 
-        payload = self.generate_payload(SET, {self.DPS_INDEX_BRIGHTNESS: brightness})
+        payload = self.generate_payload(CONTROL, {self.DPS_INDEX_BRIGHTNESS: brightness})
         data = self._send_receive(payload)
         return data
 
@@ -688,7 +688,7 @@ class BulbDevice(Device):
         if not 0 <= colourtemp <= 255:
             raise ValueError("The colour temperature needs to be between 0 and 255.")
 
-        payload = self.generate_payload(SET, {self.DPS_INDEX_COLOURTEMP: colourtemp})
+        payload = self.generate_payload(CONTROL, {self.DPS_INDEX_COLOURTEMP: colourtemp})
         data = self._send_receive(payload)
         return data
 
