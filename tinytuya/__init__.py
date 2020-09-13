@@ -545,7 +545,7 @@ class BulbDevice(Device):
                 }
 
     def __init__(self, dev_id, address, local_key=None, dev_type="default"):
-        super(BulbDevice, self).__init____init__(dev_id, address, local_key, dev_type)
+        super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type)
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b):
