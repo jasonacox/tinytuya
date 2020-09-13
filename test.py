@@ -44,7 +44,7 @@ while True:
         if DEVICEVERS == "3.3":
             d.set_version(3.3)
         data = d.status()
-        if d:
+        if data:
             print("\nREADING TEST: Response %r" % data)
             print("State (bool, True is ON) %r\n" % data['dps']['1'])  
             break
