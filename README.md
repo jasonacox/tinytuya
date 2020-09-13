@@ -19,6 +19,7 @@ Install pip and python libraries if you haven't already.
 # Install required libraries
  sudo apt-get install python-crypto python-pip  # for RPi, Linux
  python3 -m pip install pycryptodome            # or pycrypto or Crypto or pyaes
+ python3 -m pip install tinytuya                # this module 
  ```
 
 ## Tuya Device Preparation
@@ -34,7 +35,7 @@ Pulling data from Tuya devices on your network requires that you know the Device
     ```bash
     python3 -m tinytuya
     ```
-3. Device Local KEY: Devices running the latest protocol version 3.3 (often seen with Firmware 1.0.5 or above) will require a _Device Local KEY_ to read the status. Both 3.1 and 3.3 devices will require a _Device Local KEY_ to control the device. The _Device Local KEY_ is used to connect with the device and decrypt the response data. Follow these instructions to get the _Device Local KEY_:
+3. Device Local KEY: Devices running the latest protocol version 3.3 (often seen with Firmware 1.0.5 or above) will require a _Device Local KEY_ to read the status. Both 3.1 and 3.3 devices will require a _Device Local KEY_ to control the device. Follow these instructions to get the _Device Local KEY_:
 
   * **From iot.tuya.com**
     * Create a Tuya developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
@@ -124,9 +125,9 @@ See the sample python script [test.py](test.py) for an OutletDevice example.
 
 ### Encryption notes
 
-These devices uses AES encryption, this is not available in Python standard library, there are three options:
+These devices uses AES encryption which is not available in the Python standard library. There are three options:
 
- 1) PyCryptodome
+ 1) PyCryptodome (recommended)
  2) PyCrypto
  3) pyaes (note Python 2.x support requires https://github.com/ricmoo/pyaes/pull/13)
 
