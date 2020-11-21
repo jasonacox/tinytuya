@@ -225,7 +225,9 @@ payload_dict = {
         # than one byte)
     "suffix": "000000000000aa55"
   },
-  # Special Case Device 
+  # Special Case Device with 22 character ID - Some of these devices 
+  # Require the 0d command as the DP_QUERY status request and the list of
+  # dps requested payload 
   "device22": {
     DP_QUERY: {  # Get Data Points from Device
       "hexByte": "0d",  # Uses CONTROL_NEW command for some reason
@@ -234,6 +236,10 @@ payload_dict = {
     CONTROL: {   # Set Control Values on Device
       "hexByte": "07",
       "command": {"devId": "", "uid": "", "t": ""}
+    },
+    HEART_BEAT: {
+      "hexByte": "09",
+      "command": {}
     },
     "prefix": "000055aa00000000000000", 
     "suffix": "000000000000aa55"
