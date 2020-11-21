@@ -180,8 +180,8 @@ The Tuya devices send back data points (DPS) also called device function points,
 The following table represents several of the standard Tuya DPS values and their properties. 
 
 #### Version 3.3 - Plug, Switch, Power Strip Type
-| DP ID | Function Point | Type | Range | Units |
-|-|-|-|-|-|-|
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Switch 1|bool|0-1||
 |2|Switch 2|bool|0-1||
 |3|Switch 3|bool|0-1||
@@ -208,16 +208,17 @@ The following table represents several of the standard Tuya DPS values and their
 |26|Fault|fault|ov_cr||
 
 #### Version 3.3 - Dimmer Switch
-| DP ID | Function Point | Type | Range |
-| 1|Switch|bool|0-1|
-| 2|Brightness|integer|10-1000|
-| 3|Minimum of Brightness|integer|10-1000|
-| 4|Type of light source1|enum|LED,incandescent,halogen|
-| 5|Mode|enum|white|
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+| 1|Switch|bool|0-1||
+| 2|Brightness|integer|10-1000||
+| 3|Minimum of Brightness|integer|10-1000||
+| 4|Type of light source1|enum|LED,incandescent,halogen||
+| 5|Mode|enum|white||
 
 #### Version 3.3 - Light Type (RGB)
-| DP ID | Function Point | Type | Range | Units |
-|-|-|-|-|-|-|
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
 | 20|Switch|bool|0-1||
 | 21|Mode|enum|white,colour,scene,music||
 | 22|Bright|integer|10-1000||
@@ -230,7 +231,8 @@ The following table represents several of the standard Tuya DPS values and their
 | 29|Debug|string|n/a||
 
 #### Version 3.3 - Automated Curtain Type
-| DP ID | Function Point | Type | Range | Units |
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Curtain Switch 1|enum|open, stop, close, continue||
 |2|Percent control 1|integer|0-100|%|
 |3|Accurate Calibration 1|enum|start, end||
@@ -246,7 +248,8 @@ The following table represents several of the standard Tuya DPS values and their
 |14|Light mode|enum|relay, pos, none||
 
 #### Version 3.3 - Fan Switch Type
-| DP ID | Function Point | Type | Range | Units |
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Fan switch|bool|0-1|n/a|
 |2|Fan countdown|integer|0-86400|s|
 |3|Fan speed|enum|level_1, level_2, level_3, level_4, level_5||
@@ -262,7 +265,8 @@ The following table represents several of the standard Tuya DPS values and their
 |13|Backlight switch|bool|0-1||
 
 #### Version 3.3 - Sensor Type
-| DP ID | Function Point | Type | Range | Units |
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
 |DP ID|Function points|Function type|Range|Units|
 |1|Door Sensor|bool|0-1||
 |2|Battery level state|enum|low, middle, high||
