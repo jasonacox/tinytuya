@@ -155,40 +155,37 @@ tinytuya.scan(50)
 devices = tinytuya.deviceScan(false, 50)
 ```
 
-## Credits
+## Notes
 
-  * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
-    For protocol reverse engineering, additional protocol reverse engineering from jepsonrob and clach04
-  * PyTuya https://github.com/clach04/python-tuya by clach04
-    The origin of this python module (now abandoned), nijave pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
-  * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
-    Updated pytuya to support devices with Device IDs of 22 characters
+* Tuya devices only allow one TCP connection at a time.  Make sure you close the TuyaSmart or SmartLife app before using *TinyTuya* to connect.
+* Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
+* The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed.
 
-## Related Projects
-
-  * https://github.com/sean6541/tuyaapi Python API to the web api
-  * https://github.com/codetheweb/tuyapi node.js
-  * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
-  * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
-
-## Tuya Protocol Notes
-
-### Data Points - DPS Table
+## Tuya Data Points - DPS Table
 
 The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products. 
 
 The following table represents several of the standard Tuya DPS values and their properties. 
 
+#### Version 3.1 - Plug or Switch Type
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+|1|Switch|bool|True/False||
+|2|Countdown?|integer|0-86400|s|
+|4|Current|integer|0-30000|mA|
+|5|Power|integer|0-50000|W|
+|6|Voltage|integer|0-5000|V|
+
 #### Version 3.3 - Plug, Switch, Power Strip Type
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
-|1|Switch 1|bool|0-1||
-|2|Switch 2|bool|0-1||
-|3|Switch 3|bool|0-1||
-|4|Switch 4|bool|0-1||
-|5|Switch 5|bool|0-1||
-|6|Switch 6|bool|0-1||
-|7|Switch 7/usb|bool|0-1||
+|1|Switch 1|bool|True/False||
+|2|Switch 2|bool|True/False||
+|3|Switch 3|bool|True/False||
+|4|Switch 4|bool|True/False||
+|5|Switch 5|bool|True/False||
+|6|Switch 6|bool|True/False||
+|7|Switch 7/usb|bool|True/False||
 |9|Countdown 1|integer|0-86400|s|
 |10|Countdown 2|integer|0-86400|s|
 |11|Countdown 3|integer|0-86400|s|
@@ -210,7 +207,7 @@ The following table represents several of the standard Tuya DPS values and their
 #### Version 3.3 - Dimmer Switch
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
-| 1|Switch|bool|0-1||
+| 1|Switch|bool|True/False||
 | 2|Brightness|integer|10-1000||
 | 3|Minimum of Brightness|integer|10-1000||
 | 4|Type of light source1|enum|LED,incandescent,halogen||
@@ -219,7 +216,7 @@ The following table represents several of the standard Tuya DPS values and their
 #### Version 3.3 - Light Type (RGB)
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
-| 20|Switch|bool|0-1||
+| 20|Switch|bool|True/False||
 | 21|Mode|enum|white,colour,scene,music||
 | 22|Bright|integer|10-1000||
 | 23|Color Temp|integer|0-1000||
@@ -250,11 +247,11 @@ The following table represents several of the standard Tuya DPS values and their
 #### Version 3.3 - Fan Switch Type
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
-|1|Fan switch|bool|0-1|n/a|
+|1|Fan switch|bool|True/False|n/a|
 |2|Fan countdown|integer|0-86400|s|
 |3|Fan speed|enum|level_1, level_2, level_3, level_4, level_5||
 |4|Fan speed|integer|1-100|%|
-|5|Fan light switch|bool|0-1||
+|5|Fan light switch|bool|True/False||
 |6|Brightness integer|integer|10-1000||
 |7|Fan light countdown|integer|0-86400||
 |8|Minimum brightness|integer|10-1000||
@@ -262,16 +259,15 @@ The following table represents several of the standard Tuya DPS values and their
 |10|Mode|enum|white||
 |11|Power-on state setting|enum|off, on, memory||
 |12|Indicator status setting|enum|none, relay, pos||
-|13|Backlight switch|bool|0-1||
+|13|Backlight switch|bool|True/False||
 
 #### Version 3.3 - Sensor Type
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
-|DP ID|Function points|Function type|Range|Units|
-|1|Door Sensor|bool|0-1||
+|1|Door Sensor|bool|True/False||
 |2|Battery level state|enum|low, middle, high||
 |3|Battery level|integer|0-100|%|
-|4|Temper alarm|bool|0-1||
+|4|Temper alarm|bool|True/False||
 |5|Flooding Detection State|enum|alarm, normal||
 |6|Luminance detection state|enum|low, middle, high, strong||
 |7|Current Luminance|integer|0-100|%|
@@ -285,13 +281,13 @@ The following table represents several of the standard Tuya DPS values and their
 |15|Alarm Volume|enum|low, middle, high, mute||
 |16|Alarm Ringtone|enum|1, 2, 3, 4, 5||
 |17|Alarm Time|integer|0-60|s|
-|18|Auto-Detect|bool|0-1||
+|18|Auto-Detect|bool|True/False||
 |19|Auto-Detect Result|enum|checking, check_success, check_failure, others||
-|20|Preheat|bool|0-1||
+|20|Preheat|bool|True/False||
 |21|Fault Alarm|fault|fault, serious_fault, sensor_fault, probe_fault, power_fault|Barrier|
-|22|Lifecycle|bool|0-1||
-|23|Alarm Switch|bool|0-1||
-|24|Silence|bool|0-1||
+|22|Lifecycle|bool|True/False||
+|23|Alarm Switch|bool|True/False||
+|24|Silence|bool|True/False||
 |25|Gas Detection State|enum|alarm, normal||
 |26|Detected Gas|integer|0-1000||
 |27|CH4 Detection State|enum|alarm, normal||
@@ -314,3 +310,18 @@ The following table represents several of the standard Tuya DPS values and their
 
 * Tuya Hardware Development - Protocol: https://developer.tuya.com/en/docs/iot/device-development/embedded-software-development/mcu-development-access/wifi-mcu-sdk-solution/tuya-cloud-universal-serial-port-access-protocol?id=K9hhi0xxtn9cb
 
+## Credits
+
+  * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
+    For protocol reverse engineering, additional protocol reverse engineering from jepsonrob and clach04
+  * PyTuya https://github.com/clach04/python-tuya by clach04
+    The origin of this python module (now abandoned), nijave pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
+  * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
+    Updated pytuya to support devices with Device IDs of 22 characters
+
+## Related Projects
+
+  * https://github.com/sean6541/tuyaapi Python API to the web api
+  * https://github.com/codetheweb/tuyapi node.js
+  * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
+  * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
