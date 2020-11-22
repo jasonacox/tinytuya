@@ -68,12 +68,14 @@ Classes
         dev_type (str): Device type for payload options (see below)
 
  Functions 
-    json = status()          # returns json payload
-    set_version(version)     #  3.1 [default] or 3.3
-    set_dpsUsed(dpsUsed)     # set data points (DPs)
-    set_retry(retry=True)    # retry if response payload is truncated
-    set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
-    set_value(index, value)  # Set int value of any index.
+    json = status()                    # returns json payload
+    set_version(version)               # 3.1 [default] or 3.3
+    set_socketPersistent(False/True)   # False [default] or True
+    set_socketNODELAY(False/True)      # False or True [default]
+    set_dpsUsed(dpsUsed)               # set data points (DPs)
+    set_retry(retry=True)              # retry if response payload is truncated
+    set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
+    set_value(index, value)            # Set int value of any index.
     turn_on(switch=1):
     turn_off(switch=1):
     set_timer(num_secs):
@@ -88,6 +90,7 @@ Classes
         set_white(brightness, colourtemp):
         set_brightness(brightness):
         set_colourtemp(colourtemp):
+        set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():

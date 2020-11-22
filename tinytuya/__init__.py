@@ -17,12 +17,14 @@
         dev_type (str): Device type for payload options (see below)
 
  Functions 
-    json = status()          # returns json payload
-    set_version(version)     #  3.1 [default] or 3.3
-    set_dpsUsed(dpsUsed)     # set data points (DPs)
-    set_retry(retry=True)    # retry if response payload is truncated
-    set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
-    set_value(index, value)  # Set int value of any index.
+    json = status()                    # returns json payload
+    set_version(version)               # 3.1 [default] or 3.3
+    set_socketPersistent(False/True)   # False [default] or True
+    set_socketNODELAY(False/True)      # False or True [default]
+    set_dpsUsed(dpsUsed)               # set data points (DPs)
+    set_retry(retry=True)              # retry if response payload is truncated
+    set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
+    set_value(index, value)            # Set int value of any index.
     turn_on(switch=1):
     turn_off(switch=1):
     set_timer(num_secs):
@@ -37,6 +39,7 @@
         set_white(brightness, colourtemp):
         set_brightness(brightness):
         set_colourtemp(colourtemp):
+        set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -263,9 +266,12 @@ class XenonDevice(object):
         self.retry = True
         self.dev_type = dev_type
         self.port = 6668  # default - do not expect caller to pass in
-        self.socket=None
+        self.socket = None
+        self.socketPersistent = False
+        self.socketNODELAY = True
 
     def __del__(self):
+        # In case we have a lingering socket connection, close it
         if self.socket!=None:
             self.socket.close()
             self.socket=None
@@ -279,7 +285,8 @@ class XenonDevice(object):
             self.socket=None
         if(self.socket==None):
           self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-          #s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+          if(self.socketNODELAY):
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
           self.socket.settimeout(self.connection_timeout)
           self.socket.connect((self.address, self.port))
 
@@ -290,13 +297,9 @@ class XenonDevice(object):
         Args:
             payload(bytes): Data to send.
         """
-        #s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        #s.settimeout(self.connection_timeout)
-        #s.connect((self.address, self.port))
         success=False
         while not success:
-          # make sure I have a socket
+          # make sure I have a socket (may already exist)
           self._get_socket(False)
           try:
             self.socket.send(payload)
@@ -306,9 +309,12 @@ class XenonDevice(object):
                 time.sleep(0.1)
                 data = self.socket.recv(1024)  # try again
             success=True
-            #s.close()
+            # Legacy/default mode avoids persisting socket across commands
+            if(self.socketPersistent==False):
+              self.socket.close()
+              self.socket=None
           except:
-            print("exception with low level tinytua socket!!!.  will retry!!!")
+            log.exception('Exception with low level TinyTuya socket!!! will retry!!!')
             time.sleep(0.1)
             # toss old socket and get new one
             self._get_socket(True)
@@ -316,6 +322,12 @@ class XenonDevice(object):
 
     def set_version(self, version):
         self.version = version
+
+    def set_socketPersistent(self, persist):
+        self.socketPersistent = persist
+
+    def set_socketNODELAY(self, nodelay):
+        self.socketNODELAY = nodelay
 
     def set_dpsUsed(self, dpsUsed):
         self.dpsUsed = dpsUsed
@@ -656,7 +668,7 @@ class BulbDevice(Device):
         Set to scene mode
 
         Args:
-            scene(int): Value for the colour red as int from 1-4.
+            scene(int): Value for the scene as int from 1-4.
         """
         if not 1 <= scene <= 4:
             raise ValueError("The value for scene needs to be between 1 and 4.")
