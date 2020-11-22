@@ -75,7 +75,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 4)
+version_tuple = (1, 0, 5)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -228,7 +228,9 @@ payload_dict = {
         # than one byte)
     "suffix": "000000000000aa55"
   },
-  # Special Case Device 
+  # Special Case Device with 22 character ID - Some of these devices 
+  # Require the 0d command as the DP_QUERY status request and the list of
+  # dps requested payload 
   "device22": {
     DP_QUERY: {  # Get Data Points from Device
       "hexByte": "0d",  # Uses CONTROL_NEW command for some reason
@@ -237,6 +239,10 @@ payload_dict = {
     CONTROL: {   # Set Control Values on Device
       "hexByte": "07",
       "command": {"devId": "", "uid": "", "t": ""}
+    },
+    HEART_BEAT: {
+      "hexByte": "09",
+      "command": {}
     },
     "prefix": "000055aa00000000000000", 
     "suffix": "000000000000aa55"
@@ -383,7 +389,7 @@ class XenonDevice(object):
             m = md5()
             m.update(preMd5String)
             hexdigest = m.hexdigest()
-            json_payload = PROTOCOL_VERSION_BYTES_31 + hexdigest[8:][:16].encode('latin1') + json_payload
+            json_payload = PROTOCOL_VERSION_BYTES_31 + hexdigest[8:][:24].encode('latin1') + json_payload
             self.cipher = None  # expect to connect and then disconnect to set new
 
         postfix_payload = hex2bin(bin2hex(json_payload) + payload_dict[self.dev_type]['suffix'])
