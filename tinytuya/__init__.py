@@ -292,7 +292,7 @@ class XenonDevice(object):
         if(self.socket==None):
           self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
           if(self.socketNODELAY):
-            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
           self.socket.settimeout(self.connection_timeout)
           self.socket.connect((self.address, self.port))
 
@@ -316,10 +316,11 @@ class XenonDevice(object):
                 data = self.socket.recv(1024)  # try again
             success=True
             # Legacy/default mode avoids persisting socket across commands
-            if(self.socketPersistent==False):
+            if(not self.socketPersistent):
               self.socket.close()
               self.socket=None
           except:
+            #print('Exception with low level TinyTuya socket!!! will retry!!!')
             log.exception('Exception with low level TinyTuya socket!!! will retry!!!')
             time.sleep(0.1)
             # toss old socket and get new one
