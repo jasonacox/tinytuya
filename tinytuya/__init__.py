@@ -17,12 +17,14 @@
         dev_type (str): Device type for payload options (see below)
 
  Functions 
-    json = status()          # returns json payload
-    set_version(version)     #  3.1 [default] or 3.3
-    set_dpsUsed(dpsUsed)     # set data points (DPs)
-    set_retry(retry=True)    # retry if response payload is truncated
-    set_status(on, switch=1) # Set status of the device to 'on' or 'off' (bool)
-    set_value(index, value)  # Set int value of any index.
+    json = status()                    # returns json payload
+    set_version(version)               # 3.1 [default] or 3.3
+    set_socketPersistent(False/True)   # False [default] or True
+    set_socketNODELAY(False/True)      # False or True [default]
+    set_dpsUsed(dpsUsed)               # set data points (DPs)
+    set_retry(retry=True)              # retry if response payload is truncated
+    set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
+    set_value(index, value)            # Set int value of any index.
     turn_on(switch=1):
     turn_off(switch=1):
     set_timer(num_secs):
@@ -37,6 +39,7 @@
         set_white(brightness, colourtemp):
         set_brightness(brightness):
         set_colourtemp(colourtemp):
+        set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -269,9 +272,29 @@ class XenonDevice(object):
         self.retry = True
         self.dev_type = dev_type
         self.port = 6668  # default - do not expect caller to pass in
+        self.socket = None
+        self.socketPersistent = False
+        self.socketNODELAY = True
+
+    def __del__(self):
+        # In case we have a lingering socket connection, close it
+        if self.socket!=None:
+            self.socket.close()
+            self.socket=None
 
     def __repr__(self):
         return '%r' % ((self.id, self.address),)  # FIXME can do better than this
+
+    def _get_socket(self,renew):
+        if(renew and self.socket!=None):
+            self.socket.close()
+            self.socket=None
+        if(self.socket==None):
+          self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          if(self.socketNODELAY):
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+          self.socket.settimeout(self.connection_timeout)
+          self.socket.connect((self.address, self.port))
 
     def _send_receive(self, payload):
         """
@@ -280,21 +303,38 @@ class XenonDevice(object):
         Args:
             payload(bytes): Data to send.
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        s.settimeout(self.connection_timeout)
-        s.connect((self.address, self.port))
-        s.send(payload)
-        data = s.recv(1024)
-        # Some devices fail to send full payload in first response
-        if self.retry and len(data) < 40:  
+        success=False
+        while not success:
+          # make sure I have a socket (may already exist)
+          self._get_socket(False)
+          try:
+            self.socket.send(payload)
+            data = self.socket.recv(1024)
+            # Some devices fail to send full payload in first response
+            if self.retry and len(data) < 40:  
+                time.sleep(0.1)
+                data = self.socket.recv(1024)  # try again
+            success=True
+            # Legacy/default mode avoids persisting socket across commands
+            if(not self.socketPersistent):
+              self.socket.close()
+              self.socket=None
+          except:
+            #print('Exception with low level TinyTuya socket!!! will retry!!!')
+            log.exception('Exception with low level TinyTuya socket!!! will retry!!!')
             time.sleep(0.1)
-            data = s.recv(1024)  # try again
-        s.close()
+            # toss old socket and get new one
+            self._get_socket(True)
         return data
 
     def set_version(self, version):
         self.version = version
+
+    def set_socketPersistent(self, persist):
+        self.socketPersistent = persist
+
+    def set_socketNODELAY(self, nodelay):
+        self.socketNODELAY = nodelay
 
     def set_dpsUsed(self, dpsUsed):
         self.dpsUsed = dpsUsed
@@ -542,6 +582,11 @@ class BulbDevice(Device):
     DPS             = 'dps'
     DPS_MODE_COLOUR = 'colour'
     DPS_MODE_WHITE  = 'white'
+    #
+    DPS_MODE_SCENE_1 = 'scene_1'  # nature
+    DPS_MODE_SCENE_2 = 'scene_2'
+    DPS_MODE_SCENE_3 = 'scene_3'  # rave
+    DPS_MODE_SCENE_4 = 'scene_4'  # rainbow
     
     DPS_2_STATE = {
                 '1':'is_on',
@@ -624,6 +669,33 @@ class BulbDevice(Device):
         v = int(hexvalue[12:14], 16) / 255
 
         return (h, s, v)
+
+    def set_scene(self, scene):
+        """
+        Set to scene mode
+
+        Args:
+            scene(int): Value for the scene as int from 1-4.
+        """
+        if not 1 <= scene <= 4:
+            raise ValueError("The value for scene needs to be between 1 and 4.")
+
+        #print(BulbDevice)
+
+        if(scene==1):
+          s=self.DPS_MODE_SCENE_1
+        elif(scene==2):
+          s=self.DPS_MODE_SCENE_2
+        elif(scene==3):
+          s=self.DPS_MODE_SCENE_3
+        else:
+          s=self.DPS_MODE_SCENE_4
+
+        payload = self.generate_payload(CONTROL, {
+            self.DPS_INDEX_MODE: s
+            })
+        data = self._send_receive(payload)
+        return data
 
     def set_colour(self, r, g, b):
         """
