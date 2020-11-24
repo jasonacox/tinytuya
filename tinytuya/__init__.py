@@ -21,6 +21,7 @@
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
+    set_socketRetryLimit(integer)      # retry count limit [default 5]
     set_dpsUsed(dpsUsed)               # set data points (DPs)
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
@@ -275,6 +276,7 @@ class XenonDevice(object):
         self.socket = None
         self.socketPersistent = False
         self.socketNODELAY = True
+        self.socketRetryLimit = 5
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -304,6 +306,7 @@ class XenonDevice(object):
             payload(bytes): Data to send.
         """
         success=False
+        retries=0
         while not success:
           # make sure I have a socket (may already exist)
           self._get_socket(False)
@@ -320,11 +323,26 @@ class XenonDevice(object):
               self.socket.close()
               self.socket=None
           except:
-            #print('Exception with low level TinyTuya socket!!! will retry!!!')
-            log.exception('Exception with low level TinyTuya socket!!! will retry!!!')
+            retries=retries+1
+            log.debug('Exception with low level TinyTuya socket!!! retry '+str(retries)+'/'+str(self.socketRetryLimit))
+            #print('Exception with low level TinyTuya socket!!! retry '+str(retries)+'/'+str(self.socketRetryLimit))
+            #
+            # if we exceed the limit of retries then lets get out of here by reraising to a higher power
+            #
+            if(retries>self.socketRetryLimit):
+              if(self.socket!=None):
+                self.socket.close()
+                self.socket=None
+              log.exception('Exceeded tinytuya retry limit ('+str(self.socketRetryLimit)+')')
+              #
+              # goodbye
+              #
+              raise
+            # retry:  wait a bit, toss old socket and get new one
             time.sleep(0.1)
-            # toss old socket and get new one
             self._get_socket(True)
+          # except
+        # while
         return data
 
     def set_version(self, version):
@@ -335,6 +353,9 @@ class XenonDevice(object):
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
+
+    def set_socketRetryLimit(self, limit):
+        self.socketRetryLimit = limit
 
     def set_dpsUsed(self, dpsUsed):
         self.dpsUsed = dpsUsed

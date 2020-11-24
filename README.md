@@ -72,6 +72,7 @@ Classes
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
+    set_socketRetryLimit(integer)      # retry count limit [default 5]
     set_dpsUsed(dpsUsed)               # set data points (DPs)
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
