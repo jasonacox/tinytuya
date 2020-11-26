@@ -6,15 +6,18 @@ TinyTuya Setup Wizard Tuya based WiFi smart devices
 Author: Jason A. Cox
 For more information see https://github.com/jasonacox/tinytuya
 
+B E T A
+
 Description
-    Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
-    the Device IDs and their Local KEYs.  It will save the credentials and the device
-    data in the tinytuya.json configuration file and optionally scan the local devices.
+    Setup Wizard will prompt the user for Tuya IoT Developer credentials and will gather all 
+    of the Device IDs and their Local KEYs.  It will save the credentials and the device
+    data in the tinytuya.json and devices.json configuration files respectively. The Wizard 
+    optionally scan the local devices.
 
     HOW to set up your Tuya IoT Developer account: iot.tuya.com:
     https://github.com/jasonacox/tinytuya#get-the-tuya-device-local-key
 
-    This standalone script is also available in the module: tinytuya.wizard()
+    This standalone script will eventually be available in the module: tinytuya.wizard()
 
 Credits
 * Tuya API Documentation
