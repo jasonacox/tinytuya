@@ -10,9 +10,9 @@ B E T A
 
 Description
     Setup Wizard will prompt the user for Tuya IoT Developer credentials and will gather all 
-    of the Device IDs and their Local KEYs.  It will save the credentials and the device
+    registered Device IDs and their Local KEYs.  It will save the credentials and the device
     data in the tinytuya.json and devices.json configuration files respectively. The Wizard 
-    optionally scan the local devices.
+    will then optionally scan the local devices for status.
 
     HOW to set up your Tuya IoT Developer account: iot.tuya.com:
     https://github.com/jasonacox/tinytuya#get-the-tuya-device-local-key
