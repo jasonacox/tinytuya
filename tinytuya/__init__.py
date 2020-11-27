@@ -988,6 +988,8 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
             alertdim = "\033[0m\033[91m\033[2m"
 
         print("\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"%(bold,normal,dim,__version__))
+        if(havekeys):
+            print("%s[Loaded devices.json - %d devices]\n" % (dim,len(tuyadevices)))
         print("%sScanning on UDP ports %s and %s for devices (%s retries)...%s\n" %
               (subbold, UDPPORT, UDPPORTS, maxretry, normal))
 
@@ -1057,11 +1059,11 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                     pass
             if(verbose):
                 if(dname == ""):    
-                    print("%sUnknown Device%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    bold, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    print("%s%s Device Found%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
+                    normal, version, dim, note, subbold, ip, dim, gwId, productKey, version))
                 else:
                     print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    bold, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
             try:
                 if(version == '3.1'):
                     # Version 3.1 - no device key requires - poll for status data points
@@ -1070,7 +1072,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                     dpsdata = d.status()
                     devices[ip]['dps'] = dpsdata
                     if(verbose):
-                        print("    Status = %s" % dpsdata)
+                        print("    Status: %s" % dpsdata['dps'])
                 else:
                     # Version 3.3+ requires device key
                     if(dkey != ""):
@@ -1079,7 +1081,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                         dpsdata = d.status()
                         devices[ip]['dps'] = dpsdata
                         if(verbose):
-                            print(dim + "    Status = %s" % dpsdata)      
+                            print(dim + "    Status: %s" % dpsdata['dps'])      
                     else:                      
                         if(verbose):
                             print(alertdim + "    No Stats - Device Key required to poll for status" + dim)
@@ -1102,7 +1104,73 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
 
     return(devices)
 
+
 # TinyTuya Setup Wizard
+
+def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
+    """Tuya IoT Platform Data Access
+
+    Parameters:
+        * region     Tuya API Server Region: us, eu, cn, in
+        * apiKey     Tuya Platform Developer ID
+        * apiSecret  Tuya Platform Developer secret 
+        * uri        Tuya Platform URI for this call
+        * token      Tuya OAuth Token
+
+    Playload Construction - Header Data:
+        Parameter 	  Type    Required	Description
+        client_id	  String     Yes	client_id
+        signature     String     Yes	HMAC-SHA256 Signature (see below)
+        sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
+        t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
+        lang	      String	 No	    Language. It is zh by default in China and en in other areas.
+        access_token  String     *      Required for service management calls
+
+    Signature Details:
+        * OAuth Token Request: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
+        * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
+
+    URIs:
+        * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
+        * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
+        * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
+
+    """
+    url = "https://openapi.tuya%s.com/v1.0/%s" % (apiRegion,uri)
+    now = int(time.time()*1000)
+    if(token==None):
+        payload = apiKey + str(now)
+    else:
+        payload = apiKey + token + str(now)
+
+    # Sign Payload
+    signature = hmac.new(
+        apiSecret.encode('utf-8'),
+        msg=payload.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).hexdigest().upper()
+
+    # Create Header Data
+    headers = {}
+    headers['client_id'] = apiKey
+    headers['sign_method'] = 'HMAC-SHA256'
+    headers['t'] = str(now)
+    headers['sign'] = signature
+    if(token != None):
+        headers['access_token'] = token
+
+    # Get Token
+    response = requests.get(url, headers=headers)
+    try:
+        response_dict = json.loads(response.content.decode())
+    except:
+        try:
+            response_dict = json.loads(response.content)
+        except:
+            print("Failed to get valid JSON response")
+
+    return(response_dict)
+
 def wizard(color=True):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
@@ -1128,6 +1196,7 @@ def wizard(color=True):
     # Get Configuration Data
     CONFIGFILE = 'tinytuya.json'
     DEVICEFILE = 'devices.json'
+    SNAPSHOTFILE = 'snapshot.json'
     config = {}
     config['apiKey'] = ''
     config['apiSecret'] = ''
@@ -1187,7 +1256,7 @@ def wizard(color=True):
         json_object = json.dumps(config, indent=4)
         with open(CONFIGFILE, "w") as outfile:
             outfile.write(json_object)
-        print(bold + "\n>> Configuration Data Saved to %s" % CONFIGFILE)
+        print(bold + "\n>> Configuration Data Saved to " + CONFIGFILE)
         print(dim + json_object)
 
     KEY = config['apiKey']
@@ -1196,118 +1265,20 @@ def wizard(color=True):
     REGION = config['apiRegion']        # us, eu, cn, in
     LANG = 'en'                         # en or zh
 
-    # Build Tuya IoT Platform Payload
-    """
-    Header Elements:
-    Parameter 	  Type    Required	Description
-    client_id	  String     Yes	client_id
-    signature     String     Yes	HMAC-SHA256 Signature (see below)
-    sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
-    t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
-    lang	      String	 No	    Language. It is zh by default in China and en in other areas.
-    access_token  String     *      Required for service management calls
-
-    Signature Details:
-    * Token Management: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
-    * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
-
-    URIs:
-    * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
-    * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
-    * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
-
-    """
-
-    url = "https://openapi.tuya%s.com/v1.0/" % REGION
-    now = int(time.time()*1000)
-    payload = KEY + str(now)
-
-    # Sign Payload
-    signature = hmac.new(
-        SECRET.encode('utf-8'),
-        msg=payload.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest().upper()
-
-    # Create Header Data
-    headers = {}
-    headers['client_id'] = KEY
-    headers['sign_method'] = 'HMAC-SHA256'
-    headers['t'] = str(now)
-    headers['sign'] = signature
-
-    # Get Token
-    response = requests.get(url + 'token?grant_type=1', headers=headers)
-    try:
-        response_dict = json.loads(response.content.decode())
-    except:
-        try:
-            response_dict = json.loads(response.content)
-        except:
-            print("Failed to get valid JSON response")
-
-    # Rebuild Payload with Token
+    # Get Oauth Token from tuyaPlatform
+    uri = 'token?grant_type=1'
+    response_dict = tuyaPlatform(REGION, KEY, SECRET,uri)
     token = response_dict['result']['access_token']
-    now = int(time.time()*1000)
-    payload = KEY + token + str(now)
 
-    # Sign Payload
-    signature = hmac.new(
-        SECRET.encode('utf-8'),
-        msg=payload.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest().upper()
-
-    # Create Header Data
-    headers = {}
-    headers['client_id'] = KEY
-    headers['sign_method'] = 'HMAC-SHA256'
-    headers['t'] = str(now)
-    headers['sign'] = signature
-    headers['access_token'] = token
-
-    # Get UID from sample Device ID to Pull Full List
-    response = requests.get(url + 'devices/%s' % DEVICEID, headers=headers)
-    try:
-        response_dict = json.loads(response.content.decode())
-    except:
-        try:
-            response_dict = json.loads(response.content)
-        except:
-            print("Failed to get valid JSON response")
-
-    # Build Payload to get Devices by UID
+    # Get UID from sample Device ID 
+    uri = 'devices/%s' % DEVICEID
+    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
     uid = response_dict['result']['uid']
-    now = int(time.time()*1000)
-    payload = KEY + token + str(now)
 
-    # Sign Payload
-    signature = hmac.new(
-        SECRET.encode('utf-8'),
-        msg=payload.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest().upper()
-
-    # Create Header Data
-    headers = {}
-    headers['client_id'] = KEY
-    headers['sign_method'] = 'HMAC-SHA256'
-    headers['t'] = str(now)
-    headers['sign'] = signature
-    headers['access_token'] = token
-
-    # Get list of Devices
-    response = requests.get(url + 'users/%s/devices' % uid, headers=headers)
-    try:
-        json_data = json.loads(response.content.decode())
-    except:
-        try:
-            json_data = json.loads(response.content)
-        except:
-            print("Failed to get valid JSON response")
-    #json_data = json.loads(response.content.decode())
-    # pprint.pprint(json_data)
-
+    # Use UID to get list of all Devices for User
+    uri = 'users/%s/devices' % uid
+    json_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
+ 
     # Filter to only Name, ID and Key
     tuyadevices = []
     for i in json_data['result']:
@@ -1323,7 +1294,7 @@ def wizard(color=True):
     print(output)
 
     # Save list to devices.json
-    print(bold + "\n>> " + normal + "Saving list to devices.json")
+    print(bold + "\n>> " + normal + "Saving list to " + DEVICEFILE)
     with open(DEVICEFILE, "w") as outfile:
         outfile.write(output)
     print(dim + "    %d registered devices saved" % len(tuyadevices))
@@ -1337,7 +1308,7 @@ def wizard(color=True):
         devices = deviceScan(False, 20)
         print("    %s%s local devices discovered%s" %
               (dim, len(devices), normal))
-        print()
+        print("")
 
         def getIP(d, gwid):
             for ip in d:
@@ -1345,10 +1316,17 @@ def wizard(color=True):
                     return (ip, d[ip]['version'])
             return (0, 0)
 
+        polling = []
         print("Polling local devices...")
         for i in tuyadevices:
+            item = {}
             name = i['name']
             (ip, ver) = getIP(devices, i['id'])
+            item['name'] = name
+            item['ip'] = ip
+            item['ver'] = ver
+            item['id'] = i['id']
+            item['key'] = i['key']
             if (ip == 0):
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
@@ -1359,6 +1337,7 @@ def wizard(color=True):
                         d.set_version(3.3)
                     data = d.status()
                     if data:
+                        item['dps'] = data
                         state = alertdim + "Off" + dim
                         # print(data)
                         try:
@@ -1375,6 +1354,15 @@ def wizard(color=True):
                 except:
                     print("    %s[%s] - %s%s - %sNo Response" %
                           (subbold, name, dim, ip, alertdim))
+            polling.append(item)
+        # for loop
+
+        # Save polling data snapsot
+        current = {'timestamp' : time.time(), 'devices' : polling}
+        output = json.dumps(current, indent=4) 
+        print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
+        with open(SNAPSHOTFILE, "w") as outfile:
+            outfile.write(output)
 
     print("\nDone.\n")
     return

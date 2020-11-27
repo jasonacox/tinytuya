@@ -112,3 +112,4 @@ sandbox/
 .vscode/settings.json
 devices.json
 tinytuya.json
+snapshot.json
