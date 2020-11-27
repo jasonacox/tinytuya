@@ -16,7 +16,8 @@ setuptools.setup(
     url='https://github.com/jasonacox/tinytuya',
     packages=setuptools.find_packages(),
     install_requires=[
-        'pyaes',  # NOTE this is optional, AES can be provided via PyCrypto or PyCryptodome
+        'pycryptodome',  # Encryption - AES can also be provided via PyCrypto or pyaes
+        'requests',      # Used for Setup Wizard - Tuya IoT Platform calls
     ],
     classifiers=[
         "Programming Language :: Python :: 2",
