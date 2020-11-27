@@ -31,7 +31,7 @@ Pulling data from Tuya devices on your network requires that you know the Device
 1. Download the "Smart Life" - Smart Living app for iPhone or Android. Pair with your smart plug (this is important as you cannot monitor a plug that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
     * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
-2. For Device IP, ID and VERSION: Run the tinytuya scan to get a list of Tuya devices on your network along with their device IP, ID and VERSION number (3.1 or 3.3):
+2. For Device IP, ID and VERSION: Run the tinytuya scan to get a list of Tuya devices on your network along with their device IP, ID and VERSION number (3.1 or 3.3) 
     ```bash
     python3 -m tinytuya
     ```
@@ -44,19 +44,30 @@ Pulling data from Tuya devices on your network requires that you know the Device
     * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
     * Verify under Cloud Development -> select your project -> API Setting that the following API groups have status "Open": Authorization management, Device Management and Device Control ([see here](https://user-images.githubusercontent.com/5875512/92361673-15864000-f132-11ea-9a01-9c715116456f.png))
   * **From your Local Workstation**
-    * From your PC/Mac run this to install the Tuya CLI: `npm i @tuyapi/cli -g`
-    * Next run: `tuya-cli wizard` and it will prompt you for the API *ID* key and *Secret* from your Tuya IoT project we noted above.  The Virtual ID is the Device ID from step 2 above or in the Device List on your Tuya IoT project.
-    * The wizard will take a while but eventually print a JSON looking output that contains the name, id and key of the registered device(s).  This is the _Device Local KEY_ (also called LOCAL_KEY) you will use to poll your device.
+    * From your PC/Mac run the *TinyTuya Setup Wizard* to fetch the _Device Local KEYs_ for all of your
+    registered devices:
+    ```
+    python3 -m tinytuya wizard
+    ```
+    * The *Wizard* will prompt you for the API *ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project noted above.  It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
+    * The *Wizard* will poll the Tuya IoT Platform and print a JSON list of all your registered devices with the name, id and key of your registered device(s). This list contains the Device Local _KEY_ (also called LOCAL_KEY) you will use to poll your device.
+    * The *Wizard* will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.scanDevices()` or when running `python3 -m tinytuya` to scan your local network.  Optionally, it will poll all the devices on your network for status details.
 
-Note: If you ever reset or re-pair your smart devices, they will reset their _Device Local KEY_ and you will need to repeat these steps above.
-
-For a helpful video walk-through of getting the KEYS you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
+Notes:
+* If you ever reset or re-pair your smart devices, they will reset their _Device Local KEY_ and you will need to repeat these steps above. 
+* Instead of the built in Wizard, you can use the TuyAPI CLI: `npm i @tuyapi/cli -g` and run `tuya-cli wizard`  
+* For a helpful video walk-through of getting the KEYS you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
 
 
 ## Programming with TinyTuya
 
 ### TinyTuya Module Classes and Functions 
 ```
+Global Functions
+    devices = scanDevices()            # returns dictionary of devices found on local network
+    scan()                             # interactive scan of local network
+    wizard()                           # interactive setup wizard
+
 Classes
     OutletDevice(dev_id, address, local_key=None, dev_type='default')
     CoverDevice(dev_id, address, local_key=None, dev_type='default')
@@ -67,8 +78,8 @@ Classes
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
 
- Functions 
-    json = status()                    # returns json payload
+ Functions
+    json = status()                    # returns json payload from device
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
