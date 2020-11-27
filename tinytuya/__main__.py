@@ -6,24 +6,58 @@
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
 
+ Run TinyTuya Setup Wizard:
+    python -m tinytuya wizard
  This network scan will run if calling this module via command line:  
-    python -m tinytuya
+    python -m tinytuya <max_retry>
+
 """
+
+# Modules
 import tinytuya
 import sys
 
 retries = 0
+state = 0
+color = True
 
-print("TinyTuya (Tuya device scanner) [%s]\n"%(tinytuya.version))
+for i in sys.argv:
+    if(i==sys.argv[0]):
+        continue
+    if(i.lower() == "wizard"):
+        state = 1
+    elif(i.lower() == "scan"):
+        state = 0
+    elif(i.lower() == "-nocolor"):
+        color = False
+    else:
+        try:
+            retries = int(i)
+        except:
+            state = 2
 
-try:
-    if len(sys.argv) > 1:
-        retries = int(sys.argv[1])
-except:
-    print("Usage: python -m tinytuya <max_retry>")
-    sys.exit(2)
+# State 0 = Run Scan
+if(state == 0):
+    if retries > 0:
+        tinytuya.scan(retries, color)
+    else:
+        tinytuya.scan(color=color)
 
-if retries > 0:
-    tinytuya.scan(retries)
-else:
-    tinytuya.scan()
+# State 1 = Run Setup Wizard
+if(state == 1):
+    tinytuya.wizard(color)
+
+# State 2 = Show Usage
+if(state == 2):
+    print("TinyTuya [%s]\n" % (tinytuya.version))
+    print("Usage:\n")
+    print("    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]")
+    print("")
+    print("      command = scan        Scan local network for Tuya devices.")
+    print("      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.")
+    print("      max_retry             Maximum number of retries to find Tuya devices [Default=15]")
+    print("      -nocolor              Disable color text output.")
+    print("      -h                    Show usage.")
+    print("")
+
+# End

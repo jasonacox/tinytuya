@@ -57,6 +57,7 @@
     
 """
 
+# Modules
 from __future__ import print_function   # python 2.7 support
 import base64
 from hashlib import md5
@@ -67,6 +68,15 @@ import sys
 import time
 import colorsys
 import binascii
+import requests
+import hmac
+import hashlib
+
+# Backward compatability for python2
+try:
+    input = raw_input
+except NameError:
+    pass
 
 # Required module: pycryptodome
 try:
@@ -76,7 +86,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 0, 5)
+version_tuple = (1, 1, 0)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -134,7 +144,6 @@ PROTOCOL_VERSION_BYTES_33 = b'3.3'
 IS_PY2 = sys.version_info[0] == 2
 
 # Cryptography Helpers
-
 
 class AESCipher(object):
     def __init__(self, key):
@@ -338,7 +347,7 @@ class XenonDevice(object):
                 retries = retries+1
                 log.debug('Exception with low level TinyTuya socket!!! retry ' +
                           str(retries)+'/'+str(self.socketRetryLimit))
-                # if we exceed the limit of retries then lets get out of here 
+                # if we exceed the limit of retries then lets get out of here
                 if(retries > self.socketRetryLimit):
                     if(self.socket != None):
                         self.socket.close()
@@ -473,7 +482,7 @@ class Device(XenonDevice):
             # got an encrypted payload, happens occasionally
             # expect resulting json to look similar to:: {"devId":"ID","dps":{"1":true,"2":0},"t":EPOCH_SECS,"s":3_DIGIT_NUM}
             # NOTE dps.2 may or may not be present
-            result = result[len(PROTOCOL_VERSION_BYTES_31):]  # remove version header
+            result = result[len(PROTOCOL_VERSION_BYTES_31)                            :]  # remove version header
             # Remove 16-bytes appears to be MD5 hexdigest of payload
             result = result[16:]
             cipher = AESCipher(self.local_key)
@@ -878,6 +887,8 @@ udpkey = md5(b"yGAdlopoPVldABfn").digest()
 def decrypt_udp(msg): return decrypt(msg, udpkey)
 
 # Return positive number or zero
+
+
 def floor(x):
     if x > 0:
         return x
@@ -897,18 +908,24 @@ def appenddevice(newdevice, devices):
     return False
 
 # Scan function shortcut
-def scan(maxretry=MAXCOUNT):
+
+
+def scan(maxretry=MAXCOUNT, color=True):
     """Scans your network for Tuya devices with output to stdout
     """
-    d = deviceScan(True, maxretry)
+    d = deviceScan(True, maxretry, color)
 
 # Scan function
-def deviceScan(verbose=False, maxretry=MAXCOUNT):
+
+
+def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
     Parameters:
-        verbose = True or False, print formatted output to stdout
+        verbose = True or False, print formatted output to stdout [Default: False]
+        maxretry = The number of loops to wait to pick up UDP from all devices
+        color = True or False, print output in color [Default: True]
 
     Response: 
         devices = Dictionary of all devices found
@@ -923,6 +940,27 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
             dps = devices[ip]['dps']
 
     """
+    DEVICEFILE = 'devices.json'
+    havekeys = False
+    tuyadevices = []
+
+    # Lookup Tuya device info by (id) returning (name, key)
+    def tuyaLookup(deviceid):
+        for i in tuyadevices:
+            if (i['id'] == deviceid):
+                return (i['name'], i['key'])
+        return ("", "")
+
+    # Check to see if we have additional Device info
+    try:
+        # Load defaults
+        with open(DEVICEFILE) as f:
+            tuyadevices = json.load(f)
+            havekeys = True
+    except:
+        # No Device info
+        pass
+
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(
         socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -937,8 +975,21 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
     clients.settimeout(TIMEOUT)
 
     if(verbose):
-        print("Scanning on UDP ports %s and %s for devices (%s retries)...\n" %
-              (UDPPORT, UDPPORTS, maxretry))
+        if(color == False):
+            # Disable Terminal Color Formatting
+            bold = subbold = normal = dim = alert = alertdim = ""
+        else:
+            # Terminal Color Formatting
+            bold = "\033[0m\033[97m\033[1m"
+            subbold = "\033[0m\033[32m"
+            normal = "\033[97m\033[0m"
+            dim = "\033[0m\033[97m\033[2m"
+            alert = "\033[0m\033[91m\033[1m"
+            alertdim = "\033[0m\033[91m\033[2m"
+
+        print("\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"%(bold,normal,dim,__version__))
+        print("%sScanning on UDP ports %s and %s for devices (%s retries)...%s\n" %
+              (subbold, UDPPORT, UDPPORTS, maxretry, normal))
 
     # globals
     devices = {}
@@ -950,7 +1001,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
     while (count + counts) <= maxretry:
         note = 'invalid'
         if(verbose):
-            print("Scanning... %s\r" % (spinner[spinnerx]), end='')
+            print("%sScanning... %s\r" % (dim, spinner[spinnerx]), end='')
             spinnerx = (spinnerx + 1) % 4
 
         if (count <= counts):  # alternate between 6666 and 6667 ports
@@ -968,7 +1019,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
                 counts = counts + 1
                 continue
         ip = addr[0]
-        gwId = productKey = version = ""
+        gwId = productKey = version = dname = dkey = ""
         result = data
         try:
             result = data[20:-8]
@@ -985,24 +1036,36 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
             productKey = result['productKey']
             version = result['version']
         except:
-            print("*  Unexpected payload=%r\n", result)
+            if(verbose):
+                print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
             result = {"ip": ip}
             note = "Unknown"
 
         # check to see if we have seen this device before and add to devices array
         if appenddevice(result, devices) == False:
+            
             # new device found - back off count if we keep getting new devices
             if(version == '3.1'):
                 count = floor(count - 1)
             else:
                 counts = floor(counts - 1)
+            if(havekeys):
+                try:
+                    # Try to pull name and key data
+                    (dname, dkey) = tuyaLookup(gwId)
+                except:
+                    pass
             if(verbose):
-                print("FOUND Device [%s payload]: %s\n    ID = %s, product = %s, Version = %s" % (
-                    note, ip, gwId, productKey, version))
+                if(dname == ""):    
+                    print("%sUnknown Device%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
+                    bold, dim, note, subbold, ip, dim, gwId, productKey, version))
+                else:
+                    print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
+                    bold, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
             try:
                 if(version == '3.1'):
                     # Version 3.1 - no device key requires - poll for status data points
-                    d = OutletDevice(gwId, ip)
+                    d = OutletDevice(gwId, ip, dkey)
                     d.set_version(3.1)
                     dpsdata = d.status()
                     devices[ip]['dps'] = dpsdata
@@ -1010,12 +1073,23 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
                         print("    Status = %s" % dpsdata)
                 else:
                     # Version 3.3+ requires device key
-                    if(verbose):
-                        print("    No Stats - Device Key required to poll for status")
+                    if(dkey != ""):
+                        d = OutletDevice(gwId, ip, dkey)
+                        d.set_version(3.3)
+                        dpsdata = d.status()
+                        devices[ip]['dps'] = dpsdata
+                        if(verbose):
+                            print(dim + "    Status = %s" % dpsdata)      
+                    else:                      
+                        if(verbose):
+                            print(alertdim + "    No Stats - Device Key required to poll for status" + dim)
             except:
                 if(verbose):
-                    print("    No Stats for %s: Unable to poll" % ip)
+                    print(alertdim + "    No Stats for %s: Unable to poll" % ip)
                 devices[ip]['err'] = 'Unable to poll'
+            if(dname != ""):
+                devices[ip]['name'] = dname
+                devices[ip]['key'] = dkey
         else:
             if(version == '3.1'):
                 count = count + 1
@@ -1023,7 +1097,284 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT):
                 counts = counts + 1
 
     if(verbose):
-        print("                    \nScan Complete!  Found %s devices.\n" %
-              len(devices))
+        print("                    \n%sScan Complete!  Found %s devices.\n" %
+              (normal, len(devices)))
 
     return(devices)
+
+# TinyTuya Setup Wizard
+def wizard(color=True):
+    """
+    TinyTuya Setup Wizard Tuya based WiFi smart devices
+
+    Parameter:
+        color = True or False, print output in color [Default: True]
+
+    Description
+        Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
+        the Device IDs and their Local KEYs.  It will save the credentials and the device
+        data in the tinytuya.json and devices.json configuration files respectively.
+
+        HOW to set up your Tuya IoT Developer account: iot.tuya.com:
+        https://github.com/jasonacox/tinytuya#get-the-tuya-device-local-key
+
+    Credits
+    * Tuya API Documentation
+        https://developer.tuya.com/en/docs/iot/open-api/api-list/api?id=K989ru6gtvspg
+    * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
+        The TuyAPI/CLI wizard inspired and informed this python version.
+    """
+
+    # Get Configuration Data
+    CONFIGFILE = 'tinytuya.json'
+    DEVICEFILE = 'devices.json'
+    config = {}
+    config['apiKey'] = ''
+    config['apiSecret'] = ''
+    config['apiRegion'] = ''
+    config['apiDeviceID'] = ''
+    needconfigs = True
+    try:
+        # Load defaults
+        with open(CONFIGFILE) as f:
+            config = json.load(f)
+    except:
+        # First Time Setup
+        pass
+    
+    if(color == False):
+        # Disable Terminal Color Formatting
+        bold = subbold = normal = dim = alert = alertdim = ""
+    else:
+        # Terminal Color Formatting
+        bold = "\033[0m\033[97m\033[1m"
+        subbold = "\033[0m\033[32m"
+        normal = "\033[97m\033[0m"
+        dim = "\033[0m\033[97m\033[2m"
+        alert = "\033[0m\033[91m\033[1m"
+        alertdim = "\033[0m\033[91m\033[2m"
+
+    print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (version) + normal)
+    print('')
+
+    if(config['apiKey'] != '' and config['apiSecret'] != '' and
+            config['apiRegion'] != '' and config['apiDeviceID'] != ''):
+        needconfigs = False
+        print("    " + subbold + "Existing settings:" + dim +
+              "\n        API Key=%s \n        Secret=%s\n        DeviceID=%s\n        Region=%s" %
+              (config['apiKey'], config['apiSecret'], config['apiDeviceID'],
+               config['apiRegion']))
+        print('')
+        answer = input(subbold + '    Use existing credentials ' +
+                       normal + '(Y/n): ')
+        if(answer[0:1].lower() == 'n'):
+            needconfigs = True
+
+    if(needconfigs):
+        # Ask user for config settings
+        print('')
+        config['apiKey'] = input(subbold + "    Enter " + bold + "API Key" + subbold +
+                                 " from tuya.com: " + normal)
+        config['apiSecret'] = input(subbold + "    Enter " + bold + "API Secret" + subbold +
+                                    " from tuya.com: " + normal)
+        config['apiDeviceID'] = input(subbold +
+                                      "    Enter " + bold + "any Device ID" + subbold +
+                                      " currently registered in Tuya App (used to pull full list): " + normal)
+        # TO DO - Determine apiRegion based on Device - for now, ask
+        config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
+                                    " (Options: us, eu, cn or in): " + normal)
+        # Write Config
+        json_object = json.dumps(config, indent=4)
+        with open(CONFIGFILE, "w") as outfile:
+            outfile.write(json_object)
+        print(bold + "\n>> Configuration Data Saved to %s" % CONFIGFILE)
+        print(dim + json_object)
+
+    KEY = config['apiKey']
+    SECRET = config['apiSecret']
+    DEVICEID = config['apiDeviceID']
+    REGION = config['apiRegion']        # us, eu, cn, in
+    LANG = 'en'                         # en or zh
+
+    # Build Tuya IoT Platform Payload
+    """
+    Header Elements:
+    Parameter 	  Type    Required	Description
+    client_id	  String     Yes	client_id
+    signature     String     Yes	HMAC-SHA256 Signature (see below)
+    sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
+    t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
+    lang	      String	 No	    Language. It is zh by default in China and en in other areas.
+    access_token  String     *      Required for service management calls
+
+    Signature Details:
+    * Token Management: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
+    * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
+
+    URIs:
+    * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
+    * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
+    * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
+
+    """
+
+    url = "https://openapi.tuya%s.com/v1.0/" % REGION
+    now = int(time.time()*1000)
+    payload = KEY + str(now)
+
+    # Sign Payload
+    signature = hmac.new(
+        SECRET.encode('utf-8'),
+        msg=payload.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).hexdigest().upper()
+
+    # Create Header Data
+    headers = {}
+    headers['client_id'] = KEY
+    headers['sign_method'] = 'HMAC-SHA256'
+    headers['t'] = str(now)
+    headers['sign'] = signature
+
+    # Get Token
+    response = requests.get(url + 'token?grant_type=1', headers=headers)
+    try:
+        response_dict = json.loads(response.content.decode())
+    except:
+        try:
+            response_dict = json.loads(response.content)
+        except:
+            print("Failed to get valid JSON response")
+
+    # Rebuild Payload with Token
+    token = response_dict['result']['access_token']
+    now = int(time.time()*1000)
+    payload = KEY + token + str(now)
+
+    # Sign Payload
+    signature = hmac.new(
+        SECRET.encode('utf-8'),
+        msg=payload.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).hexdigest().upper()
+
+    # Create Header Data
+    headers = {}
+    headers['client_id'] = KEY
+    headers['sign_method'] = 'HMAC-SHA256'
+    headers['t'] = str(now)
+    headers['sign'] = signature
+    headers['access_token'] = token
+
+    # Get UID from sample Device ID to Pull Full List
+    response = requests.get(url + 'devices/%s' % DEVICEID, headers=headers)
+    try:
+        response_dict = json.loads(response.content.decode())
+    except:
+        try:
+            response_dict = json.loads(response.content)
+        except:
+            print("Failed to get valid JSON response")
+
+    # Build Payload to get Devices by UID
+    uid = response_dict['result']['uid']
+    now = int(time.time()*1000)
+    payload = KEY + token + str(now)
+
+    # Sign Payload
+    signature = hmac.new(
+        SECRET.encode('utf-8'),
+        msg=payload.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).hexdigest().upper()
+
+    # Create Header Data
+    headers = {}
+    headers['client_id'] = KEY
+    headers['sign_method'] = 'HMAC-SHA256'
+    headers['t'] = str(now)
+    headers['sign'] = signature
+    headers['access_token'] = token
+
+    # Get list of Devices
+    response = requests.get(url + 'users/%s/devices' % uid, headers=headers)
+    try:
+        json_data = json.loads(response.content.decode())
+    except:
+        try:
+            json_data = json.loads(response.content)
+        except:
+            print("Failed to get valid JSON response")
+    #json_data = json.loads(response.content.decode())
+    # pprint.pprint(json_data)
+
+    # Filter to only Name, ID and Key
+    tuyadevices = []
+    for i in json_data['result']:
+        item = {}
+        item['name'] = i['name'].strip()
+        item['id'] = i['id']
+        item['key'] = i['local_key']
+        tuyadevices.append(item)
+
+    # Display device list
+    print("\n\n" + bold + "Device Listing\n" + dim)
+    output = json.dumps(tuyadevices, indent=4)  # sort_keys=True)
+    print(output)
+
+    # Save list to devices.json
+    print(bold + "\n>> " + normal + "Saving list to devices.json")
+    with open(DEVICEFILE, "w") as outfile:
+        outfile.write(output)
+    print(dim + "    %d registered devices saved" % len(tuyadevices))
+
+    # Find out if we should poll all devices
+    answer = input(subbold + '\nPoll local devices? ' +
+                   normal + '(Y/n): ')
+    if(answer[0:1].lower() != 'n'):
+        # Scan network for devices and provide polling data
+        print(normal + "\nScanning local network for Tuya devices...")
+        devices = deviceScan(False, 20)
+        print("    %s%s local devices discovered%s" %
+              (dim, len(devices), normal))
+        print()
+
+        def getIP(d, gwid):
+            for ip in d:
+                if (gwid == d[ip]['gwId']):
+                    return (ip, d[ip]['version'])
+            return (0, 0)
+
+        print("Polling local devices...")
+        for i in tuyadevices:
+            name = i['name']
+            (ip, ver) = getIP(devices, i['id'])
+            if (ip == 0):
+                print("    %s[%s] - %s%s - %sError: No IP found%s" %
+                      (subbold, name, dim, ip, alert, normal))
+            else:
+                try:
+                    d = OutletDevice(i['id'], ip, i['key'])
+                    if ver == "3.3":
+                        d.set_version(3.3)
+                    data = d.status()
+                    if data:
+                        state = alertdim + "Off" + dim
+                        # print(data)
+                        try:
+                            if(data['dps']['1'] == True):
+                                state = bold + "On" + dim
+                            print("    %s[%s] - %s%s - %s - DPS: %r" %
+                                  (subbold, name, dim, ip, state, data['dps']))
+                        except:
+                            print("    %s[%s] - %s%s - %sNo Response" %
+                                  (subbold, name, dim, ip, alertdim))
+                    else:
+                        print("    %s[%s] - %s%s - %sNo Response" %
+                              (subbold, name, dim, ip, alertdim))
+                except:
+                    print("    %s[%s] - %s%s - %sNo Response" %
+                          (subbold, name, dim, ip, alertdim))
+
+    print("\nDone.\n")
+    return

@@ -110,3 +110,5 @@ test.sh
 sandbox/
 .DS_Store
 .vscode/settings.json
+devices.json
+tinytuya.json
