@@ -117,11 +117,14 @@ See the sample python script [test.py](test.py) for an OutletDevice example.
 ```python
     import tinytuya
 
+    """
+    OUTLET Device
+    """
     d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
     d.set_version(3.3)
     data = d.status()  # NOTE this does NOT require a valid key vor version 3.1
 
-    # Show status of first controlled switch on device
+    # Show status and state of first controlled switch on device
     print('Dictionary %r' % data)
     print('State (bool, true is ON) %r' % data['dps']['1'])  
 
@@ -136,6 +139,27 @@ See the sample python script [test.py](test.py) for an OutletDevice example.
     if data:
         print('set_status() result %r' % data)
         print('set_status() extra %r' % data[20:-8])
+
+    """
+    RGB Bulb Device
+    """
+    d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+    d.set_version(3.3)  # IMPORTANT to set this regardless of version
+    data = d.status()
+
+    # Show status of first controlled switch on device
+    print('Dictionary %r' % data)
+
+    # Set to RED Color - set_colour(r, g, b):
+    d.set_colour(255,0,0)  
+
+    # Brightness: Type A devices range = 25-255 and Type B = 10-1000
+    d.set_brightness(1000)
+
+    # Set to White - set_white(brightness, colourtemp):
+    #    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
+    d.set_white(1000,10)
+
 ```
 
 ### Encryption notes
@@ -180,7 +204,9 @@ devices = tinytuya.deviceScan(false, 50)
 
 The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products. 
 
-The following table represents several of the standard Tuya DPS values and their properties. 
+The following table represents several of the standard Tuya DPS values and their properties. It represents data compiled from Tuya documentation and self-discovery. Devices may vary. Feedback or additional data would would be appreciated.  Please submit a Issue or Pull Request if you have additional data that would be helpful for others.
+
+### Version 3.1 Devices
 
 #### Version 3.1 - Plug or Switch Type
 | DP ID        | Function Point | Type        | Range       | Units |
@@ -190,6 +216,17 @@ The following table represents several of the standard Tuya DPS values and their
 |4|Current|integer|0-30000|mA|
 |5|Power|integer|0-50000|W|
 |6|Voltage|integer|0-5000|V|
+
+#### Version 3.1 - Light Type (RGB)
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+| 1|Switch|bool|True/False||
+| 2|Mode|enum|white,colour,scene,music||
+| 3|Bright|integer|10-1000||
+| 4|Color Temp|integer|0-1000||
+| 5|Color|hexstring|r:0-255,g:0-255,b:0-255,h:0-360,s:0-255,v:0-255|rgb+hsv|
+
+### Version 3.3 Devices
 
 #### Version 3.3 - Plug, Switch, Power Strip Type
 | DP ID        | Function Point | Type        | Range       | Units |
@@ -235,7 +272,7 @@ The following table represents several of the standard Tuya DPS values and their
 | 21|Mode|enum|white,colour,scene,music||
 | 22|Bright|integer|10-1000||
 | 23|Color Temp|integer|0-1000||
-| 24|Color|string|n/a||
+| 24|Color|hexstring|h:0-360,s:0-1000,v:0-1000|hsv|
 | 25|Scene|string|n/a||
 | 26|Left time|integer|0-86400|s|
 | 27|Music|string|n/a||
