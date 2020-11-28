@@ -86,7 +86,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 0)
+version_tuple = (1, 1, 1)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -335,7 +335,8 @@ class XenonDevice(object):
                 self.socket.send(payload)
                 data = self.socket.recv(1024)
                 # Some devices fail to send full payload in first response
-                if self.retry and len(data) < 40:
+                # Note - some devices respond with len = 28 for error response
+                if self.retry and len(data) < 28:  
                     time.sleep(0.1)
                     data = self.socket.recv(1024)  # try again
                 success = True
@@ -548,20 +549,22 @@ class Device(XenonDevice):
         """Turn the device off"""
         self.set_status(False, switch)
 
-    def set_timer(self, num_secs):
+    def set_timer(self, num_secs, dps_id=0):
         """
         Set a timer.
 
         Args:
             num_secs(int): Number of seconds
+            dps_id(int): DPS Index for Timer
         """
 
         # Query status, pick last device id as that is probably the timer
-        status = self.status()
-        devices = status['dps']
-        devices_numbers = list(devices.keys())
-        devices_numbers.sort()
-        dps_id = devices_numbers[-1]
+        if(dps_id==0):
+            status = self.status()
+            devices = status['dps']
+            devices_numbers = list(devices.keys())
+            devices_numbers.sort()
+            dps_id = devices_numbers[-1]
 
         payload = self.generate_payload(CONTROL, {dps_id: num_secs})
 
@@ -622,20 +625,31 @@ class BulbDevice(Device):
     """
     Represents a Tuya based Smart Light/Bulb.
 
-    Args:
+    This class supports two types of bulbs with different DPS mappings and functions:
+        Type A - Uses DPS index 1-5
+        Type B - Uses DPS index 20-27 (no index 1)
+
+    Init Args:
         dev_id (str): The device id.
         address (str): The network address.
         local_key (str, optional): The encryption key. Defaults to None.
-    """
-    DPS_INDEX_ON = '1'
-    DPS_INDEX_MODE = '2'
-    DPS_INDEX_BRIGHTNESS = '3'
-    DPS_INDEX_COLOURTEMP = '4'
-    DPS_INDEX_COLOUR = '5'
 
+    """
+    # Two types of Bulbs - TypeA uses DPS 1-5, TypeB uses DPS 20-24
+    DPS_INDEX_ON = {'A': '1', 'B': '20'}         
+    DPS_INDEX_MODE = {'A': '2', 'B': '21'}
+    DPS_INDEX_BRIGHTNESS = {'A': '3', 'B': '22'}
+    DPS_INDEX_COLOURTEMP = {'A': '4', 'B': '23'}
+    DPS_INDEX_COLOUR = {'A': '5', 'B': '24'}
+    DPS_INDEX_SCENE = {'A': '2', 'B': '25'}
+    DPS_INDEX_TIMER = {'A': None, 'B': '26'}
+    DPS_INDEX_MUSIC = {'A': None, 'B': '27'}
+    
     DPS = 'dps'
-    DPS_MODE_COLOUR = 'colour'
     DPS_MODE_WHITE = 'white'
+    DPS_MODE_COLOUR = 'colour'
+    DPS_MODE_SCENE = 'scene'
+    DPS_MODE_MUSIC = 'music'
     #
     DPS_MODE_SCENE_1 = 'scene_1'  # nature
     DPS_MODE_SCENE_2 = 'scene_2'
@@ -648,22 +662,33 @@ class BulbDevice(Device):
         '3': 'brightness',
         '4': 'colourtemp',
         '5': 'colour',
+        '20': 'is_on',
+        '21': 'mode',
+        '22': 'brightness',
+        '23': 'colourtemp',
+        '24': 'colour',
     }
+
+    # Default Bulb Type
+    bulb_type = 'A'
 
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type)
 
     @staticmethod
-    def _rgb_to_hexvalue(r, g, b):
+    def _rgb_to_hexvalue(r, g, b, bulb='A'):
         """
-        Convert an RGB value to the hex representation expected by tuya.
+        Convert an RGB value to the hex representation expected by Tuya Bulb.
 
-        Index '5' (DPS_INDEX_COLOUR) is assumed to be in the format:
-        rrggbb0hhhssvv
+        Index (DPS_INDEX_COLOUR) is assumed to be in the format:
+            (Type A) Index: 5 in hex format: rrggbb0hhhssvv 
+            (Type B) Index: 24 in hex format: hhhhssssvvvv 
 
         While r, g and b are just hexadecimal values of the corresponding
         Red, Green and Blue values, the h, s and v values (which are values
-        between 0 and 1) are scaled to 360 (h) and 255 (s and v) respectively.
+        between 0 and 1) are scaled:
+            Type A: 360 (h) and 255 (s and v)
+            Type B: 360 (h) and 1000 (s and v)
 
         Args:
             r(int): Value for the colour red as int from 0-255.
@@ -673,29 +698,44 @@ class BulbDevice(Device):
         rgb = [r, g, b]
         hsv = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
 
-        hexvalue = ""
-        for value in rgb:
-            temp = str(hex(int(value))).replace("0x", "")
-            if len(temp) == 1:
-                temp = "0" + temp
-            hexvalue = hexvalue + temp
+        # Bulb Type A
+        if(bulb == 'A'):
+            hexvalue = ""
+            for value in rgb:
+                hsvarray = [int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255)]
+                temp = str(hex(int(value))).replace("0x", "")
+                if len(temp) == 1:
+                    temp = "0" + temp
+                hexvalue = hexvalue + temp
 
-        hsvarray = [int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255)]
-        hexvalue_hsv = ""
-        for value in hsvarray:
-            temp = str(hex(int(value))).replace("0x", "")
-            if len(temp) == 1:
-                temp = "0" + temp
-            hexvalue_hsv = hexvalue_hsv + temp
-        if len(hexvalue_hsv) == 7:
-            hexvalue = hexvalue + "0" + hexvalue_hsv
-        else:
-            hexvalue = hexvalue + "00" + hexvalue_hsv
+            hsvarray = [int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255)]
+            hexvalue_hsv = ""
+            for value in hsvarray:
+                temp = str(hex(int(value))).replace("0x", "")
+                if len(temp) == 1:
+                    temp = "0" + temp
+                hexvalue_hsv = hexvalue_hsv + temp
+            if len(hexvalue_hsv) == 7:
+                hexvalue = hexvalue + "0" + hexvalue_hsv
+            else:
+                hexvalue = hexvalue + "00" + hexvalue_hsv
 
+        # Bulb Type B
+        if(bulb == 'B'):
+            # h:0-360,s:0-1000,v:0-1000|hsv|
+            hexvalue = ""
+            hsvarray = [int(hsv[0] * 360), int(hsv[1] * 1000), int(hsv[2] * 1000)]
+            for value in hsvarray:
+                temp = str(hex(int(value))).replace("0x", "")
+                while len(temp) < 4:
+                    temp = "0" + temp
+                hexvalue = hexvalue + temp
+
+        print("hexvalue=%s" % hexvalue)
         return hexvalue
 
     @staticmethod
-    def _hexvalue_to_rgb(hexvalue):
+    def _hexvalue_to_rgb(hexvalue, bulb='A'):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an RGB value.
@@ -703,14 +743,24 @@ class BulbDevice(Device):
         Args:
             hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
         """
-        r = int(hexvalue[0:2], 16)
-        g = int(hexvalue[2:4], 16)
-        b = int(hexvalue[4:6], 16)
-
+        if(bulb == 'A'):
+            r = int(hexvalue[0:2], 16)
+            g = int(hexvalue[2:4], 16)
+            b = int(hexvalue[4:6], 16)
+        if(bulb == 'B'):
+            # hexvalue is in hsv
+            h = float(int(hexvalue[0:4], 16)/360.0)
+            s = float(int(hexvalue[4:8], 16)/1000.0)
+            v = float(int(hexvalue[8:12], 16)/1000.0)
+            rgb = colorsys.hsv_to_rgb(h,s,v)
+            r = int(rgb[0]*255)
+            g = int(rgb[1]*255)
+            b = int(rgb[2]*255)
+            
         return (r, g, b)
 
     @staticmethod
-    def _hexvalue_to_hsv(hexvalue):
+    def _hexvalue_to_hsv(hexvalue, bulb='A'):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an HSV value.
@@ -718,12 +768,44 @@ class BulbDevice(Device):
         Args:
             hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
         """
-        h = int(hexvalue[7:10], 16) / 360
-        s = int(hexvalue[10:12], 16) / 255
-        v = int(hexvalue[12:14], 16) / 255
+        if(bulb == 'A'):
+            h = int(hexvalue[7:10], 16) / 360
+            s = int(hexvalue[10:12], 16) / 255
+            v = int(hexvalue[12:14], 16) / 255
+        if(bulb == 'B'):
+            # hexvalue is in hsv
+            print(hexvalue + " - " + hexvalue[0:4])
+            h = int(hexvalue[0:4], 16)/360.0
+            s = int(hexvalue[4:8], 16)/1000.0
+            v = int(hexvalue[8:12], 16)/1000.0 
 
         return (h, s, v)
 
+    def set_version(self, version):
+        """
+        Set the Tuya device version 3.1 or 3.3 for BulbDevice
+        Attempt to determine BulbDevice Type: A or B based on:
+            Type A has keys 1-5
+            Type B has keys 20-29
+        """
+        self.version = version
+        # Try to determine type of BulbDevice Type based on switch DPS
+        status = self.status()
+        if '1' not in status['dps']:
+            self.bulb_type = 'B'
+
+    def turn_on(self, switch=0):
+        """Turn the device on"""
+        if switch==0:
+            switch = self.DPS_INDEX_ON[self.bulb_type]
+        self.set_status(True, switch)
+
+    def turn_off(self, switch=0):
+        """Turn the device on"""
+        if switch==0:
+            switch = self.DPS_INDEX_ON[self.bulb_type]
+        self.set_status(False, switch)
+        
     def set_scene(self, scene):
         """
         Set to scene mode
@@ -735,8 +817,6 @@ class BulbDevice(Device):
             raise ValueError(
                 "The value for scene needs to be between 1 and 4.")
 
-        # print(BulbDevice)
-
         if(scene == 1):
             s = self.DPS_MODE_SCENE_1
         elif(scene == 2):
@@ -747,7 +827,7 @@ class BulbDevice(Device):
             s = self.DPS_MODE_SCENE_4
 
         payload = self.generate_payload(CONTROL, {
-            self.DPS_INDEX_MODE: s
+            self.DPS_INDEX_MODE[self.bulb_type]: s
         })
         data = self._send_receive(payload)
         return data
@@ -771,11 +851,11 @@ class BulbDevice(Device):
             raise ValueError(
                 "The value for blue needs to be between 0 and 255.")
 
-        hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b)
+        hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b, self.bulb_type)
 
         payload = self.generate_payload(CONTROL, {
-            self.DPS_INDEX_MODE: self.DPS_MODE_COLOUR,
-            self.DPS_INDEX_COLOUR: hexvalue})
+            self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
+            self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue})
         data = self._send_receive(payload)
         return data
 
@@ -787,16 +867,22 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness (25-255).
             colourtemp(int): Value for the colour temperature (0-255).
         """
-        if not 25 <= brightness <= 255:
-            raise ValueError("The brightness needs to be between 25 and 255.")
-        if not 0 <= colourtemp <= 255:
+        if self.bulb_type == 'A' and not (25 <= brightness <= 255):
+                raise ValueError("The brightness needs to be between 25 and 255.")
+        if self.bulb_type == 'B' and not (10 <= brightness <= 1000):
+                raise ValueError("The brightness needs to be between 10 and 1000.")
+
+        if self.bulb_type == 'A' and not (0 <= colourtemp <= 255):
             raise ValueError(
                 "The colour temperature needs to be between 0 and 255.")
+        if self.bulb_type == 'B' and not (0 <= colourtemp <= 1000):
+            raise ValueError(
+                "The colour temperature needs to be between 0 and 1000.")
 
         payload = self.generate_payload(CONTROL, {
-            self.DPS_INDEX_MODE: self.DPS_MODE_WHITE,
-            self.DPS_INDEX_BRIGHTNESS: brightness,
-            self.DPS_INDEX_COLOURTEMP: colourtemp})
+            self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_WHITE,
+            self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness,
+            self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp})
 
         data = self._send_receive(payload)
         return data
@@ -808,11 +894,13 @@ class BulbDevice(Device):
         Args:
             brightness(int): Value for the brightness (25-255).
         """
-        if not 25 <= brightness <= 255:
-            raise ValueError("The brightness needs to be between 25 and 255.")
+        if self.bulb_type == 'A' and not (25 <= brightness <= 255):
+                raise ValueError("The brightness needs to be between 25 and 255.")
+        if self.bulb_type == 'B' and not (10 <= brightness <= 1000):
+                raise ValueError("The brightness needs to be between 10 and 1000.")
 
         payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_BRIGHTNESS: brightness})
+            CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness})
         data = self._send_receive(payload)
         return data
 
@@ -823,9 +911,12 @@ class BulbDevice(Device):
         Args:
             colourtemp(int): Value for the colour temperature (0-255).
         """
-        if not 0 <= colourtemp <= 255:
+        if self.bulb_type == 'A' and not (0 <= colourtemp <= 255):
             raise ValueError(
                 "The colour temperature needs to be between 0 and 255.")
+        if self.bulb_type == 'B' and not (0 <= colourtemp <= 1000):
+            raise ValueError(
+                "The colour temperature needs to be between 0 and 1000.")
 
         payload = self.generate_payload(
             CONTROL, {self.DPS_INDEX_COLOURTEMP: colourtemp})
@@ -834,21 +925,21 @@ class BulbDevice(Device):
 
     def brightness(self):
         """Return brightness value"""
-        return self.status()[self.DPS][self.DPS_INDEX_BRIGHTNESS]
+        return self.status()[self.DPS][self.DPS_INDEX_BRIGHTNESS[self.bulb_type]]
 
     def colourtemp(self):
         """Return colour temperature"""
-        return self.status()[self.DPS][self.DPS_INDEX_COLOURTEMP]
+        return self.status()[self.DPS][self.DPS_INDEX_COLOURTEMP[self.bulb_type]]
 
     def colour_rgb(self):
         """Return colour as RGB value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR]
-        return BulbDevice._hexvalue_to_rgb(hexvalue)
+        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
+        return BulbDevice._hexvalue_to_rgb(hexvalue, self.bulb_type)
 
     def colour_hsv(self):
         """Return colour as HSV value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR]
-        return BulbDevice._hexvalue_to_hsv(hexvalue)
+        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
+        return BulbDevice._hexvalue_to_hsv(hexvalue, self.bulb_type)
 
     def state(self):
         """Return state of Bulb"""
@@ -856,7 +947,7 @@ class BulbDevice(Device):
         state = {}
 
         for key in status[self.DPS].keys():
-            if(int(key) <= 5):
+            if(key in self.DPS_2_STATE):
                 state[self.DPS_2_STATE[key]] = status[self.DPS][key]
 
         return state
