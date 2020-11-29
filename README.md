@@ -104,7 +104,7 @@ Classes
         set_brightness(brightness):
         set_brightness_percentage(brightness=100):
         set_colourtemp(colourtemp):
-        set_colourtemp_percentage(self, colourtemp=100):
+        set_colourtemp_percentage(colourtemp=100):
         set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
         set_mode(mode='white'):       # white, colour, scene, music
         result = brightness():
