@@ -100,9 +100,13 @@ Classes
     BulbDevice
         set_colour(r, g, b):
         set_white(brightness, colourtemp):
+        set_white_percentage(brightness=100, colourtemp=0):
         set_brightness(brightness):
+        set_brightness_percentage(brightness=100):
         set_colourtemp(colourtemp):
+        set_colourtemp_percentage(self, colourtemp=100):
         set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
+        set_mode(mode='white'):       # white, colour, scene, music
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -112,7 +116,7 @@ Classes
 
 ### Example Usage
 
-See the sample python script [test.py](test.py) for an OutletDevice example.
+See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples] directory for other scripts.
 
 ```python
     import tinytuya
@@ -122,7 +126,7 @@ See the sample python script [test.py](test.py) for an OutletDevice example.
     """
     d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
     d.set_version(3.3)
-    data = d.status()  # NOTE this does NOT require a valid key vor version 3.1
+    data = d.status()  
 
     # Show status and state of first controlled switch on device
     print('Dictionary %r' % data)

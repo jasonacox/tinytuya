@@ -731,7 +731,6 @@ class BulbDevice(Device):
                     temp = "0" + temp
                 hexvalue = hexvalue + temp
 
-        print("hexvalue=%s" % hexvalue)
         return hexvalue
 
     @staticmethod
@@ -805,6 +804,20 @@ class BulbDevice(Device):
         if switch==0:
             switch = self.DPS_INDEX_ON[self.bulb_type]
         self.set_status(False, switch)
+
+    def set_mode(self, mode='white'):
+        """
+        Set bulb mode
+
+        Args:
+            mode(string): white,colour,scene,music
+        
+        """
+        payload = self.generate_payload(CONTROL, {
+            self.DPS_INDEX_MODE[self.bulb_type]: mode
+        })
+        data = self._send_receive(payload)
+        return data
         
     def set_scene(self, scene):
         """
@@ -859,19 +872,54 @@ class BulbDevice(Device):
         data = self._send_receive(payload)
         return data
 
-    def set_white(self, brightness, colourtemp):
+    def set_white_percentage(self, brightness=100, colourtemp=0):
         """
         Set white coloured theme of an rgb bulb.
 
         Args:
-            brightness(int): Value for the brightness (25-255).
-            colourtemp(int): Value for the colour temperature (0-255).
+            brightness(int): Value for the brightness in percent (0-100)
+            colourtemp(int): Value for the colour temperature in percent (0-100)
         """
+        # Brightness
+        if not (0 <= brightness <= 100):
+            raise ValueError("Brightness percentage needs to be between 0 and 100.")
+        b = int(25 + (255-25)*brightness/100)
+        if self.bulb_type == 'B':
+            b = int(10 + (1000-10)*brightness/100)
+
+        # Colourtemp
+        if not (0 <= colourtemp <= 100):
+            raise ValueError("Colourtemp percentage needs to be between 0 and 100.")
+        c = colourtemp = int(255*colourtemp/100)
+        if self.bulb_type == 'B':
+            c = int(1000*colourtemp/100)
+
+        data = set_white(b,c)
+        return data
+
+    def set_white(self, brightness=-1, colourtemp=-1): 
+        """
+        Set white coloured theme of an rgb bulb.
+
+        Args:
+            brightness(int): Value for the brightness (A:25-255 or B:10-1000)
+            colourtemp(int): Value for the colour temperature (A:0-255, B:0-1000).
+
+            Default: Max Brightness and Min Colourtemp
+        """
+        # Brightness (default Max)
+        if brightness < 0:
+            brightness = 255
+            if self.bulb_type == 'B':
+                brightness = 1000
         if self.bulb_type == 'A' and not (25 <= brightness <= 255):
                 raise ValueError("The brightness needs to be between 25 and 255.")
         if self.bulb_type == 'B' and not (10 <= brightness <= 1000):
                 raise ValueError("The brightness needs to be between 10 and 1000.")
 
+        # Colourtemp (default Min)
+        if colourtemp < 0:
+            colourtemp = 0
         if self.bulb_type == 'A' and not (0 <= colourtemp <= 255):
             raise ValueError(
                 "The colour temperature needs to be between 0 and 255.")
@@ -885,6 +933,22 @@ class BulbDevice(Device):
             self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp})
 
         data = self._send_receive(payload)
+        return data
+
+    def set_brightness_percentage(self, brightness=100):
+        """
+        Set the brightness value of an rgb bulb.
+
+        Args:
+            brightness(int): Value for the brightness in percent (0-100)
+        """
+        if not (0 <= brightness <= 100):
+            raise ValueError("Brightness percentage needs to be between 0 and 100.")
+        b = int(25 + (255-25)*brightness/100)
+        if self.bulb_type == 'B':
+            b = int(10 + (1000-10)*brightness/100)
+
+        data = self.set_brightness(b)
         return data
 
     def set_brightness(self, brightness):
@@ -904,6 +968,22 @@ class BulbDevice(Device):
         data = self._send_receive(payload)
         return data
 
+    def set_colourtemp_percentage(self, colourtemp=100):
+        """
+        Set the colour temperature of an rgb bulb.
+
+        Args:
+            colourtemp(int): Value for the colour temperature in percentage (0-100).
+        """
+        if not (0 <= colourtemp <= 100):
+            raise ValueError("Colourtemp percentage needs to be between 0 and 100.")
+        c = int(255*colourtemp/100)
+        if self.bulb_type == 'B':
+            c = int(1000*colourtemp/100)
+        
+        data = self.set_colourtemp(c)
+        return data
+
     def set_colourtemp(self, colourtemp):
         """
         Set the colour temperature of an rgb bulb.
@@ -919,7 +999,7 @@ class BulbDevice(Device):
                 "The colour temperature needs to be between 0 and 1000.")
 
         payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_COLOURTEMP: colourtemp})
+            CONTROL, {self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp})
         data = self._send_receive(payload)
         return data
 
