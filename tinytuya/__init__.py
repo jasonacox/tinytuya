@@ -86,7 +86,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 1)
+version_tuple = (1, 1, 2)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -435,8 +435,9 @@ class XenonDevice(object):
             m = md5()
             m.update(preMd5String)
             hexdigest = m.hexdigest()
+            # some tuya libraries strip 8: to :24
             json_payload = PROTOCOL_VERSION_BYTES_31 + \
-                hexdigest[8:][:24].encode('latin1') + json_payload
+                hexdigest[8:][:16].encode('latin1') + json_payload
             self.cipher = None  # expect to connect and then disconnect to set new
 
         postfix_payload = hex2bin(
