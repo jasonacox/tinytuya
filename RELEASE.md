@@ -1,5 +1,32 @@
 # RELEASE NOTES
 
+## Potential Future Release Features
+
+* IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
+* Add socket.shutdown(socket.SHUT_RDWR)
+* Automatic IP Address Detection based on Device ID
+
+## v1.1.3 - Automatic IP Lookup
+
+* PyPi Version 1.1.3
+* Updated device read retry logic for minimum response payload (28 characters) (Issue #17)
+* Feature added to do automatic IP address lookup via network scan if _None_ or '0.0.0.0' is specified.  Example:
+```python
+    import tinytuya
+    ID = "01234567890123456789"
+    IP = None
+    KEY = "0123456789012345"
+    d = tinytuya.OutletDevice(ID,IP,KEY)
+    d.status()
+```
+
+## v1.1.2 - Bug Fix or 3.1 Devices
+
+* PyPi Version 1.1.2
+* Bug Fix for 3.1 Devices using CONTROL command - updated to hexdigest[8:][:16]
+* See Issue: #11
+
+
 ## v1.1.1 - BulbDevice Class Update
 
 * PyPi Version 1.1.1
