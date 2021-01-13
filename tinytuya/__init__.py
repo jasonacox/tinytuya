@@ -86,7 +86,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 2)
+version_tuple = (1, 1, 3)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -227,7 +227,7 @@ payload_dict = {
         },
         HEART_BEAT: {
             "hexByte": "09",
-            "command": {}
+            "command": {"gwId": "", "devId": ""}
         },
         DP_QUERY: {  # Get Data Points from Device
             "hexByte": "0a",
@@ -261,7 +261,7 @@ payload_dict = {
         },
         HEART_BEAT: {
             "hexByte": "09",
-            "command": {}
+            "command": {"gwId": "", "devId": ""}
         },
         "prefix": "000055aa00000000000000",
         "suffix": "000000000000aa55"
@@ -296,10 +296,19 @@ class XenonDevice(object):
         self.socketPersistent = False
         self.socketNODELAY = True
         self.socketRetryLimit = 5
+        if(address == None or address == 'Auto' or address == '0.0.0.0'):
+            # try to determine IP address automatically 
+            (addr, ver) = self.find(dev_id)
+            if(addr == None):
+                raise Exception('Unable to find device on network (specify IP address)')
+            self.address = addr
+            if(ver == "3.3"):
+                self.version = 3.3
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
         if self.socket != None:
+            # self.socket.shutdown(socket.SHUT_RDWR)
             self.socket.close()
             self.socket = None
 
@@ -309,6 +318,7 @@ class XenonDevice(object):
 
     def _get_socket(self, renew):
         if(renew and self.socket != None):
+            # self.socket.shutdown(socket.SHUT_RDWR)
             self.socket.close()
             self.socket = None
         if(self.socket == None):
@@ -335,8 +345,10 @@ class XenonDevice(object):
                 self.socket.send(payload)
                 data = self.socket.recv(1024)
                 # Some devices fail to send full payload in first response
-                # Note - some devices respond with len = 28 for error response
-                if self.retry and len(data) < 28:  
+                # At minimum requires: prefix (4), sequence (4), command (4), length (4),
+                # CRC (4), and suffix (4) for 24 total bytes
+                # Messages from the device also include return code (4), for 28 total bytes
+                if self.retry and len(data) <= 28:  
                     time.sleep(0.1)
                     data = self.socket.recv(1024)  # try again
                 success = True
@@ -362,6 +374,7 @@ class XenonDevice(object):
                 self._get_socket(True)
             # except
         # while
+        # signal we are done reading
         return data
 
     def set_version(self, version):
@@ -381,6 +394,80 @@ class XenonDevice(object):
 
     def set_retry(self, retry):
         self.retry = retry
+    
+    def find(self, did=None):
+        """Scans network for Tuya devices with ID = did
+            
+        Parameters:
+            did = The specific Device ID you are looking for (returns only IP and Version)
+
+        Response: 
+            (ip, version)
+        """
+        if(did == None):
+            return(None, None)
+        # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+        client = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        client.bind(("", UDPPORT))
+        client.settimeout(TIMEOUT)
+        # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+        clients = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        clients.bind(("", UDPPORTS))
+        clients.settimeout(TIMEOUT)
+
+        count = 0
+        counts = 0
+        maxretry = 30
+        ret = (None, None)
+
+        while (count + counts) <= maxretry:
+            if (count <= counts):  # alternate between 6666 and 6667 ports
+                try:
+                    data, addr = client.recvfrom(4048)
+                    count = count + 1
+                except:
+                    # Timeout
+                    count = count + 1
+                    continue
+            else:
+                try:
+                    data, addr = clients.recvfrom(4048)
+                    counts = counts + 1
+                except:
+                    # Timeout
+                    counts = counts + 1
+                    continue
+            ip = addr[0]
+            gwId = version = ""
+            result = data
+            try:
+                result = data[20:-8]
+                try:
+                    result = decrypt_udp(result)
+                except:
+                    result = result.decode()
+
+                result = json.loads(result)
+                ip = result['ip']
+                gwId = result['gwId']
+                version = result['version']
+            except:
+                result = {"ip": ip}
+
+            # Check to see if we are only looking for one device
+            if(gwId == did):
+                # We found it!
+                ret = (ip, version)
+                break
+
+        # while
+        clients.close()
+        client.close()
+        return(ret)
 
     def generate_payload(self, command, data=None):
         """
@@ -438,7 +525,7 @@ class XenonDevice(object):
             # some tuya libraries strip 8: to :24
             json_payload = PROTOCOL_VERSION_BYTES_31 + \
                 hexdigest[8:][:16].encode('latin1') + json_payload
-            self.cipher = None  # expect to connect and then disconnect to set new
+            self.cipher = None  
 
         postfix_payload = hex2bin(
             bin2hex(json_payload) + payload_dict[self.dev_type]['suffix'])
@@ -484,7 +571,7 @@ class Device(XenonDevice):
             # got an encrypted payload, happens occasionally
             # expect resulting json to look similar to:: {"devId":"ID","dps":{"1":true,"2":0},"t":EPOCH_SECS,"s":3_DIGIT_NUM}
             # NOTE dps.2 may or may not be present
-            result = result[len(PROTOCOL_VERSION_BYTES_31)                            :]  # remove version header
+            result = result[len(PROTOCOL_VERSION_BYTES_31):]  # remove version header
             # Remove 16-bytes appears to be MD5 hexdigest of payload
             result = result[16:]
             cipher = AESCipher(self.local_key)
@@ -521,6 +608,17 @@ class Device(XenonDevice):
         data = self._send_receive(payload)
         log.debug('set_status received data=%r', data)
 
+        return data
+
+    def heartbeat(self):
+        """
+        Send a simple HEART_BEAT command to device.
+
+        """
+        # open device, send request, then close connection
+        payload = self.generate_payload(HEART_BEAT)
+        data = self._send_receive(payload)
+        log.debug('heartbeat received data=%r', data)
         return data
 
     def set_value(self, index, value):
@@ -1274,6 +1372,8 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         print("                    \n%sScan Complete!  Found %s devices.\n" %
               (normal, len(devices)))
 
+    clients.close()
+    client.close()
     return(devices)
 
 

@@ -74,7 +74,7 @@ Classes
     BulbDevice(dev_id, address, local_key=None, dev_type='default')
 
         dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99
+        address (str): Device Network IP Address e.g. 10.0.1.99 or 0.0.0.0 to auto-find
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
 
@@ -88,9 +88,10 @@ Classes
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
-    turn_on(switch=1):
-    turn_off(switch=1):
-    set_timer(num_secs):
+    turn_on(switch=1)
+    turn_off(switch=1)
+    set_timer(num_secs)
+    heartbeat()                        # Send Tuya Heartbeat 
 
     CoverDevice:
         open_cover(switch=1):  
