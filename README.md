@@ -204,6 +204,14 @@ devices = tinytuya.deviceScan(false, 50)
 * Tuya devices only allow one TCP connection at a time.  Make sure you close the TuyaSmart or SmartLife app before using *TinyTuya* to connect.
 * Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
 * The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed.
+* Some devices with 22 character IDs will require additional setting to poll correctly - here is an example:
+```python
+  a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
+  a.set_version(3.3)
+  a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
+  data =  a.status()
+  print(data)
+```
 
 ## Tuya Data Points - DPS Table
 
