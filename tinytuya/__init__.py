@@ -26,9 +26,12 @@
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
+    heartbeat()                        # Send heartbeat to device
+    updatedps()                        # Send updatedps command to device
     turn_on(switch=1):
     turn_off(switch=1):
     set_timer(num_secs):
+    set_debug(True/False)
 
     CoverDevice:
         open_cover(switch=1):  
@@ -86,7 +89,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 3)
+version_tuple = (1, 1, 4)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -120,6 +123,7 @@ CONTROL_NEW = 13
 ENABLE_WIFI = 14
 DP_QUERY_NEW = 16
 SCENE_EXECUTE = 17
+UPDATEDPS = 18      # possibly causes refresh of DPS?
 UDP_NEW = 19
 AP_CONFIG_NEW = 20
 LAN_GW_ACTIVE = 240
@@ -191,6 +195,7 @@ class AESCipher(object):
     def _unpad(s):
         return s[:-ord(s[len(s)-1:])]
 
+# Misc Helpers
 
 def bin2hex(x, pretty=False):
     if pretty:
@@ -203,16 +208,23 @@ def bin2hex(x, pretty=False):
         result = ''.join('%02X%s' % (y, space) for y in x)
     return result
 
-
 def hex2bin(x):
     if IS_PY2:
         return x.decode('hex')
     else:
         return bytes.fromhex(x)
 
-# Tuya Device Dictionary - Commands and Payload Template
-# See requests.json payload at https://github.com/codetheweb/tuyapi
+def set_debug(toggle=True):
+    """
+    Enable tinytuya verbose logging
+    """
+    if(toggle):
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.NOTSET)
 
+# Tuya Device Dictionary - Commands and Payload Template
+# See requests.json payload at http s://github.com/codetheweb/tuyapi
 
 payload_dict = {
     # Default Device
@@ -228,6 +240,10 @@ payload_dict = {
         HEART_BEAT: {
             "hexByte": "09",
             "command": {"gwId": "", "devId": ""}
+        },
+        UPDATEDPS: {
+            "hexByte": "12",
+            "command": { "dpId": ""},
         },
         DP_QUERY: {  # Get Data Points from Device
             "hexByte": "0a",
@@ -262,6 +278,10 @@ payload_dict = {
         HEART_BEAT: {
             "hexByte": "09",
             "command": {"gwId": "", "devId": ""}
+        },
+        UPDATEDPS: {
+            "hexByte": "12",
+            "command": { "dpId": ""},
         },
         "prefix": "000055aa00000000000000",
         "suffix": "000000000000aa55"
@@ -329,12 +349,13 @@ class XenonDevice(object):
             self.socket.settimeout(self.connection_timeout)
             self.socket.connect((self.address, self.port))
 
-    def _send_receive(self, payload):
+    def _send_receive(self, payload, minresponse=28):
         """
         Send single buffer `payload` and receive a single buffer.
 
         Args:
             payload(bytes): Data to send.
+            minresponse(int): Minimum response size expected (default=28 characters)
         """
         success = False
         retries = 0
@@ -348,7 +369,7 @@ class XenonDevice(object):
                 # At minimum requires: prefix (4), sequence (4), command (4), length (4),
                 # CRC (4), and suffix (4) for 24 total bytes
                 # Messages from the device also include return code (4), for 28 total bytes
-                if self.retry and len(data) <= 28:  
+                if self.retry and len(data) <= minresponse:  
                     time.sleep(0.1)
                     data = self.socket.recv(1024)  # try again
                 success = True
@@ -376,7 +397,7 @@ class XenonDevice(object):
         # while
         # signal we are done reading
         return data
-
+        
     def set_version(self, version):
         self.version = version
 
@@ -492,7 +513,10 @@ class XenonDevice(object):
             json_data['t'] = str(int(time.time()))
 
         if data is not None:
-            json_data['dps'] = data
+            if 'dpId' in json_data:
+                json_data['dpId'] = data
+            else:
+                json_data['dps'] = data
         if command_hb == '0d':   # CONTROL_NEW
             json_data['dps'] = self.dpsUsed
 
@@ -619,6 +643,21 @@ class Device(XenonDevice):
         payload = self.generate_payload(HEART_BEAT)
         data = self._send_receive(payload)
         log.debug('heartbeat received data=%r', data)
+        return data
+    
+    def updatedps(self, index=[1]):
+        """
+        Request device to update index.
+
+        Args:
+            index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
+        """
+        log.debug('updatedps() entry (dev_type is %s)', self.dev_type)
+        # open device, send request, then close connection
+        payload = self.generate_payload(UPDATEDPS, index)
+        print(payload)
+        data = self._send_receive(payload, 0)
+        log.debug('updatedps received data=%r', data)
         return data
 
     def set_value(self, index, value):
