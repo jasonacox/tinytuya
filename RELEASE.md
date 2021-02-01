@@ -4,7 +4,35 @@
 
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add socket.shutdown(socket.SHUT_RDWR)
-* Automatic IP Address Detection based on Device ID
+* Add function to send multiple DPS index updates with one call
+
+## v1.1.4 - Update DPS (Command 18)
+
+* PyPi Version 1.1.4
+* Added `updatedps()` command 18 function to request device to update DPS values (Issue #8)
+* Added `set_debug()` function to activate debug logging 
+```python
+import tinytuya
+import time
+
+tinytuya.set_debug(True)
+
+d = tinytuya.OutletDevice('DEVICEID', 'IP', 'LOCALKEY')
+d.set_version(3.3)
+
+print(" > Fetch Status < ")
+data = d.status()
+time.sleep(5)
+
+print(" > Request Update for DPS indexes 18, 19 and 20 < ")
+result = d.updatedps([18, 19, 20])
+
+print(" > Fetch Status Again < ")
+data2 = d.status()
+
+print("Before %r" % data)
+print("After  %r" % data2)
+```
 
 ## v1.1.3 - Automatic IP Lookup
 
