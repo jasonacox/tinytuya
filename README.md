@@ -235,8 +235,8 @@ The following table represents several of the standard Tuya DPS values and their
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 1|Switch|bool|True/False||
 | 2|Mode|enum|white,colour,scene,music||
-| 3|Bright|integer|10-1000||
-| 4|Color Temp|integer|0-1000||
+| 3|Bright|integer|10-1000*||
+| 4|Color Temp|integer|0-1000*||
 | 5|Color|hexstring|r:0-255,g:0-255,b:0-255,h:0-360,s:0-255,v:0-255|rgb+hsv|
 
 ### Version 3.3 Devices
@@ -273,8 +273,8 @@ The following table represents several of the standard Tuya DPS values and their
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 1|Switch|bool|True/False||
-| 2|Brightness|integer|10-1000||
-| 3|Minimum of Brightness|integer|10-1000||
+| 2|Brightness|integer|10-1000*||
+| 3|Minimum of Brightness|integer|10-1000*||
 | 4|Type of light source1|enum|LED,incandescent,halogen||
 | 5|Mode|enum|white||
 
@@ -283,7 +283,7 @@ The following table represents several of the standard Tuya DPS values and their
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 20|Switch|bool|True/False||
 | 21|Mode|enum|white,colour,scene,music||
-| 22|Bright|integer|10-1000||
+| 22|Bright|integer|10-1000*||
 | 23|Color Temp|integer|0-1000||
 | 24|Color|hexstring|h:0-360,s:0-1000,v:0-1000|hsv|
 | 25|Scene|string|n/a||
@@ -370,6 +370,8 @@ The following table represents several of the standard Tuya DPS values and their
 |39|CH2O value|integer|0-1000||
 |40|Master mode|enum|disarmed, arm, home, sos||
 |41|Air quality index|enum|level_1, level_2, level_3, level_4, level_5, level_6||
+
+NOTE (*) - The range can vary depending on the device. As an example, for dimmers, it may be 10-1000 or 25-255.
 
 ### Tuya References
 
