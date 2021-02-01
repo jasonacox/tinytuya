@@ -2,8 +2,8 @@
 
 Example usage of the tinytuya module to control various Tuya devices.
 
-## Smart Bulb (RGB) Test
+* Read Tuya Device Status - [getstatus.py](getstatus.py) - This script will read the status of a Tuya device. 
 
-[bulb.py](bulb.py) - This script tests controlling Smart Bulb with RGB capabilities. 
-Tested devices:
-* Peteme Smart Light Bulbs, Wi-Fi - [link](https://www.amazon.com/gp/product/B07MKDLV1V/)
+* Smart Bulb (RGB) Test - [bulb.py](bulb.py) - This script tests controlling Smart Bulb with RGB capabilities.  Tested devices:  Peteme Smart Light Bulbs, Wi-Fi - [link](https://www.amazon.com/gp/product/B07MKDLV1V/)
+
+* Send Raw DPS Values - [send_raw_dps.py](send_raw_dps.py) - This script show how to send raw DPS values to a device. 
