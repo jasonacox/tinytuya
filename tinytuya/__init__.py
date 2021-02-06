@@ -27,7 +27,7 @@
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
     heartbeat()                        # Send heartbeat to device
-    updatedps()                        # Send updatedps command to device
+    updatedps(index=[1])               # Send updatedps command to device
     turn_on(switch=1):
     turn_off(switch=1):
     set_timer(num_secs):
@@ -71,9 +71,11 @@ import sys
 import time
 import colorsys
 import binascii
+import struct
 import requests
 import hmac
 import hashlib
+from collections import namedtuple
 
 # Backward compatability for python2
 try:
@@ -89,7 +91,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 4)
+version_tuple = (1, 1, 5)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -140,9 +142,18 @@ LAN_CHECK_GW_UPDATE = 250
 LAN_GW_UPDATE = 251
 LAN_SET_GW_CHANNEL = 252
 
-# Protocol Versions
+# Protocol Versions and Headers
 PROTOCOL_VERSION_BYTES_31 = b'3.1'
 PROTOCOL_VERSION_BYTES_33 = b'3.3'
+PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + 12 * b"\x00"
+MESSAGE_HEADER_FMT = ">4I"       # 4*uint32: prefix, seqno, cmd, length
+MESSAGE_RECV_HEADER_FMT = ">5I"  # 4*uint32: prefix, seqno, cmd, length, retcode
+MESSAGE_END_FMT = ">2I"          # 2*uint32: crc, suffix
+PREFIX_VALUE = 0x000055AA
+SUFFIX_VALUE = 0x0000AA55
+
+# Tuya Packet Format
+TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc")
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
@@ -215,16 +226,48 @@ def hex2bin(x):
         return bytes.fromhex(x)
 
 def set_debug(toggle=True):
-    """
-    Enable tinytuya verbose logging
-    """
+    """Enable tinytuya verbose logging"""
     if(toggle):
+        logging.basicConfig(level=logging.DEBUG)
         log.setLevel(logging.DEBUG)
     else:
         log.setLevel(logging.NOTSET)
 
+def pack_message(msg):
+    """Pack a TuyaMessage into bytes."""
+    # Create full message excluding CRC and suffix
+    buffer = (
+        struct.pack(
+            MESSAGE_HEADER_FMT,
+            PREFIX_VALUE,
+            msg.seqno,
+            msg.cmd,
+            len(msg.payload) + struct.calcsize(MESSAGE_END_FMT),
+        )
+        + msg.payload
+    )
+    # Calculate CRC, add it together with suffix
+    buffer += struct.pack(MESSAGE_END_FMT, binascii.crc32(buffer) & 0xffffffff, SUFFIX_VALUE)
+    return buffer
+
+def unpack_message(data):
+    """Unpack bytes into a TuyaMessage."""
+    header_len = struct.calcsize(MESSAGE_RECV_HEADER_FMT)
+    end_len = struct.calcsize(MESSAGE_END_FMT)
+
+    _, seqno, cmd, _, retcode = struct.unpack(
+        MESSAGE_RECV_HEADER_FMT, data[:header_len]
+    )
+    payload = data[header_len:-end_len]
+    crc, _ = struct.unpack(MESSAGE_END_FMT, data[-end_len:])
+    return TuyaMessage(seqno, cmd, retcode, payload, crc)
+
+
 # Tuya Device Dictionary - Commands and Payload Template
 # See requests.json payload at http s://github.com/codetheweb/tuyapi
+# 'default' devices require the 0a command for the DP_QUERY request
+# 'device22' devices require the 0d command for the DP_QUERY request and a list of
+#            dps used set to Null in the request payload
 
 payload_dict = {
     # Default Device
@@ -316,6 +359,9 @@ class XenonDevice(object):
         self.socketPersistent = False
         self.socketNODELAY = True
         self.socketRetryLimit = 5
+        self.cipher = AESCipher(self.local_key)
+        self.dps_to_request = {}
+        self.seqno = 0
         if(address == None or address == 'Auto' or address == '0.0.0.0'):
             # try to determine IP address automatically 
             (addr, ver) = self.find(dev_id)
@@ -359,6 +405,8 @@ class XenonDevice(object):
         """
         success = False
         retries = 0
+        dev_type = self.dev_type
+        data = None
         while not success:
             # make sure I have a socket (may already exist)
             self._get_socket(False)
@@ -395,9 +443,72 @@ class XenonDevice(object):
                 self._get_socket(True)
             # except
         # while
-        # signal we are done reading
-        return data
+
+        # Decode Message with hard coded offsets - option
+        # result = self._decode_payload(data[20:-8])
+
+        # Unpack Message into TuyaMessage format
+        # and return payload decrypted
+        msg = unpack_message(data)
+        # Data available seqno cmd retcode payload crc
+        log.debug("raw unpacked message = %r", msg)
+        result = self._decode_payload(msg.payload)
         
+        # Did we detect a device22 device? Try again.
+        if dev_type != self.dev_type:
+            log.debug(
+                "Re-send %s due to device type change (%s -> %s)",
+                payload,
+                dev_type,
+                self.dev_type,
+            )
+            return self._send_receive(payload, minresponse)
+
+        return result
+    
+    def _decode_payload(self, payload):
+        log.debug("decode payload=%r", payload)
+        cipher = AESCipher(self.local_key)
+
+        if payload.startswith(PROTOCOL_VERSION_BYTES_31):
+            # Received an encrypted payload
+            # Remove version header
+            payload = payload[len(PROTOCOL_VERSION_BYTES_31) :]  
+            # Decrypt payload
+            # Remove 16-bytes of MD5 hexdigest of payload
+            payload = cipher.decrypt(payload[16:])
+        elif self.version == 3.3:
+            # Trim header for non-default device type
+            if self.dev_type != "default" or payload.startswith(PROTOCOL_VERSION_BYTES_33):
+                payload = payload[len(PROTOCOL_33_HEADER) :]
+                log.debug('removing 3.3=%r', payload)
+                log.debug('len=%r', len(payload))
+            try:
+                payload = cipher.decrypt(payload, False)
+            except:
+                log.debug("Incomplete payload=%r", payload)
+                return(None)
+
+            log.debug('decrypted payload=%r', payload)
+            # Try to detect if device22 found
+            if "data unvalid" in payload:
+                self.dev_type = "device22"
+                # set at least one DPS
+                self.dpsUsed = {"1": None}
+                log.debug(
+                    "'data unvalid' error detected: switching to dev_type %r",
+                    self.dev_type,
+                )
+                return None
+        elif not payload.startswith(b"{"):
+            log.debug("Unexpected payload=%r", payload)
+            raise Exception("Unexpected payload={payload}")
+
+        if not isinstance(payload, str):
+            payload = payload.decode()
+        log.debug("decrypted result=%r", payload)
+        return json.loads(payload)
+
     def set_version(self, version):
         self.version = version
 
@@ -521,40 +632,47 @@ class XenonDevice(object):
             json_data['dps'] = self.dpsUsed
 
         # Create byte buffer from hex data
-        json_payload = json.dumps(json_data)
+        payload = json.dumps(json_data)
         # if spaces are not removed device does not respond!
-        json_payload = json_payload.replace(' ', '')
-        json_payload = json_payload.encode('utf-8')
-        log.debug('json_payload=%r', json_payload)
+        payload = payload.replace(' ', '')
+        payload = payload.encode('utf-8')
+        log.debug('payload=%r', payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
-            json_payload = self.cipher.encrypt(json_payload, False)
+            payload = self.cipher.encrypt(payload, False)
             self.cipher = None
             if command_hb != '0a':
                 # add the 3.3 header
-                json_payload = PROTOCOL_VERSION_BYTES_33 + \
-                    b"\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
+                payload = PROTOCOL_33_HEADER + payload
         elif command == CONTROL:
             # need to encrypt
-            # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
-            json_payload = self.cipher.encrypt(json_payload)
-            preMd5String = b'data=' + json_payload + b'||lpv=' + \
+            payload = self.cipher.encrypt(payload)
+            preMd5String = b'data=' + payload + b'||lpv=' + \
                 PROTOCOL_VERSION_BYTES_31 + b'||' + self.local_key
             m = md5()
             m.update(preMd5String)
             hexdigest = m.hexdigest()
             # some tuya libraries strip 8: to :24
-            json_payload = PROTOCOL_VERSION_BYTES_31 + \
-                hexdigest[8:][:16].encode('latin1') + json_payload
+            payload = PROTOCOL_VERSION_BYTES_31 + \
+                hexdigest[8:][:16].encode('latin1') + payload
             self.cipher = None  
 
+        # create Tuya message packet
+        msg = TuyaMessage(self.seqno, int(command_hb,16), 0, payload, 0)
+        self.seqno += 1     # increase message sequence number
+        buffer = pack_message(msg)
+        log.debug('gen-payload1=%r', buffer)
+        return buffer
+        """
+        # construct payload - option
         postfix_payload = hex2bin(
-            bin2hex(json_payload) + payload_dict[self.dev_type]['suffix'])
+            bin2hex(payload) + payload_dict[self.dev_type]['suffix'])
 
         assert len(postfix_payload) <= 0xff
+
         postfix_payload_hex_len = '%x' % len(
             postfix_payload)  # single byte 0-255 (0x00-0xff)
         buffer = hex2bin(payload_dict[self.dev_type]['prefix'] +
@@ -565,56 +683,22 @@ class XenonDevice(object):
         # calc the CRC of everything except where the CRC goes and the suffix
         hex_crc = format(binascii.crc32(buffer[:-8]) & 0xffffffff, '08X')
         buffer = buffer[:-8] + hex2bin(hex_crc) + buffer[-4:]
+        log.debug('gen-payload2=%r', buffer)
         return buffer
-
+        """
 
 class Device(XenonDevice):
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(Device, self).__init__(dev_id, address, local_key, dev_type)
 
     def status(self):
+        """Return device status."""
         log.debug('status() entry (dev_type is %s)', self.dev_type)
-        # open device, send request, then close connection
         payload = self.generate_payload(DP_QUERY)
 
         data = self._send_receive(payload)
         log.debug('status received data=%r', data)
-
-        result = data[20:-8]  # hard coded offsets
-        if self.dev_type != 'default':
-            result = result[15:]
-
-        log.debug('result=%r', result)
-
-        if result.startswith(b'{'):
-            # this is the regular expected code path
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        elif result.startswith(PROTOCOL_VERSION_BYTES_31):
-            # got an encrypted payload, happens occasionally
-            # expect resulting json to look similar to:: {"devId":"ID","dps":{"1":true,"2":0},"t":EPOCH_SECS,"s":3_DIGIT_NUM}
-            # NOTE dps.2 may or may not be present
-            result = result[len(PROTOCOL_VERSION_BYTES_31):]  # remove version header
-            # Remove 16-bytes appears to be MD5 hexdigest of payload
-            result = result[16:]
-            cipher = AESCipher(self.local_key)
-            result = cipher.decrypt(result)
-            log.debug('decrypted result=%r', result)
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        elif self.version == 3.3:
-            cipher = AESCipher(self.local_key)
-            result = cipher.decrypt(result, False)
-            log.debug('decrypted result=%r', result)
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        else:
-            log.error('Unexpected status() payload=%r', result)
-
-        return result
+        return data
 
     def set_status(self, on, switch=1):
         """
@@ -834,7 +918,7 @@ class BulbDevice(Device):
             b(int): Value for the colour blue as int from 0-255.
         """
         rgb = [r, g, b]
-        hsv = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
+        hsv = colorsys.rgb_to_hsv(rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0)
 
         # Bulb Type A
         if(bulb == 'A'):

@@ -6,6 +6,14 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.1.5 - Bug Fixes
+
+* PyPi Version 1.1.5
+* Now decrypting all TuyaMessage responses (not just status)
+* Fixed `set_colour(r, g, b)` to work with python2
+* Fixed `set_debug()` to activate debug logging
+* Added handler for `device22` to automatically detect and `set_dpsUsed()` with available DPS values. 
+
 ## v1.1.4 - Update DPS (Command 18)
 
 * PyPi Version 1.1.4
