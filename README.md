@@ -88,10 +88,12 @@ Classes
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
+    heartbeat()                        # Send heartbeat to device
+    updatedps(index=[1])               # Send updatedps command to device
     turn_on(switch=1)
     turn_off(switch=1)
     set_timer(num_secs)
-    heartbeat()                        # Send Tuya Heartbeat 
+    set_debug(True/False)
 
     CoverDevice:
         open_cover(switch=1):  
