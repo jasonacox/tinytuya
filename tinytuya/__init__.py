@@ -484,6 +484,7 @@ class XenonDevice(object):
                 log.debug('removing 3.3=%r', payload)
                 log.debug('len=%r', len(payload))
             try:
+                log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
             except:
                 log.debug("Incomplete payload=%r", payload)
@@ -507,7 +508,12 @@ class XenonDevice(object):
         if not isinstance(payload, str):
             payload = payload.decode()
         log.debug("decrypted result=%r", payload)
-        return json.loads(payload)
+        try:
+            json_payload = json.loads(payload)
+        except:
+            log.debug("Invalid json payload assume error=%r", payload)
+            json_payload = json.loads('{ "Response":"%s"}' % payload)
+        return json_payload
 
     def set_version(self, version):
         self.version = version
