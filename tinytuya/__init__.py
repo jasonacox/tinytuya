@@ -22,16 +22,18 @@
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
+    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dpsUsed)               # set data points (DPs)
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
     heartbeat()                        # Send heartbeat to device
     updatedps(index=[1])               # Send updatedps command to device
-    turn_on(switch=1):
-    turn_off(switch=1):
-    set_timer(num_secs):
-    set_debug(True/False)
+    turn_on(switch=1)                  # Turn on device / switch #
+    turn_off(switch=1)                 # Turn off
+    set_timer(num_secs)                # Set timer for num_secs
+    set_debug(toggle, color)           # Activate verbose debugging output
+    set_wait(num_secs)                 # Seconds to wait after sending for response
 
     CoverDevice:
         open_cover(switch=1):  
@@ -151,6 +153,7 @@ MESSAGE_RECV_HEADER_FMT = ">5I"  # 4*uint32: prefix, seqno, cmd, length, retcode
 MESSAGE_END_FMT = ">2I"          # 2*uint32: crc, suffix
 PREFIX_VALUE = 0x000055AA
 SUFFIX_VALUE = 0x0000AA55
+SUFFIX_BIN = b"\x00\x00\xaaU"
 
 # Tuya Packet Format
 TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc")
@@ -225,10 +228,13 @@ def hex2bin(x):
     else:
         return bytes.fromhex(x)
 
-def set_debug(toggle=True):
+def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""
     if(toggle):
-        logging.basicConfig(level=logging.DEBUG)
+        if(color):
+            logging.basicConfig(format='\x1b[31;1m%(levelname)s:%(message)s\x1b[0m',level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(levelname)s:%(message)s',level=logging.DEBUG)
         log.setLevel(logging.DEBUG)
     else:
         log.setLevel(logging.NOTSET)
@@ -262,6 +268,12 @@ def unpack_message(data):
     crc, _ = struct.unpack(MESSAGE_END_FMT, data[-end_len:])
     return TuyaMessage(seqno, cmd, retcode, payload, crc)
 
+def has_suffix(payload):
+    """Check to see if payload has valid Tuya suffix"""
+    if len(payload) < 4:
+        return False
+    log.debug('buffer %r = %r',payload[-4:], SUFFIX_BIN)
+    return(payload[-4:] == SUFFIX_BIN)
 
 # Tuya Device Dictionary - Commands and Payload Template
 # See requests.json payload at http s://github.com/codetheweb/tuyapi
@@ -333,7 +345,7 @@ payload_dict = {
 
 
 class XenonDevice(object):
-    def __init__(self, dev_id, address, local_key="", dev_type="default", connection_timeout=10):
+    def __init__(self, dev_id, address, local_key="", dev_type="default", connection_timeout=5):
         """
         Represents a Tuya device.
 
@@ -362,6 +374,7 @@ class XenonDevice(object):
         self.cipher = AESCipher(self.local_key)
         self.dps_to_request = {}
         self.seqno = 0
+        self.sendWait = 0.01  
         if(address == None or address == 'Auto' or address == '0.0.0.0'):
             # try to determine IP address automatically 
             (addr, ver) = self.find(dev_id)
@@ -393,7 +406,11 @@ class XenonDevice(object):
                 self.socket.setsockopt(
                     socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.socket.settimeout(self.connection_timeout)
-            self.socket.connect((self.address, self.port))
+            try:
+                self.socket.connect((self.address, self.port))
+            except:
+                time.sleep(0.1)
+                self.socket.connect((self.address, self.port))
 
     def _send_receive(self, payload, minresponse=28):
         """
@@ -401,46 +418,55 @@ class XenonDevice(object):
 
         Args:
             payload(bytes): Data to send.
-            minresponse(int): Minimum response size expected (default=28 characters)
+            minresponse(int): Minimum response size expected (default=28 bytes)
         """
         success = False
         retries = 0
         dev_type = self.dev_type
         data = None
         while not success:
-            # make sure I have a socket (may already exist)
-            self._get_socket(False)
             try:
+                # make sure I have a socket (may already exist)
+                self._get_socket(False)
                 self.socket.send(payload)
+                time.sleep(self.sendWait) # give device time to respond
                 data = self.socket.recv(1024)
-                # Some devices fail to send full payload in first response
-                # At minimum requires: prefix (4), sequence (4), command (4), length (4),
-                # CRC (4), and suffix (4) for 24 total bytes
-                # Messages from the device also include return code (4), for 28 total bytes
+                # device may send null ack (28 byte) response before a full response
                 if self.retry and len(data) <= minresponse:  
+                    log.debug('received null payload (%r), fetch new one',data)
                     time.sleep(0.1)
-                    data = self.socket.recv(1024)  # try again
+                    data = self.socket.recv(1024)  # try to fetch new payload
                 success = True
-                # Legacy/default mode avoids persisting socket across commands
+                log.debug('received data=%r',data)
+                # legacy/default mode avoids persisting socket across commands
                 if(not self.socketPersistent):
                     self.socket.close()
                     self.socket = None
-            except:
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                exit()                      
+            except socket.timeout as err:
+                # likely we have socket timeout
                 retries = retries+1
-                log.debug('Exception with low level TinyTuya socket!!! retry ' +
+                log.debug('Timeout or exception fetching payload - retry ' +
                           str(retries)+'/'+str(self.socketRetryLimit))
                 # if we exceed the limit of retries then lets get out of here
                 if(retries > self.socketRetryLimit):
                     if(self.socket != None):
                         self.socket.close()
                         self.socket = None
-                    log.exception(
+                    log.debug(
                         'Exceeded tinytuya retry limit ('+str(self.socketRetryLimit)+')')
-                    # goodbye
-                    raise
+                    # timeout reached - return error
+                    json_payload = json.loads('{ "Error":"Timeout waiting for response - check key"}')
+                    return(json_payload)
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                self._get_socket(True)
+                self._get_socket(True)      
+            except Exception as err:
+                log.debug('Unable to connect to device ')
+                json_payload = json.loads('{ "Error_54":"Unable to connect to device"}')
+                return(json_payload)            
             # except
         # while
 
@@ -482,12 +508,11 @@ class XenonDevice(object):
             if self.dev_type != "default" or payload.startswith(PROTOCOL_VERSION_BYTES_33):
                 payload = payload[len(PROTOCOL_33_HEADER) :]
                 log.debug('removing 3.3=%r', payload)
-                log.debug('len=%r', len(payload))
             try:
                 log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
             except:
-                log.debug("Incomplete payload=%r", payload)
+                log.debug("incomplete payload=%r", payload)
                 return(None)
 
             log.debug('decrypted payload=%r', payload)
@@ -512,7 +537,7 @@ class XenonDevice(object):
             json_payload = json.loads(payload)
         except:
             log.debug("Invalid json payload assume error=%r", payload)
-            json_payload = json.loads('{ "Response":"%s"}' % payload)
+            json_payload = json.loads('{ "Error":"%s"}' % payload.replace('\"',''))
         return json_payload
 
     def set_version(self, version):
@@ -527,11 +552,17 @@ class XenonDevice(object):
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
 
+    def set_socketTimeout(self, s):
+        self.connection_timeout = s
+
     def set_dpsUsed(self, dpsUsed):
         self.dpsUsed = dpsUsed
 
     def set_retry(self, retry):
         self.retry = retry
+
+    def set_wait(self, s):
+        self.sendWait = s
     
     def find(self, did=None):
         """Scans network for Tuya devices with ID = did
@@ -642,7 +673,7 @@ class XenonDevice(object):
         # if spaces are not removed device does not respond!
         payload = payload.replace(' ', '')
         payload = payload.encode('utf-8')
-        log.debug('payload=%r', payload)
+        log.debug('building payload=%r', payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
@@ -670,28 +701,8 @@ class XenonDevice(object):
         msg = TuyaMessage(self.seqno, int(command_hb,16), 0, payload, 0)
         self.seqno += 1     # increase message sequence number
         buffer = pack_message(msg)
-        log.debug('gen-payload1=%r', buffer)
+        log.debug('payload generated=%r', buffer)
         return buffer
-        """
-        # construct payload - option
-        postfix_payload = hex2bin(
-            bin2hex(payload) + payload_dict[self.dev_type]['suffix'])
-
-        assert len(postfix_payload) <= 0xff
-
-        postfix_payload_hex_len = '%x' % len(
-            postfix_payload)  # single byte 0-255 (0x00-0xff)
-        buffer = hex2bin(payload_dict[self.dev_type]['prefix'] +
-                         payload_dict[self.dev_type][command]['hexByte'] +
-                         '000000' +
-                         postfix_payload_hex_len) + postfix_payload
-
-        # calc the CRC of everything except where the CRC goes and the suffix
-        hex_crc = format(binascii.crc32(buffer[:-8]) & 0xffffffff, '08X')
-        buffer = buffer[:-8] + hex2bin(hex_crc) + buffer[-4:]
-        log.debug('gen-payload2=%r', buffer)
-        return buffer
-        """
 
 class Device(XenonDevice):
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
@@ -746,7 +757,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
         print(payload)
-        data = self._send_receive(payload, 0)
+        data = self._send_receive(payload)
         log.debug('updatedps received data=%r', data)
         return data
 
@@ -1018,7 +1029,11 @@ class BulbDevice(Device):
         self.version = version
         # Try to determine type of BulbDevice Type based on switch DPS
         status = self.status()
-        if '1' not in status['dps']:
+        if 'dps' in status:
+            if '1' not in status['dps']:
+                self.bulb_type = 'B'
+        else:
+            # response has no dps
             self.bulb_type = 'B'
 
     def turn_on(self, switch=0):
@@ -1271,7 +1286,6 @@ TIMEOUT = 3.0       # Seconds to wait for a broadcast
 
 # UDP packet payload decryption - credit to tuya-convert
 
-
 def pad(s): return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
 def unpad(s): return s[:-ord(s[len(s) - 1:])]
 
@@ -1286,7 +1300,6 @@ udpkey = md5(b"yGAdlopoPVldABfn").digest()
 def decrypt_udp(msg): return decrypt(msg, udpkey)
 
 # Return positive number or zero
-
 
 def floor(x):
     if x > 0:
@@ -1307,7 +1320,6 @@ def appenddevice(newdevice, devices):
     return False
 
 # Scan function shortcut
-
 
 def scan(maxretry=MAXCOUNT, color=True):
     """Scans your network for Tuya devices with output to stdout
@@ -1408,14 +1420,24 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         if (count <= counts):  # alternate between 6666 and 6667 ports
             try:
                 data, addr = client.recvfrom(4048)
-            except:
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                if verbose:
+                    print("\n**User Break**")
+                exit()
+            except Exception as err:
                 # Timeout
                 count = count + 1
                 continue
         else:
             try:
                 data, addr = clients.recvfrom(4048)
-            except:
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                if verbose:
+                    print("\n**User Break**")
+                exit()
+            except Exception as err:
                 # Timeout
                 counts = counts + 1
                 continue
@@ -1463,30 +1485,48 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                 else:
                     print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
                     normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
-            try:
+            if True:
+            #try:
                 if(version == '3.1'):
                     # Version 3.1 - no device key requires - poll for status data points
                     d = OutletDevice(gwId, ip, dkey)
                     d.set_version(3.1)
                     dpsdata = d.status()
-                    devices[ip]['dps'] = dpsdata
-                    if(verbose):
-                        print("    Status: %s" % dpsdata['dps'])
+                    if 'dps' not in dpsdata:
+                        if(verbose):
+                            if 'Error_54' in dpsdata:
+                                print("%s    Access rejected by %s: %r" % (alertdim, ip, dpsdata['Error_54']))
+                            else:
+                                print("%s    Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                        devices[ip]['err'] = 'Unable to poll'
+                    else:
+                        devices[ip]['dps'] = dpsdata
+                        if(verbose):
+                            print("    Status: %s" % dpsdata['dps'])
                 else:
                     # Version 3.3+ requires device key
                     if(dkey != ""):
                         d = OutletDevice(gwId, ip, dkey)
                         d.set_version(3.3)
                         dpsdata = d.status()
-                        devices[ip]['dps'] = dpsdata
-                        if(verbose):
-                            print(dim + "    Status: %s" % dpsdata['dps'])      
+                        if 'dps' not in dpsdata:
+                            if verbose:
+                                if 'Error_54' in dpsdata:
+                                    print("%s    Access rejected by %s: %r" % (alertdim, ip, dpsdata['Error_54']))
+                                else:
+                                    print("%s    Check DEVICE KEY - Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                            devices[ip]['err'] = 'Unable to poll' 
+                        else:
+                            devices[ip]['dps'] = dpsdata
+                            if(verbose):
+                                print(dim + "    Status: %s" % dpsdata['dps'])      
                     else:                      
                         if(verbose):
-                            print(alertdim + "    No Stats - Device Key required to poll for status" + dim)
-            except:
+                            print("%s    No Stats for %s: DEVICE KEY required to poll for status%s" % (alertdim, ip, dim))
+            else:
+            #except:
                 if(verbose):
-                    print(alertdim + "    No Stats for %s: Unable to poll" % ip)
+                    print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
                 devices[ip]['err'] = 'Unable to poll'
             if(dname != ""):
                 devices[ip]['name'] = dname
@@ -1737,15 +1777,17 @@ def wizard(color=True):
                     if ver == "3.3":
                         d.set_version(3.3)
                     data = d.status()
-                    if data:
+                    if 'dps' in data:
                         item['dps'] = data
                         state = alertdim + "Off" + dim
-                        # print(data)
                         try:
-                            if(data['dps']['1'] == True):
+                            if '1' in data['dps'] or '20' in data['dps']:
                                 state = bold + "On" + dim
-                            print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                  (subbold, name, dim, ip, state, data['dps']))
+                                print("    %s[%s] - %s%s - %s - DPS: %r" %
+                                    (subbold, name, dim, ip, state, data['dps']))
+                            else:
+                                print("    %s[%s] - %s%s - DPS: %r" %
+                                    (subbold, name, dim, ip, data['dps']))
                         except:
                             print("    %s[%s] - %s%s - %sNo Response" %
                                   (subbold, name, dim, ip, alertdim))
