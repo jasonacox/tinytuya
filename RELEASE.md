@@ -13,6 +13,10 @@
 * Fixed `set_colour(r, g, b)` to work with python2
 * Fixed `set_debug()` to activate debug logging
 * Added handler for `device22` to automatically detect and `set_dpsUsed()` with available DPS values. 
+* Improved error handling
+* Added `set_socketTimeout(s)` for adjustable connection timeout setting (defaults to 5s)
+* Added `set_sendWait(s)` for adjustable wait time after sending device commands
+* Added color to debug logging (adjustable via `set_debug()`)
 
 ## v1.1.4 - Update DPS (Command 18)
 

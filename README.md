@@ -78,22 +78,25 @@ Classes
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
 
- Functions
-    json = status()                    # returns json payload from device
+ Functions:
+ 
+    json = status()                    # returns json payload
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
+    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dpsUsed)               # set data points (DPs)
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
     heartbeat()                        # Send heartbeat to device
     updatedps(index=[1])               # Send updatedps command to device
-    turn_on(switch=1)
-    turn_off(switch=1)
-    set_timer(num_secs)
-    set_debug(True/False)
+    turn_on(switch=1)                  # Turn on device / switch #
+    turn_off(switch=1)                 # Turn off
+    set_timer(num_secs)                # Set timer for num_secs
+    set_debug(toggle, color)           # Activate verbose debugging output
+    set_sendWait(num_secs)             # Seconds to wait after sending for response
 
     CoverDevice:
         open_cover(switch=1):  

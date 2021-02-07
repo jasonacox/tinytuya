@@ -33,7 +33,7 @@
     turn_off(switch=1)                 # Turn off
     set_timer(num_secs)                # Set timer for num_secs
     set_debug(toggle, color)           # Activate verbose debugging output
-    set_wait(num_secs)                 # Seconds to wait after sending for response
+    set_sendWait(num_secs)             # Seconds to wait after sending for response
 
     CoverDevice:
         open_cover(switch=1):  
@@ -561,7 +561,7 @@ class XenonDevice(object):
     def set_retry(self, retry):
         self.retry = retry
 
-    def set_wait(self, s):
+    def set_sendWait(self, s):
         self.sendWait = s
     
     def find(self, did=None):
