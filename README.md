@@ -79,7 +79,7 @@ Classes
         dev_type (str): Device type for payload options (see below)
 
  Functions:
- 
+
     json = status()                    # returns json payload
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
@@ -120,9 +120,26 @@ Classes
         result = state():
 ```
 
+### TinyTuya Error Codes
+
+Starting with v1.2.0 TinyTuya functions will return error details in the JSON data responses instead of raising exceptions.  The format for this response:
+
+```json
+{ "Error":"Invalid JSON Payload", "Err":"900", "Payload":"{Tuya Message}" }'
+```
+
+The "Err" number will be one of these:
+
+  900 - Invalid JSON Response from Device
+  901 - Network Error: Unable to Connect
+  902 - Timeout Waiting for Device
+  903 - Specified Value Out of Range
+  904 - Unexpected Payload from Device
+  905 - Network Error: Device Unreachable
+
 ### Example Usage
 
-See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples] directory for other scripts.
+See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts.
 
 ```python
     import tinytuya
