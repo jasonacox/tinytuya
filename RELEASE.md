@@ -6,17 +6,33 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.1.5 - Bug Fixes
+## v1.2.0 - Error Handling and Bug Fixes
 
-* PyPi Version 1.1.5
+* PyPi Version 1.2.0
 * Now decrypting all TuyaMessage responses (not just status)
 * Fixed `set_colour(r, g, b)` to work with python2
-* Fixed `set_debug()` to activate debug logging
+* Fixed `set_debug()` to toggle on debug logging (with color)
 * Added handler for `device22` to automatically detect and `set_dpsUsed()` with available DPS values. 
-* Improved error handling
 * Added `set_socketTimeout(s)` for adjustable connection timeout setting (defaults to 5s)
 * Added `set_sendWait(s)` for adjustable wait time after sending device commands
-* Added color to debug logging (adjustable via `set_debug()`)
+* Improved and added additional error handling and retry logic
+* Instead of Exceptions, tinytuya responds with Error response codes (potential breaking change):
+
+Example
+
+```python
+import tinytuya
+
+tinytuya.set_debug(toggle=False, color=True)
+
+d = tinytuya.OutletDevice('<ID>','<IP>','<KEY>')
+d.set_version(3.3)
+d.status()
+```
+```
+{u'Payload': None, u'Err': u'905', u'Error': u'Network Error: Device Unreachable'}
+```
+
 
 ## v1.1.4 - Update DPS (Command 18)
 
