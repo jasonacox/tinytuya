@@ -414,10 +414,11 @@ class XenonDevice(object):
             (addr, ver) = self.find(dev_id)
             if(addr == None):
                 log.debug('Unable to find device on network (specify IP address)')
-                log.exception('Unable to find device on network (specify IP address)')
+                raise Exception("Unable to find device on network (specify IP address)")
             self.address = addr
             if(ver == "3.3"):
                 self.version = 3.3
+            time.sleep(0.5)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -432,26 +433,35 @@ class XenonDevice(object):
 
     def _get_socket(self, renew):
         if(renew and self.socket != None):
-            # self.socket.shutdown(socket.SHUT_RDWR)
+            #self.socket.shutdown(socket.SHUT_RDWR)
             self.socket.close()
             self.socket = None
         if(self.socket == None):
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if(self.socketNODELAY):
-                self.socket.setsockopt(
-                    socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.socket.settimeout(self.connection_timeout)
+            # Set up Socket
             retries = 0
-            while (retries < self.socketRetryLimit):
+            while(retries < self.socketRetryLimit):
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                if(self.socketNODELAY):
+                    self.socket.setsockopt(
+                        socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.socket.settimeout(self.connection_timeout)
                 try:
+                    retries = retries + 1
                     self.socket.connect((self.address, self.port))
                     return True
-                except:
-                    retries = retries+1
+                except socket.timeout as err:
+                    # unable to open socket
+                    log.debug('socket unable to connect - retry %d/%d %r' % (retries,self.socketRetryLimit,err))
+                    self.socket.close()
                     time.sleep(0.1)
-            # should not get here
+                except Exception as err:
+                    # unable to open socket
+                    log.debug('socket unable to connect - retry %d/%d %r' % (retries,self.socketRetryLimit,err))
+                    self.socket.close()
+                    time.sleep(5)
+            # unable to get connection
             return False
-        # nothing to do
+        # existing socket active
         return True
 
     def _send_receive(self, payload, minresponse=28):
@@ -467,9 +477,14 @@ class XenonDevice(object):
         dev_type = self.dev_type
         data = None
         while not success:
-            # open up socket if device is available
+            # open up socket if device is available 
             if not self._get_socket(False):
+                # unable to get a socket - device likely offline
+                if self.socket is not None:
+                    self.socket.close()
+                self.socket = None
                 return error_json(ERR_OFFLINE)
+            # send request to device
             try:
                 self.socket.send(payload)
                 time.sleep(self.sendWait) # give device time to respond
@@ -487,7 +502,7 @@ class XenonDevice(object):
                     self.socket = None
             except KeyboardInterrupt as err:
                 log.debug('Keyboard Interrupt - Exiting')
-                exit()                      
+                raise                  
             except socket.timeout as err:
                 # a socket timeout occurred
                 retries = retries+1
@@ -799,7 +814,7 @@ class Device(XenonDevice):
         """
         # open device, send request, then close connection
         payload = self.generate_payload(HEART_BEAT)
-        data = self._send_receive(payload)
+        data = self._send_receive(payload,0)
         log.debug('heartbeat received data=%r', data)
         return data
     
@@ -813,7 +828,7 @@ class Device(XenonDevice):
         log.debug('updatedps() entry (dev_type is %s)', self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
-        data = self._send_receive(payload)
+        data = self._send_receive(payload,0)
         log.debug('updatedps received data=%r', data)
         return data
 
@@ -1542,6 +1557,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                     print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
                     normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
             try:
+                time.sleep(0.1) # give device a break before polling
                 if(version == '3.1'):
                     # Version 3.1 - no device key requires - poll for status data points
                     d = OutletDevice(gwId, ip, dkey)
