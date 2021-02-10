@@ -33,7 +33,7 @@
     turn_off(switch=1)                 # Turn off
     set_timer(num_secs)                # Set timer for num_secs
     set_debug(toggle, color)           # Activate verbose debugging output
-    set_sendWait(num_secs)             # Seconds to wait after sending for response
+    set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
 
     CoverDevice:
         open_cover(switch=1):  
@@ -1083,7 +1083,6 @@ class BulbDevice(Device):
             v = int(hexvalue[12:14], 16) / 255
         if(bulb == 'B'):
             # hexvalue is in hsv
-            print(hexvalue + " - " + hexvalue[0:4])
             h = int(hexvalue[0:4], 16)/360.0
             s = int(hexvalue[4:8], 16)/1000.0
             v = int(hexvalue[8:12], 16)/1000.0 
