@@ -130,12 +130,12 @@ Starting with v1.2.0 TinyTuya functions will return error details in the JSON da
 
 The "Err" number will be one of these:
 
-  900 - Invalid JSON Response from Device
-  901 - Network Error: Unable to Connect
-  902 - Timeout Waiting for Device
-  903 - Specified Value Out of Range
-  904 - Unexpected Payload from Device
-  905 - Network Error: Device Unreachable
+* 900 - Invalid JSON Response from Device
+* 901 - Network Error: Unable to Connect
+* 902 - Timeout Waiting for Device
+* 903 - Specified Value Out of Range
+* 904 - Unexpected Payload from Device
+* 905 - Network Error: Device Unreachable
 
 ### Example Usage
 
