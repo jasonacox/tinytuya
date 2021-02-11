@@ -9,3 +9,5 @@ Example usage of the tinytuya module to control various Tuya devices.
 * Send Raw DPS Values - [send_raw_dps.py](send_raw_dps.py) - This script show how to send raw DPS values to a device. 
 
 * Scan all Devices - [devices.py](devices.py) - Poll status of all devices in `devices.json`.
+
+* Use snapshot.json to Manage Devices - [snapshot.py](snapshot.py) - Load `snapshot.json` to manage Tuya Devices
