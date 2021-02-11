@@ -332,7 +332,7 @@ payload_dict = {
         },
         UPDATEDPS: {
             "hexByte": "12",
-            "command": { "dpId": ""},
+            "command": {"dpId": [18, 19, 20]},
         },
         DP_QUERY: {  # Get Data Points from Device
             "hexByte": "0a",
@@ -370,7 +370,7 @@ payload_dict = {
         },
         UPDATEDPS: {
             "hexByte": "12",
-            "command": { "dpId": ""},
+            "command": {"dpId": [18, 19, 20]},
         },
         "prefix": "000055aa00000000000000",
         "suffix": "000000000000aa55"
@@ -636,6 +636,9 @@ class XenonDevice(object):
     def set_sendWait(self, s):
         self.sendWait = s
     
+    def close(self):
+        self.__del__()
+
     def find(self, did=None):
         """Scans network for Tuya devices with ID = did
             
@@ -752,7 +755,7 @@ class XenonDevice(object):
             self.cipher = AESCipher(self.local_key)
             payload = self.cipher.encrypt(payload, False)
             self.cipher = None
-            if command_hb != '0a':
+            if command_hb != '0a' and command_hb != '12':
                 # add the 3.3 header
                 payload = PROTOCOL_33_HEADER + payload
         elif command == CONTROL:
