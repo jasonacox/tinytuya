@@ -6,6 +6,12 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+
+## v1.2.1 - Bug Fix for Command 0x12 UpdateDPS
+
+* PyPi Version 1.2.1
+* Fixed header for 0x12 Update DPS Command (see issue #8)
+
 ## v1.2.0 - Error Handling and Bug Fixes
 
 * PyPi Version 1.2.0
