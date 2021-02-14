@@ -24,5 +24,8 @@ d.set_version(3.3)
 # Generate the payload to send - add all the DPS values you want to change here
 payload=d.generate_payload(tinytuya.CONTROL, {'1': True, '2': 50})
 
+# Optionally you can set separate gwId, devId and uid values 
+# payload=d.generate_payload(tinytuya.CONTROL, data={'1': True, '2': 50}, gwId=DEVICEID, devId=DEVICEID, uid=DEVICEID)
+
 # Send the payload to the device
 d._send_receive(payload)

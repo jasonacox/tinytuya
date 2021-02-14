@@ -93,7 +93,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 1)
+version_tuple = (1, 2, 2)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -713,7 +713,7 @@ class XenonDevice(object):
         log.debug(ret)
         return(ret)
 
-    def generate_payload(self, command, data=None):
+    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """
         Generate the payload to send.
 
@@ -722,16 +722,28 @@ class XenonDevice(object):
                 This is one of the entries from payload_dict
             data(dict, optional): The data to send.
                 This is what will be passed via the 'dps' entry
+            gwId(str, optional): Will be used for gwId
+            devId(str, optional): Will be used for devId
+            uid(str, optional): Will be used for uid
         """
         json_data = payload_dict[self.dev_type][command]['command']
         command_hb = payload_dict[self.dev_type][command]['hexByte']
 
         if 'gwId' in json_data:
-            json_data['gwId'] = self.id
+            if gwId is not None:
+                json_data['gwId'] = gwId
+            else:
+                json_data['gwId'] = self.id
         if 'devId' in json_data:
-            json_data['devId'] = self.id
+            if devId is not None:
+                json_data['devId'] = devId
+            else:
+                json_data['devId'] = self.id
         if 'uid' in json_data:
-            json_data['uid'] = self.id  # use device ID
+            if uid is not None:
+                json_data['uid'] = uid 
+            else:
+                json_data['uid'] = self.id 
         if 't' in json_data:
             json_data['t'] = str(int(time.time()))
 
