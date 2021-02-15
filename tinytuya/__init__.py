@@ -1120,6 +1120,7 @@ class BulbDevice(Device):
         else:
             # response has no dps
             self.bulb_type = 'B'
+        log.debug("bulb type set to %s" % self.bulb_type)
 
     def turn_on(self, switch=0):
         """Turn the device on"""
