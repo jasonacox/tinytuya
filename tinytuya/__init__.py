@@ -1223,7 +1223,7 @@ class BulbDevice(Device):
         if self.bulb_type == 'B':
             c = int(1000*colourtemp/100)
 
-        data = set_white(b,c)
+        data = self.set_white(b,c)
         return data
 
     def set_white(self, brightness=-1, colourtemp=-1): 
