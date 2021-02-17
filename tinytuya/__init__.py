@@ -1212,18 +1212,22 @@ class BulbDevice(Device):
         # Brightness
         if not (0 <= brightness <= 100):
             return error_json(ERR_RANGE,"set_white_percentage: Brightness percentage needs to be between 0 and 100.")
+        
         b = int(25 + (255-25)*brightness/100)
+        
         if self.bulb_type == 'B':
             b = int(10 + (1000-10)*brightness/100)
 
         # Colourtemp
         if not (0 <= colourtemp <= 100):
             return error_json(ERR_RANGE,"set_white_percentage: Colourtemp percentage needs to be between 0 and 100.")
-        c = colourtemp = int(255*colourtemp/100)
+        
+        c = int(255*colourtemp/100)
+        
         if self.bulb_type == 'B':
             c = int(1000*colourtemp/100)
 
-        data = set_white(b,c)
+        data = self.set_white(b,c)
         return data
 
     def set_white(self, brightness=-1, colourtemp=-1): 
