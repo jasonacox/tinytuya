@@ -5,6 +5,21 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
+* Move setup **Wizard** out of module init to standalone import to save import load.
+
+Command line mode is still the same:
+```python
+python3 -m tinytuya wizard
+```
+
+Import now requires additional import to run Wizard programmatically:
+```python
+import tinytuya
+import tinytuya.wizard
+
+tinytuya.wizard.wizard()
+
+```
 
 ## v1.2.2 - Bug Fix for Bulb Functions
 
