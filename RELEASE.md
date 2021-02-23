@@ -5,7 +5,14 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
-* Move setup **Wizard** out of module init to standalone import to save import load.
+
+
+## v1.2.2 - Bug Fix for Bulb Functions
+
+* PyPi Version 1.2.2
+* Fix bug in set_white_percentage(): added missing self. PR #32
+* Fixed set_white_percentage: colour temp was incorrectly computed for B type Bulbs. PR #33
+* Moved setup **Wizard** out of module init to standalone import to save import load.
 
 Command line mode is still the same:
 ```python
@@ -20,12 +27,6 @@ import tinytuya.wizard
 tinytuya.wizard.wizard()
 
 ```
-
-## v1.2.2 - Bug Fix for Bulb Functions
-
-* PyPi Version 1.2.2
-* Fix bug in set_white_percentage(): added missing self. PR #32
-* Fixed set_white_percentage: colour temp was incorrectly computed for B type Bulbs. PR #33
 
 ## v1.2.1 - Bug Fix for Command 0x12 UpdateDPS
 
