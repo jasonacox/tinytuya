@@ -234,6 +234,10 @@ devices = tinytuya.deviceScan(false, 50)
   data =  a.status()
   print(data)
 ```
+* Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
+```
+reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
+```
 
 ## Tuya Data Points - DPS Table
 
