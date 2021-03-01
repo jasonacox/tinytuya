@@ -41,22 +41,21 @@ python -m tinytuya scan
 
 ### Setup Wizard
 
-Starting with v1.1.0, `tinytuya` also has a built in setup Wizard that will poll the Tuya IoT Cloud Platform and save a JSON list (devices.json) of all your registered devices (provides *Name*, *ID* and *LOCAL_KEY*). The following steps will help you determine the settings for your Tuya devices.
+Starting with v1.1.0, `tinytuya` has a built in setup Wizard that will access the Tuya IoT Cloud Platform and save a JSON list (devices.json) of all your registered devices (provides *Name*, *ID* and *LOCAL_KEY*).
 
-```bash
-python -m tinytuya wizard   # use -nocolor for non-ANSI terminals
-```
+Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) will require a device *LOCAL_KEY* to read the status. Both 3.1 and 3.3 devices will require a device *LOCAL_KEY* to control the device.
 
-Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) will require a device *LOCAL_KEY* to read the status. Both 3.1 and 3.3 devices will require a device *LOCAL_KEY* to control the device. Follow these instructions to get the *LOCAL_KEY*:
+Follow these instructions to get the *LOCAL_KEY*:
 
 1. Download the "Smart Life" - Smart Living app for iPhone or Android. Pair with your smart plug (this is important as you cannot monitor a plug that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
     * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
-2. Get device *IP*, *ID* and *VERSION*: Run the tinytuya scan to get a list of Tuya devices on your network along with their device *IP*, *ID* and *VERSION* number (3.1 or 3.3) 
+
+2. Get device *IP*, *ID* and *VERSION*: Run the tinytuya scan to get a list of Tuya devices on your network along with their device *IP*, *ID* and *VERSION* number (3.1 or 3.3)
     ```bash
     python -m tinytuya scan
     ```
-  **NOTE:** You will need to use one of the displayed Device *IDs* for step 4.  
+    **NOTE:** You will need to use one of the displayed Device *IDs* for step 4.  
 
 3. **Set up Tuya Account**
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
@@ -66,9 +65,9 @@ Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) w
     * **IMPORTANT** Verify under Cloud Development -> select your project -> API Setting that the following API groups have status "Open": Authorization management, Device Management and Device Control ([see here](https://user-images.githubusercontent.com/5875512/92361673-15864000-f132-11ea-9a01-9c715116456f.png))
 
 4. **Run Setup Wizard**
-    * From your PC/Mac run the TinyTuya Setup **Wizard** to fetch the Device *LOCAL_KEYs* for all of your registered devices:
-      ```
-      python -m tinytuya wizard
+    * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the Device *LOCAL_KEYs* for all of your registered devices:
+      ```bash
+      python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
     * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project noted above.  It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
     * The **Wizard** will poll the Tuya IoT Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *LOCAL_KEY* you will use to poll your device.
@@ -227,24 +226,24 @@ These devices uses AES encryption which is not available in the Python standard 
 The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their IP, Device ID, ProductID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
 
 You can run the scanner from the command line using this:
-```bash
-python -m tinytuya
-```
+  ```bash
+  python -m tinytuya
+  ```
 
 By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
 
-```bash
-# command line
-python -m tinytuya 50
-```
+  ```bash
+  # command line
+  python -m tinytuya 50
+  ```
 
-```python
-# invoke verbose interactive scan
-tinytuya.scan(50)
+  ```python
+  # invoke verbose interactive scan
+  tinytuya.scan(50)
 
-# return payload of devices
-devices = tinytuya.deviceScan(false, 50)
-```
+  # return payload of devices
+  devices = tinytuya.deviceScan(false, 50)
+  ```
 
 ## Troubleshooting
 
@@ -252,17 +251,17 @@ devices = tinytuya.deviceScan(false, 50)
 * Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
 * The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed.
 * Some devices with 22 character IDs will require additional setting to poll correctly - here is an example:
-```python
-  a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
-  a.set_version(3.3)
-  a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
-  data =  a.status()
-  print(data)
-```
+  ```python
+    a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
+    a.set_version(3.3)
+    a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
+    data =  a.status()
+    print(data)
+  ```
 * Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
-```
-reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
-```
+  ```
+  reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
+  ```
 
 ## Tuya Data Points - DPS Table
 
