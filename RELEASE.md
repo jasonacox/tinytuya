@@ -6,6 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.3 - Dimmer Function
+
+* PyPi Version 1.2.3
+* Added `set_dimmer()` to OutletDevice class
 
 ## v1.2.2 - Bug Fix for Bulb Functions
 

@@ -35,6 +35,9 @@
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
 
+    OutletDevice:
+        set_dimmer(percentage):
+
     CoverDevice:
         open_cover(switch=1):  
         close_cover(switch=1):
@@ -93,7 +96,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 2)
+version_tuple = (1, 2, 3)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -110,26 +113,38 @@ else:
     log.debug('Using PyCrypto from %r', Crypto.__file__)
 
 # Tuya Command Types
-UDP = 0
-AP_CONFIG = 1
-ACTIVE = 2
-BIND = 3
-RENAME_GW = 4
-RENAME_DEVICE = 5
-UNBIND = 6
-CONTROL = 7         # set values
-STATUS = 8
+UDP = 0             # HEAT_BEAT_CMD
+AP_CONFIG = 1       # PRODUCT_INFO_CMD
+ACTIVE = 2          # WORK_MODE_CMD
+BIND = 3            # WIFI_STATE_CMD - wifi working status
+RENAME_GW = 4       # WIFI_RESET_CMD - reset wifi
+RENAME_DEVICE = 5   # WIFI_MODE_CMD - Choose smartconfig/AP mode
+UNBIND = 6          # DATA_QUERT_CMD - issue command
+CONTROL = 7         # STATE_UPLOAD_CMD
+STATUS = 8          # STATE_QUERY_CMD
 HEART_BEAT = 9
-DP_QUERY = 10       # get data points
-QUERY_WIFI = 11
-TOKEN_BIND = 12
-CONTROL_NEW = 13
-ENABLE_WIFI = 14
-DP_QUERY_NEW = 16
+DP_QUERY = 10       # UPDATE_START_CMD - get data points
+QUERY_WIFI = 11     # UPDATE_TRANS_CMD
+TOKEN_BIND = 12     # GET_ONLINE_TIME_CMD - system time (GMT)
+CONTROL_NEW = 13    # FACTORY_MODE_CMD
+ENABLE_WIFI = 14    # WIFI_TEST_CMD
+DP_QUERY_NEW = 16   
 SCENE_EXECUTE = 17
-UPDATEDPS = 18      # possibly causes refresh of DPS?
+UPDATEDPS = 18      # Request refresh of DPS
 UDP_NEW = 19
 AP_CONFIG_NEW = 20
+GET_LOCAL_TIME_CMD = 28 
+WEATHER_OPEN_CMD = 32
+WEATHER_DATA_CMD = 33
+STATE_UPLOAD_SYN_CMD = 34
+STATE_UPLOAD_SYN_RECV_CMD = 35
+HEAT_BEAT_STOP = 37
+STREAM_TRANS_CMD = 38
+GET_WIFI_STATUS_CMD = 43
+WIFI_CONNECT_TEST_CMD = 44
+GET_MAC_CMD = 45
+GET_IR_STATUS_CMD = 46
+IR_TX_RX_TEST_CMD = 47
 LAN_GW_ACTIVE = 240
 LAN_SUB_DEV_REQUEST = 241
 LAN_DELETE_SUB_DEV = 242
@@ -318,6 +333,10 @@ def error_json(number=None, payload=None):
 payload_dict = {
     # Default Device
     "default": {
+        AP_CONFIG: {   # [BETA] Set Control Values on Device
+            "hexByte": "01",
+            "command": {"gwId": "", "devId": "", "uid": "", "t": ""}
+        },
         CONTROL: {   # Set Control Values on Device
             "hexByte": "07",
             "command": {"devId": "", "uid": "", "t": ""}
@@ -330,13 +349,9 @@ payload_dict = {
             "hexByte": "09",
             "command": {"gwId": "", "devId": ""}
         },
-        UPDATEDPS: {
-            "hexByte": "12",
-            "command": {"dpId": [18, 19, 20]},
-        },
         DP_QUERY: {  # Get Data Points from Device
             "hexByte": "0a",
-            "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
+            "command": {"gwId": "", "devId": "", "uid": "", "t": ""}
         },
         CONTROL_NEW: {
             "hexByte": "0d",
@@ -345,6 +360,10 @@ payload_dict = {
         DP_QUERY_NEW: {
             "hexByte": "0f",
             "command": {"devId": "", "uid": "", "t": ""}
+        },
+        UPDATEDPS: {
+            "hexByte": "12",
+            "command": {"dpId": [18, 19, 20]}
         },
         "prefix": "000055aa00000000000000",
         # Next byte is command "hexByte" + length of remaining payload + command + suffix
@@ -822,6 +841,17 @@ class Device(XenonDevice):
 
         return data
 
+    def product(self):
+        """
+        Request AP_CONFIG Product Info from device. [BETA]
+
+        """
+        # open device, send request, then close connection
+        payload = self.generate_payload(AP_CONFIG)
+        data = self._send_receive(payload,0)
+        log.debug('product received data=%r', data)
+        return data
+
     def heartbeat(self):
         """
         Send a simple HEART_BEAT command to device.
@@ -912,6 +942,29 @@ class OutletDevice(Device):
         super(OutletDevice, self).__init__(
             dev_id, address, local_key, dev_type)
 
+    def set_dimmer(self, percentage=None, value=None, dps_id=3):
+        """Set dimmer value
+        
+        Args:
+            percentage (int): percentage dim 0-100
+            value (int): direct value for switch 0-255
+            dps_id (int): DPS index for dimmer value
+        """
+  
+        if percentage is not None:
+            level = int(percentage * 255.0 / 100.0)   
+        else:
+            level = value
+
+        if level == 0:
+            self.turn_off()
+        elif level is not None:
+            if level < 25:
+                level = 25
+            if level > 255:
+                level = 255
+            self.turn_on()
+            self.set_value(dps_id, level)
 
 class CoverDevice(Device):
     """
@@ -1542,6 +1595,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                 result = result.decode()
 
             result = json.loads(result)
+            log.debug("Valid UDP Packet: %r" % result)
 
             note = 'Valid'
             ip = result['ip']
@@ -1553,6 +1607,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                 print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
             result = {"ip": ip}
             note = "Unknown"
+            log.debug("Invalid UDP Packet: %r" % result)
 
         # check to see if we have seen this device before and add to devices array
         if appenddevice(result, devices) == False:

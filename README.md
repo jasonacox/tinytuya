@@ -120,6 +120,9 @@ Classes
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Seconds to wait after sending for response
 
+    OutletDevice:
+        set_dimmer(percentage):
+        
     CoverDevice:
         open_cover(switch=1):  
         close_cover(switch=1):
