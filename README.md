@@ -32,14 +32,14 @@ The PyPI module will attempt to install `pycryptodome` if you don't have it. The
 ## Tuya Device Preparation
 
 Controlling and monitoring Tuya devices on your network requires the following:
-* *IP* - The local area network address (IPv4) of the device e.g. 10.0.1.100 
-* *ID* - The unique hardcoded identifier for the Tuya device
+* *IP* - The network address (IPv4) of the device e.g. 10.0.1.100 
+* *ID* - The unique identifier for the Tuya device
 * *VERSION* - The Tuya protocol version used (3.1 or 3.3)
 * *LOCAL_KEY* - The security key created to encrypt and decrypt communication. Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) will require a device *LOCAL_KEY* to read the status. Both 3.1 and 3.3 devices will require a device *LOCAL_KEY* to control the device.
 
 ### Network Scanner
 
-The `tinytuya` module has a built in network scanner that can be used to find Tuya Devices on your local network. It will show *IP*, *ID* and *VERSION* for each device.  
+TinyTuya has a built in network scanner that can be used to find Tuya Devices on your local network. It will show *IP*, *ID* and *VERSION* for each device.  
 
 ```bash
 python -m tinytuya scan
@@ -47,9 +47,9 @@ python -m tinytuya scan
 
 ### Setup Wizard
 
-TinyTuya has a built in setup Wizard that uses the Tuya IoT Cloud Platform to generate a JSON list (devices.json) of all your registered devices. This includes the secret *LOCAL_KEY* as well as the *Name* that you gave to each device.
+TinyTuya has a built in setup Wizard that uses the Tuya IoT Cloud Platform to generate a JSON list (devices.json) of all your registered devices. This includes the secret *LOCAL_KEY* as well as the *Name* of each device.
 
-Follow these instructions below to get the *LOCAL_KEYs*:
+Follow the instructions below to get the *LOCAL_KEYs*:
 
 1. Download the "Smart Life" App, available for iPhone or Android. Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
@@ -65,11 +65,11 @@ Follow these instructions below to get the *LOCAL_KEYs*:
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
     * Go to Cloud Development -> Create a project (remember the Authorization Key: *API ID* and *Secret* for below)
     * Go to Cloud Development -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
-    * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
+    * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
     * **IMPORTANT** Verify under Cloud Development -> select your project -> API Setting that the following API groups have status "Open": Authorization management, Device Management and Device Control ([see here](https://user-images.githubusercontent.com/5875512/92361673-15864000-f132-11ea-9a01-9c715116456f.png))
 
 4. **Run Setup Wizard**:
-    * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the Device *LOCAL_KEYs* for all of your registered devices:
+    * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the  *LOCAL_KEYs* for all of your registered devices:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
@@ -79,14 +79,14 @@ Follow these instructions below to get the *LOCAL_KEYs*:
     * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
 
 Notes:
-* If you ever reset or re-pair your smart devices, the *LOCAL_KEY* will be reset and you will need to repeat these steps above.
+* If you ever reset or re-pair your smart devices, the *LOCAL_KEY* will be reset and you will need to repeat the steps above.
 * The TinyTuya *Wizard* was inspired by the TuyAPI CLI which is an alternative way to fetch the *LOCAL_KEYs*: `npm i @tuyapi/cli -g` and run `tuya-cli wizard`  
 * For a helpful video walk-through of getting the *LOCAL_KEYs* you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
 
 
 ## Programming with TinyTuya
 
-After importing tinytuya, you instantiate a device handle based on the device you want to read or control.  Here is an example accessing a Tuya smart switch or plug:
+After importing tinytuya, you create a device handle for the device you want to read or control.  Here is an example for a Tuya smart switch or plug:
 
 ```python
     import tinytuya
