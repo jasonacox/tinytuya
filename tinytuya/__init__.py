@@ -1246,9 +1246,9 @@ class BulbDevice(Device):
         Set colour of an rgb bulb.
 
         Args:
-            r(int): Value for the colour red as int from 0-255.
-            g(int): Value for the colour green as int from 0-255.
-            b(int): Value for the colour blue as int from 0-255.
+            r(int): Value for the colour Red as int from 0-255.
+            g(int): Value for the colour Green as int from 0-255.
+            b(int): Value for the colour Blue as int from 0-255.
         """
         if not self.has_colour:
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
@@ -1275,9 +1275,9 @@ class BulbDevice(Device):
         Set colour of an rgb bulb using h, s, v.
 
         Args:
-            h(float): colour Hue as int from 0-1
-            s(float): colour Saturation as int from 0-1
-            v(float): colour Value as int from 0-1
+            h(float): colour Hue as float from 0-1
+            s(float): colour Saturation as float from 0-1
+            v(float): colour Value as float from 0-1
         """
         if not self.has_colour:
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
