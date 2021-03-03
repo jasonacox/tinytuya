@@ -144,6 +144,7 @@ Classes
 
     BulbDevice
         set_colour(r, g, b):
+        set_hsv(h, s, v):
         set_white(brightness, colourtemp):
         set_white_percentage(brightness=100, colourtemp=0):
         set_brightness(brightness):
@@ -169,12 +170,14 @@ Starting with v1.2.0 TinyTuya functions will return error details in the JSON da
 
 The "Err" number will be one of these:
 
-* 900 - Invalid JSON Response from Device
-* 901 - Network Error: Unable to Connect
-* 902 - Timeout Waiting for Device
-* 903 - Specified Value Out of Range
-* 904 - Unexpected Payload from Device
-* 905 - Network Error: Device Unreachable
+* 900 (ERR_JSON) - Invalid JSON Response from Device
+* 901 (ERR_CONNECT) - Network Error: Unable to Connect
+* 902 (ERR_TIMEOUT) - Timeout Waiting for Device
+* 903 (ERR_RANGE) - Specified Value Out of Range
+* 904 (ERR_PAYLOAD) - Unexpected Payload from Device
+* 905 (ERR_OFFLINE) - Network Error: Device Unreachable
+* 906 (ERR_STATE) - Device in Unknown State
+* 907 (ERR_FUNCTION) - Function Not Supported by Device
 
 ### Example Usage
 

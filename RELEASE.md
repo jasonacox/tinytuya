@@ -6,10 +6,13 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.3 - Dimmer Function
+## v1.2.3 - Dimmer and Brightness Functions
 
 * PyPi Version 1.2.3
-* Added `set_dimmer()` to OutletDevice class
+* Added `set_dimmer()` to OutletDevice class.
+* Added `set_hsv()` to BulbDevice class.
+* Updated `set_brightness()` in BulbDevice to handle *white* and *colour* modes. Issue #30
+* BulbDevice determines features of device and presents boolean variables `has_colour`, `has_brightness` and `has_colourtemp` to ignore requests that do not exist (returns error).
 
 ## v1.2.2 - Bug Fix for Bulb Functions
 
