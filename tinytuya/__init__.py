@@ -318,16 +318,16 @@ def error_json(number=None, payload=None):
     """Return error details in JSON"""
     try:
         spayload = json.dumps(payload)
-        #spayload = payload.replace('\"','').replace('\'','')
+        # spayload = payload.replace('\"','').replace('\'','')
     except:
-        spayload = ''
+        spayload = '""'
 
     vals = (error_codes[number], 
             str(number), 
             spayload)
     log.debug("ERROR %s - %s - payload: %s" % vals)
     
-    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":"%s" }' % vals)
+    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
 
 # Tuya Device Dictionary - Commands and Payload Template
@@ -541,7 +541,7 @@ class XenonDevice(object):
                     log.debug(
                         'Exceeded tinytuya retry limit ('+str(self.socketRetryLimit)+')')
                     # timeout reached - return error
-                    json_payload = error_json(ERR_TIMEOUT,'Check Device Key')
+                    json_payload = error_json(ERR_TIMEOUT,'Check device key or version')
                     return(json_payload)
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
