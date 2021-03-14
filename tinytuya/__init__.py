@@ -23,7 +23,8 @@
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
     set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
-    set_dpsUsed(dpsUsed)               # set data points (DPs)
+    set_dpsUsed(dps_to_request)        # add data points (DPS) to request
+    add_dps_to_request(index)          # add data point (DPS) index set to None
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
@@ -34,6 +35,7 @@
     set_timer(num_secs)                # Set timer for num_secs
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
+    detect_available_dps()             # Return list of DPS available from device
 
     OutletDevice:
         set_dimmer(percentage):
@@ -96,7 +98,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 3)
+version_tuple = (1, 2, 4)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -325,7 +327,7 @@ def error_json(number=None, payload=None):
             spayload)
     log.debug("ERROR %s - %s - payload: %s" % vals)
     
-    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
+    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":"%s" }' % vals)
 
 
 # Tuya Device Dictionary - Commands and Payload Template
@@ -474,12 +476,12 @@ class XenonDevice(object):
                     return True
                 except socket.timeout as err:
                     # unable to open socket
-                    log.debug('socket unable to connect - retry %d/%d %r' % (retries,self.socketRetryLimit,err))
+                    log.debug('socket unable to connect - retry %d/%d' % (retries,self.socketRetryLimit))
                     self.socket.close()
                     time.sleep(0.1)
                 except Exception as err:
                     # unable to open socket
-                    log.debug('socket unable to connect - retry %d/%d %r' % (retries,self.socketRetryLimit,err))
+                    log.debug('socket unable to connect - retry %d/%d' % (retries,self.socketRetryLimit))
                     self.socket.close()
                     time.sleep(5)
             # unable to get connection
@@ -616,7 +618,7 @@ class XenonDevice(object):
             if "data unvalid" in payload:
                 self.dev_type = "device22"
                 # set at least one DPS
-                self.dpsUsed = {"1": None}
+                self.dps_to_request = {"1": None}
                 log.debug(
                     "'data unvalid' error detected: switching to dev_type %r",
                     self.dev_type,
@@ -635,6 +637,40 @@ class XenonDevice(object):
             json_payload = error_json(ERR_JSON,payload)
         return json_payload
 
+    def detect_available_dps(self):
+        """Return which datapoints are supported by the device."""
+        # device22 devices need a sort of bruteforce querying in order to detect the
+        # list of available dps experience shows that the dps available are usually
+        # in the ranges [1-25] and [100-110] need to split the bruteforcing in
+        # different steps due to request payload limitation (max. length = 255)
+        self.dps_cache = {}
+        ranges = [(2, 11), (11, 21), (21, 31), (100, 111)]
+
+        for dps_range in ranges:
+            # dps 1 must always be sent, otherwise it might fail in case no dps is found
+            # in the requested range
+            self.dps_to_request = {"1": None}
+            self.add_dps_to_request(range(*dps_range))
+            try:
+                data = self.status()
+            except Exception as ex:
+                self.exception("Failed to get status: %s", ex)
+                raise
+            if "dps" in data:
+                self.dps_cache.update(data["dps"])
+
+            if self.dev_type == "default":
+                return self.dps_cache
+        self.debug("Detected dps: %s", self.dps_cache)
+        return self.dps_cache
+
+    def add_dps_to_request(self, dp_indicies):
+        """Add a datapoint (DP) to be included in requests."""
+        if isinstance(dp_indicies, int):
+            self.dps_to_request[str(dp_indicies)] = None
+        else:
+            self.dps_to_request.update({str(index): None for index in dp_indicies})
+            
     def set_version(self, version):
         self.version = version
 
@@ -650,8 +686,8 @@ class XenonDevice(object):
     def set_socketTimeout(self, s):
         self.connection_timeout = s
 
-    def set_dpsUsed(self, dpsUsed):
-        self.dpsUsed = dpsUsed
+    def set_dpsUsed(self, dps_to_request):
+        self.dps_to_request = dps_to_request
 
     def set_retry(self, retry):
         self.retry = retry
@@ -776,7 +812,7 @@ class XenonDevice(object):
             else:
                 json_data['dps'] = data
         if command_hb == '0d':   # CONTROL_NEW
-            json_data['dps'] = self.dpsUsed
+            json_data['dps'] = self.dps_to_request
 
         # Create byte buffer from hex data
         payload = json.dumps(json_data)
