@@ -66,7 +66,11 @@ Follow the instructions below to get the *LOCAL_KEYs*:
     * Click on "Cloud" icon -> Create a project (remember the Authorization Key: *API ID* and *Secret* for below)
     * Click on "Cloud" icon -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
     * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
-    * **IMPORTANT** Under "Cloud" -> select your project -> "API Management" -> "API Products" that the following API groups have status "Subscribed": Smart Home Devices Management, Authorization and Smart Home Family Management ([see screenshot here](https://user-images.githubusercontent.com/836718/111419675-1d0d3f80-86a7-11eb-81ad-f6078ee391fe.png))
+    * **IMPORTANT** Under "API Management" -> "API Products" and esnure the API groups have status "Subscribed": Smart Home Devices Management, Authorization and Smart Home Family Management ([see screenshot here](https://user-images.githubusercontent.com/836718/111419675-1d0d3f80-86a7-11eb-81ad-f6078ee391fe.png)) - To subscript and authorize your Project to use these 3 API groups:
+        - Click each of the API boxes
+        - Click to the "Projects" tab
+        - Click "**New Authorization**" Button
+        - Select your Project from the dropdown and click OK ([see screenshot here](https://user-images.githubusercontent.com/836718/111578175-d5eb8100-8770-11eb-93b3-46342b1a67fa.png) -
 
 4. **Run Setup Wizard**:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the  *LOCAL_KEYs* for all of your registered devices:
