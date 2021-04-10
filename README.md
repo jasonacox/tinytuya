@@ -399,6 +399,10 @@ The following table represents several of the standard Tuya DPS values and their
 |13|Backlight switch|bool|True/False||
 
 #### Version 3.3 - Sensor Type
+
+_Important Note:_
+Battery-powered Tuya sensors are usually designed to stay in sleep mode until a state change (eg.open or close alert). This means you will not be able to poll these devices except in the brief moment they awake, connect to the WiFi and send their state update payload the the Tuya Cloud. Keep in mind that if you manage to poll the device enough to keep it awake, you will likely quickly drain the battery.
+
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Door Sensor|bool|True/False||
