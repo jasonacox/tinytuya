@@ -1577,7 +1577,7 @@ def scan(maxretry=MAXCOUNT, color=True):
 # Scan function
 
 
-def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
+def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1585,6 +1585,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         verbose = True or False, print formatted output to stdout [Default: False]
         maxretry = The number of loops to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
+        poll = True or False, poll dps status for devices if possible
 
     Response: 
         devices = Dictionary of all devices found
@@ -1736,43 +1737,46 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                     print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
                     normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
             try:
-                time.sleep(0.1) # give device a break before polling
-                if(version == '3.1'):
-                    # Version 3.1 - no device key requires - poll for status data points
-                    d = OutletDevice(gwId, ip, dkey)
-                    d.set_version(3.1)
-                    dpsdata = d.status()
-                    if 'dps' not in dpsdata:
-                        if(verbose):
-                            if 'Error' in dpsdata:
-                                print("%s    Access rejected by %s: %s" % (alertdim, ip, dpsdata['Error']))
-                            else:
-                                print("%s    Invalid response from %s: %r" % (alertdim, ip, dpsdata))
-                        devices[ip]['err'] = 'Unable to poll'
-                    else:
-                        devices[ip]['dps'] = dpsdata
-                        if(verbose):
-                            print("    Status: %s" % dpsdata['dps'])
-                else:
-                    # Version 3.3+ requires device key
-                    if(dkey != ""):
+                if poll:
+                    time.sleep(0.1) # give device a break before polling
+                    if(version == '3.1'):
+                        # Version 3.1 - no device key requires - poll for status data points
                         d = OutletDevice(gwId, ip, dkey)
-                        d.set_version(3.3)
+                        d.set_version(3.1)
                         dpsdata = d.status()
                         if 'dps' not in dpsdata:
-                            if verbose:
+                            if(verbose):
                                 if 'Error' in dpsdata:
                                     print("%s    Access rejected by %s: %s" % (alertdim, ip, dpsdata['Error']))
                                 else:
-                                    print("%s    Check DEVICE KEY - Invalid response from %s: %r" % (alertdim, ip, dpsdata))
-                            devices[ip]['err'] = 'Unable to poll' 
+                                    print("%s    Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                            devices[ip]['err'] = 'Unable to poll'
                         else:
                             devices[ip]['dps'] = dpsdata
                             if(verbose):
-                                print(dim + "    Status: %s" % dpsdata['dps'])      
-                    else:                      
-                        if(verbose):
-                            print("%s    No Stats for %s: DEVICE KEY required to poll for status%s" % (alertdim, ip, dim))
+                                print("    Status: %s" % dpsdata['dps'])
+                    else:
+                        # Version 3.3+ requires device key
+                        if(dkey != ""):
+                            d = OutletDevice(gwId, ip, dkey)
+                            d.set_version(3.3)
+                            dpsdata = d.status()
+                            if 'dps' not in dpsdata:
+                                if verbose:
+                                    if 'Error' in dpsdata:
+                                        print("%s    Access rejected by %s: %s" % (alertdim, ip, dpsdata['Error']))
+                                    else:
+                                        print("%s    Check DEVICE KEY - Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                                devices[ip]['err'] = 'Unable to poll' 
+                            else:
+                                devices[ip]['dps'] = dpsdata
+                                if(verbose):
+                                    print(dim + "    Status: %s" % dpsdata['dps'])      
+                        else:                      
+                            if(verbose):
+                                print("%s    No Stats for %s: DEVICE KEY required to poll for status%s" % (alertdim, ip, dim))
+                    # else
+                # if poll
             except:
                 if(verbose):
                     print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
