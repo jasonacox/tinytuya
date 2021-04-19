@@ -6,6 +6,15 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.4 - DPS Detection and Bug Fixes
+
+* PyPi Version 1.2.4
+* Added detect_available_dps() function
+* Fixed bug in json_error() function
+* Updated instruction for using Tuya iot.tuya.com to run Wizard
+* Added option to disable deviceScan() automatic device polling
+* Added better error handling processing Tuya messages (responses) Issue #39
+
 ## v1.2.3 - Dimmer and Brightness Functions
 
 * PyPi Version 1.2.3
