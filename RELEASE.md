@@ -14,6 +14,7 @@
 * Updated instruction for using Tuya iot.tuya.com to run Wizard
 * Added option to disable deviceScan() automatic device polling
 * Added better error handling processing Tuya messages (responses) Issue #39
+* Fixed display bug in Wizard device polling to show correct On/Off state
 
 ## v1.2.3 - Dimmer and Brightness Functions
 
