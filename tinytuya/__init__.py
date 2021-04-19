@@ -66,7 +66,7 @@
     Updated pytuya to support devices with Device IDs of 22 characters
     
 """
-
+ 
 # Modules
 from __future__ import print_function   # python 2.7 support
 import base64
@@ -573,11 +573,15 @@ class XenonDevice(object):
 
         # Unpack Message into TuyaMessage format
         # and return payload decrypted
-        msg = unpack_message(data)
-        # Data available seqno cmd retcode payload crc
-        log.debug("raw unpacked message = %r", msg)
-        result = self._decode_payload(msg.payload)
-        
+        try:
+            msg = unpack_message(data)
+            # Data available seqno cmd retcode payload crc
+            log.debug("raw unpacked message = %r", msg)
+            result = self._decode_payload(msg.payload)
+        except:
+            log.debug("unexpected result unpacking tuya payload")
+            result = error_json(ERR_PAYLOAD)
+
         # Did we detect a device22 device? Try again.
         if dev_type != self.dev_type:
             log.debug(
