@@ -98,7 +98,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 4)
+version_tuple = (1, 2, 5)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -489,12 +489,12 @@ class XenonDevice(object):
         # existing socket active
         return True
 
-    def _send_receive(self, payload, minresponse=28):
+    def _send_receive(self, payload, minresponse=28, getresponse=True):
         """
         Send single buffer `payload` and receive a single buffer.
 
         Args:
-            payload(bytes): Data to send.
+            payload(bytes): Data to send. Set to 'None' to receive only.
             minresponse(int): Minimum response size expected (default=28 bytes)
         """
         success = False
@@ -511,27 +511,34 @@ class XenonDevice(object):
                 return error_json(ERR_OFFLINE)
             # send request to device
             try:
-                self.socket.send(payload)
-                time.sleep(self.sendWait) # give device time to respond
-                data = self.socket.recv(1024)
-                # device may send null ack (28 byte) response before a full response
-                if self.retry and len(data) <= minresponse:  
-                    log.debug('received null payload (%r), fetch new one',data)
-                    time.sleep(0.1)
-                    data = self.socket.recv(1024)  # try to fetch new payload
-                success = True
-                log.debug('received data=%r',data)
+                if payload != None:
+                    self.socket.send(payload)
+                    time.sleep(self.sendWait) # give device time to respond
+                if getresponse == True:
+                    data = self.socket.recv(1024)
+                    # device may send null ack (28 byte) response before a full response
+                    if self.retry and len(data) <= minresponse:  
+                        log.debug('received null payload (%r), fetch new one',data)
+                        time.sleep(0.1)
+                        data = self.socket.recv(1024)  # try to fetch new payload
+                    success = True
+                    log.debug('received data=%r',data)
                 # legacy/default mode avoids persisting socket across commands
                 if(not self.socketPersistent):
                     self.socket.close()
-                    self.socket = None
+                    self.socket = None  
+                if getresponse == False:
+                    return None
             except KeyboardInterrupt as err:
                 log.debug('Keyboard Interrupt - Exiting')
                 raise                  
             except socket.timeout as err:
                 # a socket timeout occurred
+                if payload == None:
+                    # Receive only mode - return None
+                    return(None)
                 retries = retries+1
-                log.debug('Timeout or exception fetching payload - retry ' +
+                log.debug('Timeout or exception in _send_receive() - retry ' +
                           str(retries)+'/'+str(self.socketRetryLimit))
                 # if we exceed the limit of retries then lets get out of here
                 if(retries > self.socketRetryLimit):
@@ -640,6 +647,21 @@ class XenonDevice(object):
         except:
             json_payload = error_json(ERR_JSON,payload)
         return json_payload
+
+    def receive(self):
+        """
+        Poll device to read any payload in the buffer.  Timeout results in None returned.
+        """
+        return self._send_receive(None)
+
+    def send(self, payload):
+        """
+        Send single buffer `payload`.
+
+        Args:
+            payload(bytes): Data to send. 
+        """
+        return self._send_receive(payload, 0, False)
 
     def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
