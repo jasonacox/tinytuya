@@ -473,3 +473,4 @@ NOTE (*) - The range can vary depending on the device. As an example, for dimmer
   * https://github.com/codetheweb/tuyapi node.js
   * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
   * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
+  * https://github.com/TradeFace/tuyaface - Python Async Tuya API
