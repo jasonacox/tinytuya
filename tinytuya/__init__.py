@@ -36,6 +36,9 @@
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
     detect_available_dps()             # Return list of DPS available from device
+    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
+    send(payload)                      # Send payload to device (do not wait for response)
+    receive()                          # Receive payload from device
 
     OutletDevice:
         set_dimmer(percentage):
@@ -47,10 +50,15 @@
 
     BulbDevice
         set_colour(r, g, b):
+        set_hsv(h, s, v):
         set_white(brightness, colourtemp):
+        set_white_percentage(brightness=100, colourtemp=0):
         set_brightness(brightness):
+        set_brightness_percentage(brightness=100):
         set_colourtemp(colourtemp):
+        set_colourtemp_percentage(colourtemp=100):
         set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
+        set_mode(mode='white'):       # white, colour, scene, music
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():

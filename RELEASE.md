@@ -6,9 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.5 - New Send and Receive Functions
+## v1.2.5 - Send and Receive Functions
 
-* Added raw mode `send()` and `receive()` function to allow direct control on payload transfers. Useful to manage constant state via threads or continuous loops.  This example opens a Tuya device and watches for state changes (e.g. switch going on and off):
+* PyPi Version 1.2.5
+* Added raw mode `send()` and `receive()` function to allow direct control of payload transfers. Useful to monitor constant state changes via threads or continuous loops.  This example opens a Tuya device and watches for state changes (e.g. switch going on and off):
 
 ```python
 import tinytuya

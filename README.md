@@ -137,6 +137,10 @@ Classes
     set_timer(num_secs)                # Set timer for num_secs
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Seconds to wait after sending for response
+    detect_available_dps()             # Return list of DPS available from device
+    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
+    send(payload)                      # Send payload to device (do not wait for response)
+    receive()                          # Receive payload from device
 
     OutletDevice:
         set_dimmer(percentage):
