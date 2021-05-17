@@ -9,7 +9,7 @@ Python module to interface with Tuya WiFi smart devices
 
 This python module controls and monitors [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN).  This is a compatible replacement for the `pytuya` PyPi module.
 
-[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but many also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to synchronous poll status and issue commands to these devices.
+[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to poll status and issue commands to these devices.
 
 ![TinyTuya Diagram](./docs/TinyTuya-diagram.svg)
 
