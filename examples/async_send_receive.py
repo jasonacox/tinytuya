@@ -30,3 +30,22 @@ while(True):
     print(" > Send Heartbeat Ping < ")
     payload = d.generate_payload(tinytuya.HEART_BEAT)
     d.send(payload)
+
+    # Option - Some plugs require an UPDATEDPS command to update their power data points
+
+    # print(" > Send Request for Status < ")
+    # payload = d.generate_payload(tinytuya.DP_QUERY)
+    # d.send(payload)
+
+    # # See if any data is available
+    # data = d.receive()
+    # print('Received Payload: %r' % data)
+
+    # print(" > Send DPS Update Request < ")
+    # payload = d.generate_payload(tinytuya.UPDATEDPS,['18','19','20'])
+    # d.send(payload)
+    
+    # # See if any data is available
+    # data = d.receive()
+    # print('Received Payload: %r' % data)
+    
