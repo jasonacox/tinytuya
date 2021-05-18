@@ -1765,10 +1765,10 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
                     pass
             if(verbose):
                 if(dname == ""):    
-                    print("%s%s Device Found%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
+                    print("%s%s Device Found%s [%s payload]: %s%s%s\n    Device ID = %s, Device Key = %s, Version = %s" % (
                     normal, version, dim, note, subbold, ip, dim, gwId, productKey, version))
                 else:
-                    print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
+                    print("%s%s%s [%s payload]: %s%s%s\n    Device ID = %s, Device Key = %s, Version = %s" % (
                     normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
             try:
                 if poll:
