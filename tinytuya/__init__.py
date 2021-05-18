@@ -1551,6 +1551,9 @@ class BulbDevice(Device):
         if not status:
             return error_json(ERR_JSON,"state: empty response")
 
+        if 'Error' in status.keys():
+            return status
+
         for key in status[self.DPS].keys():
             if(key in self.DPS_2_STATE):
                 state[self.DPS_2_STATE[key]] = status[self.DPS][key]
