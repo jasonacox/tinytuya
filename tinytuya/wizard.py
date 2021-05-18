@@ -197,12 +197,22 @@ def wizard(color=True):
 
     # Get Oauth Token from tuyaPlatform
     uri = 'token?grant_type=1'
-    response_dict = tuyaPlatform(REGION, KEY, SECRET,uri)
+    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri)
+
+    if not response_dict['success']:
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+        return
+
     token = response_dict['result']['access_token']
 
     # Get UID from sample Device ID 
     uri = 'devices/%s' % DEVICEID
     response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
+
+    if not response_dict['success']:
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+        return
+
     uid = response_dict['result']['uid']
 
     # Use UID to get list of all Devices for User
