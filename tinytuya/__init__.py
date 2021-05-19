@@ -106,7 +106,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 5)
+version_tuple = (1, 2, 6)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -1552,7 +1552,10 @@ class BulbDevice(Device):
             return error_json(ERR_JSON,"state: empty response")
 
         if 'Error' in status.keys():
-            return status
+            return error_json(ERR_JSON,status['Error'])
+
+        if self.DPS not in status.keys():
+            return error_json(ERR_JSON,"state: no data points")
 
         for key in status[self.DPS].keys():
             if(key in self.DPS_2_STATE):

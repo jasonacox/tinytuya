@@ -6,6 +6,13 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.6 - Improved Error Handling
+
+* PyPi Version 1.2.6
+* Added `wizard` handling to capture and display Tuya API server error responses (PR #45)
+* Added better error handling for BulbDevice `state()` function to not crash when dps values are missing in response (PR #46)
+* Added async examples using `send()` and `receive()`
+
 ## v1.2.5 - Send and Receive Functions
 
 * PyPi Version 1.2.5
