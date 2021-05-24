@@ -1680,6 +1680,9 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
             dim = "\033[0m\033[97m\033[2m"
             alert = "\033[0m\033[91m\033[1m"
             alertdim = "\033[0m\033[91m\033[2m"
+            cyan = "\033[0m\033[36m"
+            red = "\033[0m\033[31m"
+            yellow = "\033[0m\033[33m"
 
         print("\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"%(bold,normal,dim,__version__))
         if(havekeys):
@@ -1765,11 +1768,12 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
                     pass
             if(verbose):
                 if(dname == ""):    
-                    print("%s%s Device Found%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    normal, version, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    print("Unknown v%s%s Device%s   Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s" % (
+                    normal, version, dim, productKey, note, subbold, ip, cyan, gwId, red, dkey, yellow, version))
                 else:
-                    print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    print("%s%s%s  Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s,  %sLocal Key = %s,  %sVersion = %s" % (
+                    normal, dname, dim, productKey, note, subbold, ip, cyan, gwId, red, dkey, yellow, version))
+
             try:
                 if poll:
                     time.sleep(0.1) # give device a break before polling
