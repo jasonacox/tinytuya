@@ -12,6 +12,8 @@
 * Added `wizard` handling to capture and display Tuya API server error responses (PR #45)
 * Added better error handling for BulbDevice `state()` function to not crash when dps values are missing in response (PR #46)
 * Added async examples using `send()` and `receive()`
+* Updated scan output to include device Local Key if known (PR #49 #50)
+* Fixed print typo in examples/devices.py (PR #51)
 
 ## v1.2.5 - Send and Receive Functions
 
