@@ -39,7 +39,7 @@ try:
         havekeys = True
 except:
     # No Device info
-    pirnt(alert + "\nNo devices.json file found." + normal)
+    print(alert + "\nNo devices.json file found." + normal)
     exit()
 
 # Scan network for devices and provide polling data
