@@ -16,6 +16,7 @@
 # Modules
 import tinytuya
 import sys
+from . import wizard
 
 retries = 0
 state = 0
@@ -45,7 +46,7 @@ if(state == 0):
 
 # State 1 = Run Setup Wizard
 if(state == 1):
-    tinytuya.wizard(color)
+    wizard.wizard(color)
 
 # State 2 = Show Usage
 if(state == 2):

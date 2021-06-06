@@ -7,59 +7,99 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module to control and monitor WiFi [Tuya](https://en.tuya.com/) compatible Smart Devices (Plugs, Switches, Lights, Window Covers, etc.).  This is a compatible replacement for the `pytuya` PyPi module.
+This python module controls and monitors [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN).  This is a compatible replacement for the `pytuya` PyPi module.
 
-NOTE This module requires the devices to have already been **activated** by Smart Life App (or similar).
+[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to poll status and issue commands to these devices.
+
+![TinyTuya Diagram](./docs/TinyTuya-diagram.svg)
+
+NOTE: This module requires the devices to have already been **activated** by Smart Life App (or similar).
 
 ## TinyTuya Setup  
 
-Install pip and python libraries if you haven't already.
+Install pip and python modules if you haven't already.
 
 ```bash
-# Install required libraries
+# Install PIP
  sudo apt-get install python-crypto python-pip  # for RPi, Linux
- python3 -m pip install pycryptodome            # or pycrypto or Crypto or pyaes
- python3 -m pip install tinytuya                # this module 
+
+ # Install TinyTuya
+ python -m pip install tinytuya
  ```
+
+The PyPI module will attempt to install `pycryptodome` if you don't have it. The modules `pycrypto`, `Crypto` or `pyaes` could be used instead.
 
 ## Tuya Device Preparation
 
-Pulling data from Tuya devices on your network requires that you know the Device *IP*, *ID*, *VERSION* and *LOCAL_KEY* (for 3.3 devices). The `tinytuya` module has a built in network scanner that can be used to find Tuya Devices on your local network (provides *IP*, *ID* and *VERSION*).  Starting with v1.1.0, `tinytuya` also has a built in setup Wizard that will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices (provides *Name*, *ID* and *LOCAL_KEY*). The following steps will help you determine the settings for your Tuya devices:
+Controlling and monitoring Tuya devices on your network requires the following:
+* *Address* - The network address (IPv4) of the device e.g. 10.0.1.100 
+* *Device ID* - The unique identifier for the Tuya device
+* *Version* - The Tuya protocol version used (3.1 or 3.3)
+* *Local_Key* - The security key created to encrypt and decrypt communication. Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) will require a device *Local_Key* to read the status. Both 3.1 and 3.3 devices will require a device *Local_Key* to control the device.
 
-### Get the Tuya Device LOCAL_KEY
+### Network Scanner
 
-1. Download the "Smart Life" - Smart Living app for iPhone or Android. Pair with your smart plug (this is important as you cannot monitor a plug that has not been paired).  
+TinyTuya has a built in network scanner that can be used to find Tuya Devices on your local network. It will show *Address*, *Device ID* and *Version* for each device.  
+
+```bash
+python -m tinytuya scan
+```
+
+### Setup Wizard
+
+TinyTuya has a built in setup Wizard that uses the Tuya IoT Cloud Platform to generate a JSON list (devices.json) of all your registered devices. This includes the secret *Local_Key* as well as the *Name* of each device.
+
+Follow the instructions below to get the *Local_Key*:
+
+1. Download the "Smart Life" App, available for iPhone or Android. Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
     * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
-2. Get device *IP*, *ID* and *VERSION*: Run the tinytuya scan to get a list of Tuya devices on your network along with their device *IP*, *ID* and *VERSION* number (3.1 or 3.3) 
-    ```bash
-    python3 -m tinytuya
-    ```
-3. Get device *LOCAL_KEY*: Devices running the latest protocol version 3.3 (e.g. Firmware 1.0.5 or above) will require a device *LOCAL_KEY* to read the status. Both 3.1 and 3.3 devices will require a device *LOCAL_KEY* to control the device. Follow these instructions to get the *LOCAL_KEY*:
 
-  * **From iot.tuya.com**
+2. Run the TinyTuya scan to get a list of Tuya devices on your network along with their device *Address*, *Device ID* and *Version* number (3.1 or 3.3):
+    ```bash
+    python -m tinytuya scan
+    ```
+    **NOTE:** You will need to use one of the displayed *Device IDs* for step 4.
+
+3. **Set up a Tuya Account**:
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
-    * Go to Cloud Development -> Create a project  (note the Authorization Key: *API ID* and *Secret* for below)
-    * Go to Cloud Development -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
-    * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
-    * Verify under Cloud Development -> select your project -> API Setting that the following API groups have status "Open": Authorization management, Device Management and Device Control ([see here](https://user-images.githubusercontent.com/5875512/92361673-15864000-f132-11ea-9a01-9c715116456f.png))
-  * **From your Local Workstation**
-    * From your PC/Mac run the TinyTuya Setup **Wizard** to fetch the Device *LOCAL_KEYs* for all of your
-    registered devices:
-    ```
-    python3 -m tinytuya wizard
-    ```
+    * Click on "Cloud" icon -> Create a project (remember the Authorization Key: *API ID* and *Secret* for below)
+    * Click on "Cloud" icon -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
+    * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
+    * **IMPORTANT** Under "API Management" -> "API Products" and ensure the API groups have status "Subscribed": Smart Home Devices Management, Authorization and Smart Home Family Management ([see screenshot here](https://user-images.githubusercontent.com/836718/111419675-1d0d3f80-86a7-11eb-81ad-f6078ee391fe.png)) - Make sure you authorize your Project to use these 3 API groups:
+        - Click each of the API boxes
+        - Click "Projects" tab
+        - Click "**New Authorization**" button
+        - Select your Project from the dropdown and click OK ([see screenshot here](https://user-images.githubusercontent.com/836718/111578175-d5eb8100-8770-11eb-93b3-46342b1a67fa.png))
+
+4. **Run Setup Wizard**:
+    * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the  *Local_Keys* for all of your registered devices:
+      ```bash
+      python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
+      ```
     * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project noted above.  It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
-    * The **Wizard** will poll the Tuya IoT Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *LOCAL_KEY* you will use to poll your device.
-    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.scanDevices()` or when running `python3 -m tinytuya` to scan your local network.  
+    * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device.
+    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.scanDevices()` or when running `python -m tinytuya` to scan your local network.  
+    * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
 
 Notes:
-* If you ever reset or re-pair your smart devices, they will reset their *LOCAL_KEY* and you will need to repeat these steps above. 
-* The TinyTuya *Wizard* was inspired by the TuyAPI CLI which is an alternative way to fetch the *LOCAL_KEYs*: `npm i @tuyapi/cli -g` and run `tuya-cli wizard`  
-* For a helpful video walk-through of getting the *LOCAL_KEYs* you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
+* If you ever reset or re-pair your smart devices, the *Local_Key* will be reset and you will need to repeat the steps above.
+* The TinyTuya *Wizard* was inspired by the TuyAPI CLI which is an alternative way to fetch the *Local_Keys*: `npm i @tuyapi/cli -g` and run `tuya-cli wizard`  
+* For a helpful video walk-through of getting the *Local_Keys* you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
 
 
 ## Programming with TinyTuya
+
+After importing tinytuya, you create a device handle for the device you want to read or control.  Here is an example for a Tuya smart switch or plug:
+
+```python
+    import tinytuya
+
+    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+    d.set_version(3.3)
+    data = d.status() 
+    print('set_status() result %r' % data)
+```
 
 ### TinyTuya Module Classes and Functions 
 ```
@@ -74,24 +114,37 @@ Classes
     BulbDevice(dev_id, address, local_key=None, dev_type='default')
 
         dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99
+        address (str): Device Network IP Address e.g. 10.0.1.99 or 0.0.0.0 to auto-find
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
 
- Functions
-    json = status()                    # returns json payload from device
+ Functions:
+
+    json = status()                    # returns json payload
     set_version(version)               # 3.1 [default] or 3.3
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
+    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dpsUsed)               # set data points (DPs)
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
-    turn_on(switch=1):
-    turn_off(switch=1):
-    set_timer(num_secs):
+    heartbeat()                        # Send heartbeat to device
+    updatedps(index=[1])               # Send updatedps command to device
+    turn_on(switch=1)                  # Turn on device / switch #
+    turn_off(switch=1)                 # Turn off
+    set_timer(num_secs)                # Set timer for num_secs
+    set_debug(toggle, color)           # Activate verbose debugging output
+    set_sendWait(num_secs)             # Seconds to wait after sending for response
+    detect_available_dps()             # Return list of DPS available from device
+    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
+    send(payload)                      # Send payload to device (do not wait for response)
+    receive()                          # Receive payload from device
 
+    OutletDevice:
+        set_dimmer(percentage):
+        
     CoverDevice:
         open_cover(switch=1):  
         close_cover(switch=1):
@@ -99,6 +152,7 @@ Classes
 
     BulbDevice
         set_colour(r, g, b):
+        set_hsv(h, s, v):
         set_white(brightness, colourtemp):
         set_white_percentage(brightness=100, colourtemp=0):
         set_brightness(brightness):
@@ -114,9 +168,28 @@ Classes
         result = state():
 ```
 
+### TinyTuya Error Codes
+
+Starting with v1.2.0 TinyTuya functions will return error details in the JSON data responses instead of raising exceptions.  The format for this response:
+
+```json
+{ "Error":"Invalid JSON Payload", "Err":"900", "Payload":"{Tuya Message}" }'
+```
+
+The "Err" number will be one of these:
+
+* 900 (ERR_JSON) - Invalid JSON Response from Device
+* 901 (ERR_CONNECT) - Network Error: Unable to Connect
+* 902 (ERR_TIMEOUT) - Timeout Waiting for Device
+* 903 (ERR_RANGE) - Specified Value Out of Range
+* 904 (ERR_PAYLOAD) - Unexpected Payload from Device
+* 905 (ERR_OFFLINE) - Network Error: Device Unreachable
+* 906 (ERR_STATE) - Device in Unknown State
+* 907 (ERR_FUNCTION) - Function Not Supported by Device
+
 ### Example Usage
 
-See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples] directory for other scripts.
+See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts.
 
 ```python
     import tinytuya
@@ -176,33 +249,45 @@ These devices uses AES encryption which is not available in the Python standard 
 
 
 ### Scan Tool 
-The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their IP, Device ID, ProductID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
+The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
 
 You can run the scanner from the command line using this:
-```bash
-python -m tinytuya
-```
+  ```bash
+  python -m tinytuya
+  ```
 
 By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
 
-```bash
-# command line
-python -m tinytuya 50
-```
+  ```bash
+  # command line
+  python -m tinytuya 50
+  ```
 
-```python
-# invoke verbose interactive scan
-tinytuya.scan(50)
+  ```python
+  # invoke verbose interactive scan
+  tinytuya.scan(50)
 
-# return payload of devices
-devices = tinytuya.deviceScan(false, 50)
-```
+  # return payload of devices
+  devices = tinytuya.deviceScan(false, 50)
+  ```
 
-## Notes
+## Troubleshooting
 
 * Tuya devices only allow one TCP connection at a time.  Make sure you close the TuyaSmart or SmartLife app before using *TinyTuya* to connect.
 * Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
 * The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed.
+* Some devices with 22 character IDs will require additional setting to poll correctly - here is an example:
+  ```python
+    a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
+    a.set_version(3.3)
+    a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
+    data =  a.status()
+    print(data)
+  ```
+* Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
+  ```
+  reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
+  ```
 
 ## Tuya Data Points - DPS Table
 
@@ -226,8 +311,8 @@ The following table represents several of the standard Tuya DPS values and their
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 1|Switch|bool|True/False||
 | 2|Mode|enum|white,colour,scene,music||
-| 3|Bright|integer|10-1000||
-| 4|Color Temp|integer|0-1000||
+| 3|Bright|integer|10-1000*||
+| 4|Color Temp|integer|0-1000*||
 | 5|Color|hexstring|r:0-255,g:0-255,b:0-255,h:0-360,s:0-255,v:0-255|rgb+hsv|
 
 ### Version 3.3 Devices
@@ -264,8 +349,8 @@ The following table represents several of the standard Tuya DPS values and their
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 1|Switch|bool|True/False||
-| 2|Brightness|integer|10-1000||
-| 3|Minimum of Brightness|integer|10-1000||
+| 2|Brightness|integer|10-1000*||
+| 3|Minimum of Brightness|integer|10-1000*||
 | 4|Type of light source1|enum|LED,incandescent,halogen||
 | 5|Mode|enum|white||
 
@@ -274,7 +359,7 @@ The following table represents several of the standard Tuya DPS values and their
 | ------------- | ------------- | ------------- | ------------- |------------- |
 | 20|Switch|bool|True/False||
 | 21|Mode|enum|white,colour,scene,music||
-| 22|Bright|integer|10-1000||
+| 22|Bright|integer|10-1000*||
 | 23|Color Temp|integer|0-1000||
 | 24|Color|hexstring|h:0-360,s:0-1000,v:0-1000|hsv|
 | 25|Scene|string|n/a||
@@ -318,6 +403,10 @@ The following table represents several of the standard Tuya DPS values and their
 |13|Backlight switch|bool|True/False||
 
 #### Version 3.3 - Sensor Type
+
+_Important Note:_
+Battery-powered Tuya sensors are usually designed to stay in sleep mode until a state change (eg.open or close alert). This means you will not be able to poll these devices except in the brief moment they awake, connect to the WiFi and send their state update payload the the Tuya Cloud. Keep in mind that if you manage to poll the device enough to keep it awake, you will likely quickly drain the battery.
+
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Door Sensor|bool|True/False||
@@ -362,6 +451,8 @@ The following table represents several of the standard Tuya DPS values and their
 |40|Master mode|enum|disarmed, arm, home, sos||
 |41|Air quality index|enum|level_1, level_2, level_3, level_4, level_5, level_6||
 
+NOTE (*) - The range can vary depending on the device. As an example, for dimmers, it may be 10-1000 or 25-255.
+
 ### Tuya References
 
 * Tuya Hardware Development - Protocol: https://developer.tuya.com/en/docs/iot/device-development/embedded-software-development/mcu-development-access/wifi-mcu-sdk-solution/tuya-cloud-universal-serial-port-access-protocol?id=K9hhi0xxtn9cb
@@ -382,3 +473,4 @@ The following table represents several of the standard Tuya DPS values and their
   * https://github.com/codetheweb/tuyapi node.js
   * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
   * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
+  * https://github.com/TradeFace/tuyaface - Python Async Tuya API

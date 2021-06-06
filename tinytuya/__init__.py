@@ -22,13 +22,26 @@
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
-    set_dpsUsed(dpsUsed)               # set data points (DPs)
+    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
+    set_dpsUsed(dps_to_request)        # add data points (DPS) to request
+    add_dps_to_request(index)          # add data point (DPS) index set to None
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
     set_value(index, value)            # Set int value of any index.
-    turn_on(switch=1):
-    turn_off(switch=1):
-    set_timer(num_secs):
+    heartbeat()                        # Send heartbeat to device
+    updatedps(index=[1])               # Send updatedps command to device
+    turn_on(switch=1)                  # Turn on device / switch #
+    turn_off(switch=1)                 # Turn off
+    set_timer(num_secs)                # Set timer for num_secs
+    set_debug(toggle, color)           # Activate verbose debugging output
+    set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
+    detect_available_dps()             # Return list of DPS available from device
+    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
+    send(payload)                      # Send payload to device (do not wait for response)
+    receive()                          # Receive payload from device
+
+    OutletDevice:
+        set_dimmer(percentage):
 
     CoverDevice:
         open_cover(switch=1):  
@@ -37,10 +50,15 @@
 
     BulbDevice
         set_colour(r, g, b):
+        set_hsv(h, s, v):
         set_white(brightness, colourtemp):
+        set_white_percentage(brightness=100, colourtemp=0):
         set_brightness(brightness):
+        set_brightness_percentage(brightness=100):
         set_colourtemp(colourtemp):
+        set_colourtemp_percentage(colourtemp=100):
         set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
+        set_mode(mode='white'):       # white, colour, scene, music
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -56,7 +74,7 @@
     Updated pytuya to support devices with Device IDs of 22 characters
     
 """
-
+ 
 # Modules
 from __future__ import print_function   # python 2.7 support
 import base64
@@ -68,9 +86,11 @@ import sys
 import time
 import colorsys
 import binascii
+import struct
 import requests
 import hmac
 import hashlib
+from collections import namedtuple
 
 # Backward compatability for python2
 try:
@@ -86,7 +106,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 1, 2)
+version_tuple = (1, 2, 6)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -103,25 +123,38 @@ else:
     log.debug('Using PyCrypto from %r', Crypto.__file__)
 
 # Tuya Command Types
-UDP = 0
-AP_CONFIG = 1
-ACTIVE = 2
-BIND = 3
-RENAME_GW = 4
-RENAME_DEVICE = 5
-UNBIND = 6
-CONTROL = 7         # set values
-STATUS = 8
+UDP = 0             # HEAT_BEAT_CMD
+AP_CONFIG = 1       # PRODUCT_INFO_CMD
+ACTIVE = 2          # WORK_MODE_CMD
+BIND = 3            # WIFI_STATE_CMD - wifi working status
+RENAME_GW = 4       # WIFI_RESET_CMD - reset wifi
+RENAME_DEVICE = 5   # WIFI_MODE_CMD - Choose smartconfig/AP mode
+UNBIND = 6          # DATA_QUERT_CMD - issue command
+CONTROL = 7         # STATE_UPLOAD_CMD
+STATUS = 8          # STATE_QUERY_CMD
 HEART_BEAT = 9
-DP_QUERY = 10       # get data points
-QUERY_WIFI = 11
-TOKEN_BIND = 12
-CONTROL_NEW = 13
-ENABLE_WIFI = 14
-DP_QUERY_NEW = 16
+DP_QUERY = 10       # UPDATE_START_CMD - get data points
+QUERY_WIFI = 11     # UPDATE_TRANS_CMD
+TOKEN_BIND = 12     # GET_ONLINE_TIME_CMD - system time (GMT)
+CONTROL_NEW = 13    # FACTORY_MODE_CMD
+ENABLE_WIFI = 14    # WIFI_TEST_CMD
+DP_QUERY_NEW = 16   
 SCENE_EXECUTE = 17
+UPDATEDPS = 18      # Request refresh of DPS
 UDP_NEW = 19
 AP_CONFIG_NEW = 20
+GET_LOCAL_TIME_CMD = 28 
+WEATHER_OPEN_CMD = 32
+WEATHER_DATA_CMD = 33
+STATE_UPLOAD_SYN_CMD = 34
+STATE_UPLOAD_SYN_RECV_CMD = 35
+HEAT_BEAT_STOP = 37
+STREAM_TRANS_CMD = 38
+GET_WIFI_STATUS_CMD = 43
+WIFI_CONNECT_TEST_CMD = 44
+GET_MAC_CMD = 45
+GET_IR_STATUS_CMD = 46
+IR_TX_RX_TEST_CMD = 47
 LAN_GW_ACTIVE = 240
 LAN_SUB_DEV_REQUEST = 241
 LAN_DELETE_SUB_DEV = 242
@@ -136,12 +169,44 @@ LAN_CHECK_GW_UPDATE = 250
 LAN_GW_UPDATE = 251
 LAN_SET_GW_CHANNEL = 252
 
-# Protocol Versions
+# Protocol Versions and Headers
 PROTOCOL_VERSION_BYTES_31 = b'3.1'
 PROTOCOL_VERSION_BYTES_33 = b'3.3'
+PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + 12 * b"\x00"
+MESSAGE_HEADER_FMT = ">4I"       # 4*uint32: prefix, seqno, cmd, length
+MESSAGE_RECV_HEADER_FMT = ">5I"  # 4*uint32: prefix, seqno, cmd, length, retcode
+MESSAGE_END_FMT = ">2I"          # 2*uint32: crc, suffix
+PREFIX_VALUE = 0x000055AA
+SUFFIX_VALUE = 0x0000AA55
+SUFFIX_BIN = b"\x00\x00\xaaU"
+
+# Tuya Packet Format
+TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc")
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
+
+# TinyTuya Error Response Codes
+ERR_JSON = 900
+ERR_CONNECT = 901
+ERR_TIMEOUT = 902
+ERR_RANGE = 903
+ERR_PAYLOAD = 904
+ERR_OFFLINE = 905
+ERR_STATE = 906
+ERR_FUNCTION = 907
+
+error_codes = {
+    ERR_JSON: 'Invalid JSON Response from Device',
+    ERR_CONNECT: 'Network Error: Unable to Connect',
+    ERR_TIMEOUT: 'Timeout Waiting for Device',
+    ERR_RANGE: 'Specified Value Out of Range',
+    ERR_PAYLOAD: 'Unexpected Payload from Device',
+    ERR_OFFLINE: 'Network Error: Device Unreachable',
+    ERR_STATE: 'Device in Unknown State',
+    ERR_FUNCTION: 'Function Not Supported by Device',
+    None: 'Unknown Error'
+}
 
 # Cryptography Helpers
 
@@ -191,6 +256,7 @@ class AESCipher(object):
     def _unpad(s):
         return s[:-ord(s[len(s)-1:])]
 
+# Misc Helpers
 
 def bin2hex(x, pretty=False):
     if pretty:
@@ -203,20 +269,88 @@ def bin2hex(x, pretty=False):
         result = ''.join('%02X%s' % (y, space) for y in x)
     return result
 
-
 def hex2bin(x):
     if IS_PY2:
         return x.decode('hex')
     else:
         return bytes.fromhex(x)
 
-# Tuya Device Dictionary - Commands and Payload Template
-# See requests.json payload at https://github.com/codetheweb/tuyapi
+def set_debug(toggle=True, color=True):
+    """Enable tinytuya verbose logging"""
+    if(toggle):
+        if(color):
+            logging.basicConfig(format='\x1b[31;1m%(levelname)s:%(message)s\x1b[0m',level=logging.DEBUG)
+        else:
+            logging.basicConfig(format='%(levelname)s:%(message)s',level=logging.DEBUG)
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.NOTSET)
 
+def pack_message(msg):
+    """Pack a TuyaMessage into bytes."""
+    # Create full message excluding CRC and suffix
+    buffer = (
+        struct.pack(
+            MESSAGE_HEADER_FMT,
+            PREFIX_VALUE,
+            msg.seqno,
+            msg.cmd,
+            len(msg.payload) + struct.calcsize(MESSAGE_END_FMT),
+        )
+        + msg.payload
+    )
+    # Calculate CRC, add it together with suffix
+    buffer += struct.pack(MESSAGE_END_FMT, binascii.crc32(buffer) & 0xffffffff, SUFFIX_VALUE)
+    return buffer
+
+def unpack_message(data):
+    """Unpack bytes into a TuyaMessage."""
+    header_len = struct.calcsize(MESSAGE_RECV_HEADER_FMT)
+    end_len = struct.calcsize(MESSAGE_END_FMT)
+
+    _, seqno, cmd, _, retcode = struct.unpack(
+        MESSAGE_RECV_HEADER_FMT, data[:header_len]
+    )
+    payload = data[header_len:-end_len]
+    crc, _ = struct.unpack(MESSAGE_END_FMT, data[-end_len:])
+    return TuyaMessage(seqno, cmd, retcode, payload, crc)
+
+def has_suffix(payload):
+    """Check to see if payload has valid Tuya suffix"""
+    if len(payload) < 4:
+        return False
+    log.debug('buffer %r = %r',payload[-4:], SUFFIX_BIN)
+    return(payload[-4:] == SUFFIX_BIN)
+
+def error_json(number=None, payload=None):
+    """Return error details in JSON"""
+    try:
+        spayload = json.dumps(payload)
+        # spayload = payload.replace('\"','').replace('\'','')
+    except:
+        spayload = '""'
+
+    vals = (error_codes[number], 
+            str(number), 
+            spayload)
+    log.debug("ERROR %s - %s - payload: %s" % vals)
+    
+    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
+
+
+# Tuya Device Dictionary - Commands and Payload Template
+# See requests.json payload at http s://github.com/codetheweb/tuyapi
+# 'default' devices require the 0a command for the DP_QUERY request
+# 'device22' devices require the 0d command for the DP_QUERY request and a list of
+#            dps used set to Null in the request payload
 
 payload_dict = {
     # Default Device
     "default": {
+        AP_CONFIG: {   # [BETA] Set Control Values on Device
+            "hexByte": "01",
+            "command": {"gwId": "", "devId": "", "uid": "", "t": ""}
+        },
         CONTROL: {   # Set Control Values on Device
             "hexByte": "07",
             "command": {"devId": "", "uid": "", "t": ""}
@@ -227,11 +361,11 @@ payload_dict = {
         },
         HEART_BEAT: {
             "hexByte": "09",
-            "command": {}
+            "command": {"gwId": "", "devId": ""}
         },
         DP_QUERY: {  # Get Data Points from Device
             "hexByte": "0a",
-            "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
+            "command": {"gwId": "", "devId": "", "uid": "", "t": ""}
         },
         CONTROL_NEW: {
             "hexByte": "0d",
@@ -240,6 +374,10 @@ payload_dict = {
         DP_QUERY_NEW: {
             "hexByte": "0f",
             "command": {"devId": "", "uid": "", "t": ""}
+        },
+        UPDATEDPS: {
+            "hexByte": "12",
+            "command": {"dpId": [18, 19, 20]}
         },
         "prefix": "000055aa00000000000000",
         # Next byte is command "hexByte" + length of remaining payload + command + suffix
@@ -261,7 +399,11 @@ payload_dict = {
         },
         HEART_BEAT: {
             "hexByte": "09",
-            "command": {}
+            "command": {"gwId": "", "devId": ""}
+        },
+        UPDATEDPS: {
+            "hexByte": "12",
+            "command": {"dpId": [18, 19, 20]},
         },
         "prefix": "000055aa00000000000000",
         "suffix": "000000000000aa55"
@@ -270,7 +412,7 @@ payload_dict = {
 
 
 class XenonDevice(object):
-    def __init__(self, dev_id, address, local_key="", dev_type="default", connection_timeout=10):
+    def __init__(self, dev_id, address, local_key="", dev_type="default", connection_timeout=5):
         """
         Represents a Tuya device.
 
@@ -296,10 +438,25 @@ class XenonDevice(object):
         self.socketPersistent = False
         self.socketNODELAY = True
         self.socketRetryLimit = 5
+        self.cipher = AESCipher(self.local_key)
+        self.dps_to_request = {}
+        self.seqno = 0
+        self.sendWait = 0.01  
+        if(address == None or address == 'Auto' or address == '0.0.0.0'):
+            # try to determine IP address automatically 
+            (addr, ver) = self.find(dev_id)
+            if(addr == None):
+                log.debug('Unable to find device on network (specify IP address)')
+                raise Exception("Unable to find device on network (specify IP address)")
+            self.address = addr
+            if(ver == "3.3"):
+                self.version = 3.3
+            time.sleep(0.5)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
         if self.socket != None:
+            # self.socket.shutdown(socket.SHUT_RDWR)
             self.socket.close()
             self.socket = None
 
@@ -309,64 +466,247 @@ class XenonDevice(object):
 
     def _get_socket(self, renew):
         if(renew and self.socket != None):
+            #self.socket.shutdown(socket.SHUT_RDWR)
             self.socket.close()
             self.socket = None
         if(self.socket == None):
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if(self.socketNODELAY):
-                self.socket.setsockopt(
-                    socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.socket.settimeout(self.connection_timeout)
-            self.socket.connect((self.address, self.port))
+            # Set up Socket
+            retries = 0
+            while(retries < self.socketRetryLimit):
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                if(self.socketNODELAY):
+                    self.socket.setsockopt(
+                        socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self.socket.settimeout(self.connection_timeout)
+                try:
+                    retries = retries + 1
+                    self.socket.connect((self.address, self.port))
+                    return True
+                except socket.timeout as err:
+                    # unable to open socket
+                    log.debug('socket unable to connect - retry %d/%d' % (retries,self.socketRetryLimit))
+                    self.socket.close()
+                    time.sleep(0.1)
+                except Exception as err:
+                    # unable to open socket
+                    log.debug('socket unable to connect - retry %d/%d' % (retries,self.socketRetryLimit))
+                    self.socket.close()
+                    time.sleep(5)
+            # unable to get connection
+            return False
+        # existing socket active
+        return True
 
-    def _send_receive(self, payload):
+    def _send_receive(self, payload, minresponse=28, getresponse=True):
         """
         Send single buffer `payload` and receive a single buffer.
 
         Args:
-            payload(bytes): Data to send.
+            payload(bytes): Data to send. Set to 'None' to receive only.
+            minresponse(int): Minimum response size expected (default=28 bytes)
         """
         success = False
         retries = 0
+        dev_type = self.dev_type
+        data = None
         while not success:
-            # make sure I have a socket (may already exist)
-            self._get_socket(False)
+            # open up socket if device is available 
+            if not self._get_socket(False):
+                # unable to get a socket - device likely offline
+                if self.socket is not None:
+                    self.socket.close()
+                self.socket = None
+                return error_json(ERR_OFFLINE)
+            # send request to device
             try:
-                self.socket.send(payload)
-                data = self.socket.recv(1024)
-                # Some devices fail to send full payload in first response
-                # Note - some devices respond with len = 28 for error response
-                if self.retry and len(data) < 28:  
-                    time.sleep(0.1)
-                    data = self.socket.recv(1024)  # try again
-                success = True
-                # Legacy/default mode avoids persisting socket across commands
+                if payload != None:
+                    self.socket.send(payload)
+                    time.sleep(self.sendWait) # give device time to respond
+                if getresponse == True:
+                    data = self.socket.recv(1024)
+                    # device may send null ack (28 byte) response before a full response
+                    if self.retry and len(data) <= minresponse:  
+                        log.debug('received null payload (%r), fetch new one',data)
+                        time.sleep(0.1)
+                        data = self.socket.recv(1024)  # try to fetch new payload
+                    success = True
+                    log.debug('received data=%r',data)
+                # legacy/default mode avoids persisting socket across commands
                 if(not self.socketPersistent):
                     self.socket.close()
-                    self.socket = None
-            except:
+                    self.socket = None  
+                if getresponse == False:
+                    return None
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                raise                  
+            except socket.timeout as err:
+                # a socket timeout occurred
+                if payload == None:
+                    # Receive only mode - return None
+                    return(None)
                 retries = retries+1
-                log.debug('Exception with low level TinyTuya socket!!! retry ' +
+                log.debug('Timeout or exception in _send_receive() - retry ' +
                           str(retries)+'/'+str(self.socketRetryLimit))
                 # if we exceed the limit of retries then lets get out of here
                 if(retries > self.socketRetryLimit):
                     if(self.socket != None):
                         self.socket.close()
                         self.socket = None
-                    log.exception(
+                    log.debug(
                         'Exceeded tinytuya retry limit ('+str(self.socketRetryLimit)+')')
-                    # goodbye
-                    raise
+                    # timeout reached - return error
+                    json_payload = error_json(ERR_TIMEOUT,'Check device key or version')
+                    return(json_payload)
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                self._get_socket(True)
+                self._get_socket(True)      
+            except Exception as err:
+                # likely network or connection error
+                retries = retries+1
+                log.debug('Network connection error - retry ' +
+                          str(retries)+'/'+str(self.socketRetryLimit))
+                # if we exceed the limit of retries then lets get out of here
+                if(retries > self.socketRetryLimit):
+                    if(self.socket != None):
+                        self.socket.close()
+                        self.socket = None
+                    log.debug(
+                        'Exceeded tinytuya retry limit ('+str(self.socketRetryLimit)+')')
+                    log.debug('Unable to connect to device ')
+                    # timeout reached - return error
+                    json_payload = error_json(ERR_CONNECT)
+                    return(json_payload)
+                # retry:  wait a bit, toss old socket and get new one
+                time.sleep(0.1)
+                self._get_socket(True)           
             # except
         # while
-        return data
+        # option - decode Message with hard coded offsets 
+        # result = self._decode_payload(data[20:-8])
 
+        # Unpack Message into TuyaMessage format
+        # and return payload decrypted
+        try:
+            msg = unpack_message(data)
+            # Data available seqno cmd retcode payload crc
+            log.debug("raw unpacked message = %r", msg)
+            result = self._decode_payload(msg.payload)
+        except:
+            log.debug("unexpected result unpacking tuya payload")
+            result = error_json(ERR_PAYLOAD)
+
+        # Did we detect a device22 device? Try again.
+        if dev_type != self.dev_type:
+            log.debug(
+                "Re-send %s due to device type change (%s -> %s)",
+                payload,
+                dev_type,
+                self.dev_type,
+            )
+            return self._send_receive(payload, minresponse)
+
+        return result
+    
+    def _decode_payload(self, payload):
+        log.debug("decode payload=%r", payload)
+        cipher = AESCipher(self.local_key)
+
+        if payload.startswith(PROTOCOL_VERSION_BYTES_31):
+            # Received an encrypted payload
+            # Remove version header
+            payload = payload[len(PROTOCOL_VERSION_BYTES_31) :]  
+            # Decrypt payload
+            # Remove 16-bytes of MD5 hexdigest of payload
+            payload = cipher.decrypt(payload[16:])
+        elif self.version == 3.3:
+            # Trim header for non-default device type
+            if self.dev_type != "default" or payload.startswith(PROTOCOL_VERSION_BYTES_33):
+                payload = payload[len(PROTOCOL_33_HEADER) :]
+                log.debug('removing 3.3=%r', payload)
+            try:
+                log.debug("decrypting=%r", payload)
+                payload = cipher.decrypt(payload, False)
+            except:
+                log.debug("incomplete payload=%r", payload)
+                return(None)
+
+            log.debug('decrypted 3.3 payload=%r', payload)
+            # Try to detect if device22 found
+            if "data unvalid" in payload:
+                self.dev_type = "device22"
+                # set at least one DPS
+                self.dps_to_request = {"1": None}
+                log.debug(
+                    "'data unvalid' error detected: switching to dev_type %r",
+                    self.dev_type,
+                )
+                return None
+        elif not payload.startswith(b"{"):
+            log.debug("Unexpected payload=%r", payload)
+            return error_json(ERR_PAYLOAD,payload)
+
+        if not isinstance(payload, str):
+            payload = payload.decode()
+        log.debug("decoded results=%r", payload)
+        try:
+            json_payload = json.loads(payload)
+        except:
+            json_payload = error_json(ERR_JSON,payload)
+        return json_payload
+
+    def receive(self):
+        """
+        Poll device to read any payload in the buffer.  Timeout results in None returned.
+        """
+        return self._send_receive(None)
+
+    def send(self, payload):
+        """
+        Send single buffer `payload`.
+
+        Args:
+            payload(bytes): Data to send. 
+        """
+        return self._send_receive(payload, 0, False)
+
+    def detect_available_dps(self):
+        """Return which datapoints are supported by the device."""
+        # device22 devices need a sort of bruteforce querying in order to detect the
+        # list of available dps experience shows that the dps available are usually
+        # in the ranges [1-25] and [100-110] need to split the bruteforcing in
+        # different steps due to request payload limitation (max. length = 255)
+        self.dps_cache = {}
+        ranges = [(2, 11), (11, 21), (21, 31), (100, 111)]
+
+        for dps_range in ranges:
+            # dps 1 must always be sent, otherwise it might fail in case no dps is found
+            # in the requested range
+            self.dps_to_request = {"1": None}
+            self.add_dps_to_request(range(*dps_range))
+            try:
+                data = self.status()
+            except Exception as ex:
+                self.exception("Failed to get status: %s", ex)
+                raise
+            if "dps" in data:
+                self.dps_cache.update(data["dps"])
+
+            if self.dev_type == "default":
+                return self.dps_cache
+        self.debug("Detected dps: %s", self.dps_cache)
+        return self.dps_cache
+
+    def add_dps_to_request(self, dp_indicies):
+        """Add a datapoint (DP) to be included in requests."""
+        if isinstance(dp_indicies, int):
+            self.dps_to_request[str(dp_indicies)] = None
+        else:
+            self.dps_to_request.update({str(index): None for index in dp_indicies})
+            
     def set_bulb_type(self, type):
         self.bulb_type = type
-
+        
     def set_version(self, version):
         self.version = version
 
@@ -379,13 +719,96 @@ class XenonDevice(object):
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
 
-    def set_dpsUsed(self, dpsUsed):
-        self.dpsUsed = dpsUsed
+    def set_socketTimeout(self, s):
+        self.connection_timeout = s
+
+    def set_dpsUsed(self, dps_to_request):
+        self.dps_to_request = dps_to_request
 
     def set_retry(self, retry):
         self.retry = retry
 
-    def generate_payload(self, command, data=None):
+    def set_sendWait(self, s):
+        self.sendWait = s
+    
+    def close(self):
+        self.__del__()
+
+    def find(self, did=None):
+        """Scans network for Tuya devices with ID = did
+            
+        Parameters:
+            did = The specific Device ID you are looking for (returns only IP and Version)
+
+        Response: 
+            (ip, version)
+        """
+        if(did == None):
+            return(None, None)
+        log.debug('Listening for device %s on the network' % did)
+        # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+        client = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        client.bind(("", UDPPORT))
+        client.settimeout(TIMEOUT)
+        # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+        clients = socket.socket(
+            socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        clients.bind(("", UDPPORTS))
+        clients.settimeout(TIMEOUT)
+
+        count = 0
+        counts = 0
+        maxretry = 30
+        ret = (None, None)
+
+        while (count + counts) <= maxretry:
+            if (count <= counts):  # alternate between 6666 and 6667 ports
+                count = count + 1
+                try:
+                    data, addr = client.recvfrom(4048)
+                except:
+                    # Timeout
+                    continue
+            else:
+                counts = counts + 1
+                try:
+                    data, addr = clients.recvfrom(4048)
+                except:
+                    # Timeout
+                    continue
+            ip = addr[0]
+            gwId = version = ""
+            result = data
+            try:
+                result = data[20:-8]
+                try:
+                    result = decrypt_udp(result)
+                except:
+                    result = result.decode()
+
+                result = json.loads(result)
+                ip = result['ip']
+                gwId = result['gwId']
+                version = result['version']
+            except:
+                result = {"ip": ip}
+
+            # Check to see if we are only looking for one device
+            if(gwId == did):
+                # We found it!
+                ret = (ip, version)
+                break
+
+        # while
+        clients.close()
+        client.close()
+        log.debug(ret)
+        return(ret)
+
+    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """
         Generate the payload to send.
 
@@ -394,119 +817,87 @@ class XenonDevice(object):
                 This is one of the entries from payload_dict
             data(dict, optional): The data to send.
                 This is what will be passed via the 'dps' entry
+            gwId(str, optional): Will be used for gwId
+            devId(str, optional): Will be used for devId
+            uid(str, optional): Will be used for uid
         """
         json_data = payload_dict[self.dev_type][command]['command']
         command_hb = payload_dict[self.dev_type][command]['hexByte']
 
         if 'gwId' in json_data:
-            json_data['gwId'] = self.id
+            if gwId is not None:
+                json_data['gwId'] = gwId
+            else:
+                json_data['gwId'] = self.id
         if 'devId' in json_data:
-            json_data['devId'] = self.id
+            if devId is not None:
+                json_data['devId'] = devId
+            else:
+                json_data['devId'] = self.id
         if 'uid' in json_data:
-            json_data['uid'] = self.id  # use device ID
+            if uid is not None:
+                json_data['uid'] = uid 
+            else:
+                json_data['uid'] = self.id 
         if 't' in json_data:
             json_data['t'] = str(int(time.time()))
 
         if data is not None:
-            json_data['dps'] = data
+            if 'dpId' in json_data:
+                json_data['dpId'] = data
+            else:
+                json_data['dps'] = data
         if command_hb == '0d':   # CONTROL_NEW
-            json_data['dps'] = self.dpsUsed
+            json_data['dps'] = self.dps_to_request
 
         # Create byte buffer from hex data
-        json_payload = json.dumps(json_data)
+        payload = json.dumps(json_data)
         # if spaces are not removed device does not respond!
-        json_payload = json_payload.replace(' ', '')
-        json_payload = json_payload.encode('utf-8')
-        log.debug('json_payload=%r', json_payload)
+        payload = payload.replace(' ', '')
+        payload = payload.encode('utf-8')
+        log.debug('building payload=%r', payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
-            json_payload = self.cipher.encrypt(json_payload, False)
+            payload = self.cipher.encrypt(payload, False)
             self.cipher = None
-            if command_hb != '0a':
+            if command_hb != '0a' and command_hb != '12':
                 # add the 3.3 header
-                json_payload = PROTOCOL_VERSION_BYTES_33 + \
-                    b"\0\0\0\0\0\0\0\0\0\0\0\0" + json_payload
+                payload = PROTOCOL_33_HEADER + payload
         elif command == CONTROL:
             # need to encrypt
-            # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
-            json_payload = self.cipher.encrypt(json_payload)
-            preMd5String = b'data=' + json_payload + b'||lpv=' + \
+            payload = self.cipher.encrypt(payload)
+            preMd5String = b'data=' + payload + b'||lpv=' + \
                 PROTOCOL_VERSION_BYTES_31 + b'||' + self.local_key
             m = md5()
             m.update(preMd5String)
             hexdigest = m.hexdigest()
             # some tuya libraries strip 8: to :24
-            json_payload = PROTOCOL_VERSION_BYTES_31 + \
-                hexdigest[8:][:16].encode('latin1') + json_payload
-            self.cipher = None  # expect to connect and then disconnect to set new
+            payload = PROTOCOL_VERSION_BYTES_31 + \
+                hexdigest[8:][:16].encode('latin1') + payload
+            self.cipher = None  
 
-        postfix_payload = hex2bin(
-            bin2hex(json_payload) + payload_dict[self.dev_type]['suffix'])
-
-        assert len(postfix_payload) <= 0xff
-        postfix_payload_hex_len = '%x' % len(
-            postfix_payload)  # single byte 0-255 (0x00-0xff)
-        buffer = hex2bin(payload_dict[self.dev_type]['prefix'] +
-                         payload_dict[self.dev_type][command]['hexByte'] +
-                         '000000' +
-                         postfix_payload_hex_len) + postfix_payload
-
-        # calc the CRC of everything except where the CRC goes and the suffix
-        hex_crc = format(binascii.crc32(buffer[:-8]) & 0xffffffff, '08X')
-        buffer = buffer[:-8] + hex2bin(hex_crc) + buffer[-4:]
+        # create Tuya message packet
+        msg = TuyaMessage(self.seqno, int(command_hb,16), 0, payload, 0)
+        self.seqno += 1     # increase message sequence number
+        buffer = pack_message(msg)
+        log.debug('payload generated=%r', buffer)
         return buffer
-
 
 class Device(XenonDevice):
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(Device, self).__init__(dev_id, address, local_key, dev_type)
 
     def status(self):
+        """Return device status."""
         log.debug('status() entry (dev_type is %s)', self.dev_type)
-        # open device, send request, then close connection
         payload = self.generate_payload(DP_QUERY)
 
         data = self._send_receive(payload)
         log.debug('status received data=%r', data)
-
-        result = data[20:-8]  # hard coded offsets
-        if self.dev_type != 'default':
-            result = result[15:]
-
-        log.debug('result=%r', result)
-
-        if result.startswith(b'{'):
-            # this is the regular expected code path
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        elif result.startswith(PROTOCOL_VERSION_BYTES_31):
-            # got an encrypted payload, happens occasionally
-            # expect resulting json to look similar to:: {"devId":"ID","dps":{"1":true,"2":0},"t":EPOCH_SECS,"s":3_DIGIT_NUM}
-            # NOTE dps.2 may or may not be present
-            result = result[len(PROTOCOL_VERSION_BYTES_31)                            :]  # remove version header
-            # Remove 16-bytes appears to be MD5 hexdigest of payload
-            result = result[16:]
-            cipher = AESCipher(self.local_key)
-            result = cipher.decrypt(result)
-            log.debug('decrypted result=%r', result)
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        elif self.version == 3.3:
-            cipher = AESCipher(self.local_key)
-            result = cipher.decrypt(result, False)
-            log.debug('decrypted result=%r', result)
-            if not isinstance(result, str):
-                result = result.decode()
-            result = json.loads(result)
-        else:
-            log.error('Unexpected status() payload=%r', result)
-
-        return result
+        return data
 
     def set_status(self, on, switch=1):
         """
@@ -524,6 +915,42 @@ class Device(XenonDevice):
         data = self._send_receive(payload)
         log.debug('set_status received data=%r', data)
 
+        return data
+
+    def product(self):
+        """
+        Request AP_CONFIG Product Info from device. [BETA]
+
+        """
+        # open device, send request, then close connection
+        payload = self.generate_payload(AP_CONFIG)
+        data = self._send_receive(payload,0)
+        log.debug('product received data=%r', data)
+        return data
+
+    def heartbeat(self):
+        """
+        Send a simple HEART_BEAT command to device.
+
+        """
+        # open device, send request, then close connection
+        payload = self.generate_payload(HEART_BEAT)
+        data = self._send_receive(payload,0)
+        log.debug('heartbeat received data=%r', data)
+        return data
+    
+    def updatedps(self, index=[1]):
+        """
+        Request device to update index.
+
+        Args:
+            index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
+        """
+        log.debug('updatedps() entry (dev_type is %s)', self.dev_type)
+        # open device, send request, then close connection
+        payload = self.generate_payload(UPDATEDPS, index)
+        data = self._send_receive(payload,0)
+        log.debug('updatedps received data=%r', data)
         return data
 
     def set_value(self, index, value):
@@ -591,6 +1018,29 @@ class OutletDevice(Device):
         super(OutletDevice, self).__init__(
             dev_id, address, local_key, dev_type)
 
+    def set_dimmer(self, percentage=None, value=None, dps_id=3):
+        """Set dimmer value
+        
+        Args:
+            percentage (int): percentage dim 0-100
+            value (int): direct value for switch 0-255
+            dps_id (int): DPS index for dimmer value
+        """
+  
+        if percentage is not None:
+            level = int(percentage * 255.0 / 100.0)   
+        else:
+            level = value
+
+        if level == 0:
+            self.turn_off()
+        elif level is not None:
+            if level < 25:
+                level = 25
+            if level > 255:
+                level = 255
+            self.turn_on()
+            self.set_value(dps_id, level)
 
 class CoverDevice(Device):
     """
@@ -674,8 +1124,11 @@ class BulbDevice(Device):
         '24': 'colour',
     }
 
-    # Default Bulb Type
+    # Set Default Bulb Types
     bulb_type = 'A'
+    has_brightness = False
+    has_colourtemp = False
+    has_colour = False
 
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type)
@@ -701,7 +1154,7 @@ class BulbDevice(Device):
             b(int): Value for the colour blue as int from 0-255.
         """
         rgb = [r, g, b]
-        hsv = colorsys.rgb_to_hsv(rgb[0]/255, rgb[1]/255, rgb[2]/255)
+        hsv = colorsys.rgb_to_hsv(rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0)
 
         # Bulb Type A
         if(bulb == 'A'):
@@ -773,12 +1226,11 @@ class BulbDevice(Device):
             hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
         """
         if(bulb == 'A'):
-            h = int(hexvalue[7:10], 16) / 360
-            s = int(hexvalue[10:12], 16) / 255
-            v = int(hexvalue[12:14], 16) / 255
+            h = int(hexvalue[7:10], 16) / 360.0
+            s = int(hexvalue[10:12], 16) / 255.0
+            v = int(hexvalue[12:14], 16) / 255.0
         if(bulb == 'B'):
             # hexvalue is in hsv
-            print(hexvalue + " - " + hexvalue[0:4])
             h = int(hexvalue[0:4], 16)/360.0
             s = int(hexvalue[4:8], 16)/1000.0
             v = int(hexvalue[8:12], 16)/1000.0 
@@ -794,10 +1246,22 @@ class BulbDevice(Device):
             Type C is Feit type bulbs from costco
         """
         self.version = version
-        # Try to determine type of BulbDevice Type based on switch DPS
+
+        # Try to determine type of BulbDevice Type based on DPS indexes
         status = self.status()
-        if '1' not in status['dps']:
+        if 'dps' in status:
+            if '1' not in status['dps']:
+                self.bulb_type = 'B'
+            if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in status['dps']:
+                self.has_brightness = True
+            if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in status['dps']:
+                self.has_colourtemp = True
+            if self.DPS_INDEX_COLOUR[self.bulb_type] in status['dps']:
+                self.has_colour = True
+        else:
+            # response has no dps
             self.bulb_type = 'B'
+        log.debug("bulb type set to %s" % self.bulb_type)
 
     def turn_on(self, switch=0):
         """Turn the device on"""
@@ -833,8 +1297,8 @@ class BulbDevice(Device):
             scene(int): Value for the scene as int from 1-4.
         """
         if not 1 <= scene <= 4:
-            raise ValueError(
-                "The value for scene needs to be between 1 and 4.")
+            return error_json(ERR_RANGE,
+                "set_scene: The value for scene needs to be between 1 and 4.")
 
         if(scene == 1):
             s = self.DPS_MODE_SCENE_1
@@ -856,21 +1320,53 @@ class BulbDevice(Device):
         Set colour of an rgb bulb.
 
         Args:
-            r(int): Value for the colour red as int from 0-255.
-            g(int): Value for the colour green as int from 0-255.
-            b(int): Value for the colour blue as int from 0-255.
+            r(int): Value for the colour Red as int from 0-255.
+            g(int): Value for the colour Green as int from 0-255.
+            b(int): Value for the colour Blue as int from 0-255.
         """
+        if not self.has_colour:
+            return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
         if not 0 <= r <= 255:
-            raise ValueError(
-                "The value for red needs to be between 0 and 255.")
+            return error_json(ERR_RANGE,
+                "set_colour: The value for red needs to be between 0 and 255.")
         if not 0 <= g <= 255:
-            raise ValueError(
-                "The value for green needs to be between 0 and 255.")
+            return error_json(ERR_RANGE,
+                "set_colour: The value for green needs to be between 0 and 255.")
         if not 0 <= b <= 255:
-            raise ValueError(
-                "The value for blue needs to be between 0 and 255.")
+            return error_json(ERR_RANGE,
+                "set_colour: The value for blue needs to be between 0 and 255.")
 
         hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b, self.bulb_type)
+
+        payload = self.generate_payload(CONTROL, {
+            self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
+            self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue})
+        data = self._send_receive(payload)
+        return data
+
+    def set_hsv(self, h, s, v):
+        """
+        Set colour of an rgb bulb using h, s, v.
+
+        Args:
+            h(float): colour Hue as float from 0-1
+            s(float): colour Saturation as float from 0-1
+            v(float): colour Value as float from 0-1
+        """
+        if not self.has_colour:
+            return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
+        if not 0 <= h <= 1.0:
+            return error_json(ERR_RANGE,
+                "set_colour: The value for Hue needs to be between 0 and 1.")
+        if not 0 <= s <= 1.0:
+            return error_json(ERR_RANGE,
+                "set_colour: The value for Saturation needs to be between 0 and 1.")
+        if not 0 <= v <= 1.0:
+            return error_json(ERR_RANGE,
+                "set_colour: The value for Value needs to be between 0 and 1.")
+
+        (r,g,b) = colorsys.hsv_to_rgb(h,s,v)
+        hexvalue = BulbDevice._rgb_to_hexvalue(r*255.0, g*255.0, b*255.0, self.bulb_type)
 
         payload = self.generate_payload(CONTROL, {
             self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
@@ -888,19 +1384,23 @@ class BulbDevice(Device):
         """
         # Brightness
         if not (0 <= brightness <= 100):
-            raise ValueError("Brightness percentage needs to be between 0 and 100.")
+            return error_json(ERR_RANGE,"set_white_percentage: Brightness percentage needs to be between 0 and 100.")
+        
         b = int(25 + (255-25)*brightness/100)
+        
         if self.bulb_type == 'B':
             b = int(10 + (1000-10)*brightness/100)
 
         # Colourtemp
         if not (0 <= colourtemp <= 100):
-            raise ValueError("Colourtemp percentage needs to be between 0 and 100.")
-        c = colourtemp = int(255*colourtemp/100)
+            return error_json(ERR_RANGE,"set_white_percentage: Colourtemp percentage needs to be between 0 and 100.")
+        
+        c = int(255*colourtemp/100)
+        
         if self.bulb_type == 'B':
             c = int(1000*colourtemp/100)
 
-        data = set_white(b,c)
+        data = self.set_white(b,c)
         return data
 
     def set_white(self, brightness=-1, colourtemp=-1): 
@@ -919,19 +1419,19 @@ class BulbDevice(Device):
             if self.bulb_type == 'B':
                 brightness = 1000
         if self.bulb_type == 'A' and not (25 <= brightness <= 255):
-                raise ValueError("The brightness needs to be between 25 and 255.")
+                return error_json(ERR_RANGE, "set_white: The brightness needs to be between 25 and 255.")
         if self.bulb_type == 'B' and not (10 <= brightness <= 1000):
-                raise ValueError("The brightness needs to be between 10 and 1000.")
+                return error_json(ERR_RANGE, "set_white: The brightness needs to be between 10 and 1000.")
 
         # Colourtemp (default Min)
         if colourtemp < 0:
             colourtemp = 0
         if self.bulb_type == 'A' and not (0 <= colourtemp <= 255):
-            raise ValueError(
-                "The colour temperature needs to be between 0 and 255.")
+            return error_json(ERR_RANGE,
+                "set_white: The colour temperature needs to be between 0 and 255.")
         if self.bulb_type == 'B' and not (0 <= colourtemp <= 1000):
-            raise ValueError(
-                "The colour temperature needs to be between 0 and 1000.")
+            return error_json(ERR_RANGE,
+                "set_white: The colour temperature needs to be between 0 and 1000.")
 
         payload = self.generate_payload(CONTROL, {
             self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_WHITE,
@@ -949,7 +1449,7 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness in percent (0-100)
         """
         if not (0 <= brightness <= 100):
-            raise ValueError("Brightness percentage needs to be between 0 and 100.")
+            return error_json(ERR_RANGE,"set_brightness_percentage: Brightness percentage needs to be between 0 and 100.")
         b = int(25 + (255-25)*brightness/100)
         if self.bulb_type == 'B':
             b = int(10 + (1000-10)*brightness/100)
@@ -965,13 +1465,32 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness (25-255).
         """
         if self.bulb_type == 'A' and not (25 <= brightness <= 255):
-                raise ValueError("The brightness needs to be between 25 and 255.")
+                return error_json(ERR_RANGE,"set_brightness: The brightness needs to be between 25 and 255.")
         if self.bulb_type == 'B' and not (10 <= brightness <= 1000):
-                raise ValueError("The brightness needs to be between 10 and 1000.")
+                return error_json(ERR_RANGE,"set_brightness: The brightness needs to be between 10 and 1000.")
 
-        payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness})
-        data = self._send_receive(payload)
+        # Determine which mode bulb is in and adjust accordingly
+        state = self.state()
+        data = error_json(ERR_STATE,"set_brightness: Unknown bulb state.")
+
+        if 'mode' in state:
+            if state['mode'] == 'white':
+                # for white mode use DPS for brightness
+                if not self.has_brightness:
+                    return error_json(ERR_FUNCTION, "set_colour: Device does not support brightness.")
+                payload = self.generate_payload(
+                    CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness})
+                data = self._send_receive(payload)
+        
+            if state['mode'] == 'colour':
+                # for colour mode use hsv to increase brightness
+                if self.bulb_type == 'A':
+                    value = brightness / 255.0
+                else:
+                    value = brightness / 1000.0
+                (h,s,v) = self.colour_hsv()
+                data = self.set_hsv(h,s,value)
+        
         return data
 
     def set_colourtemp_percentage(self, colourtemp=100):
@@ -982,7 +1501,7 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature in percentage (0-100).
         """
         if not (0 <= colourtemp <= 100):
-            raise ValueError("Colourtemp percentage needs to be between 0 and 100.")
+            return error_json(ERR_RANGE,"set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.")
         c = int(255*colourtemp/100)
         if self.bulb_type == 'B':
             c = int(1000*colourtemp/100)
@@ -997,12 +1516,14 @@ class BulbDevice(Device):
         Args:
             colourtemp(int): Value for the colour temperature (0-255).
         """
+        if not self.has_colourtemp:
+            return error_json(ERR_FUNCTION, "set_colourtemp: Device does not support colortemp.")
         if self.bulb_type == 'A' and not (0 <= colourtemp <= 255):
-            raise ValueError(
-                "The colour temperature needs to be between 0 and 255.")
+            return error_json(ERR_RANGE,
+                "set_colourtemp: The colour temperature needs to be between 0 and 255.")
         if self.bulb_type == 'B' and not (0 <= colourtemp <= 1000):
-            raise ValueError(
-                "The colour temperature needs to be between 0 and 1000.")
+            return error_json(ERR_RANGE,
+                "set_colourtemp: The colour temperature needs to be between 0 and 1000.")
 
         payload = self.generate_payload(
             CONTROL, {self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp})
@@ -1031,6 +1552,14 @@ class BulbDevice(Device):
         """Return state of Bulb"""
         status = self.status()
         state = {}
+        if not status:
+            return error_json(ERR_JSON,"state: empty response")
+
+        if 'Error' in status.keys():
+            return error_json(ERR_JSON,status['Error'])
+
+        if self.DPS not in status.keys():
+            return error_json(ERR_JSON,"state: no data points")
 
         for key in status[self.DPS].keys():
             if(key in self.DPS_2_STATE):
@@ -1049,7 +1578,6 @@ TIMEOUT = 3.0       # Seconds to wait for a broadcast
 
 # UDP packet payload decryption - credit to tuya-convert
 
-
 def pad(s): return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
 def unpad(s): return s[:-ord(s[len(s) - 1:])]
 
@@ -1064,7 +1592,6 @@ udpkey = md5(b"yGAdlopoPVldABfn").digest()
 def decrypt_udp(msg): return decrypt(msg, udpkey)
 
 # Return positive number or zero
-
 
 def floor(x):
     if x > 0:
@@ -1086,7 +1613,6 @@ def appenddevice(newdevice, devices):
 
 # Scan function shortcut
 
-
 def scan(maxretry=MAXCOUNT, color=True):
     """Scans your network for Tuya devices with output to stdout
     """
@@ -1095,7 +1621,7 @@ def scan(maxretry=MAXCOUNT, color=True):
 # Scan function
 
 
-def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
+def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1103,6 +1629,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         verbose = True or False, print formatted output to stdout [Default: False]
         maxretry = The number of loops to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
+        poll = True or False, poll dps status for devices if possible
 
     Response: 
         devices = Dictionary of all devices found
@@ -1163,6 +1690,9 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
             dim = "\033[0m\033[97m\033[2m"
             alert = "\033[0m\033[91m\033[1m"
             alertdim = "\033[0m\033[91m\033[2m"
+            cyan = "\033[0m\033[36m"
+            red = "\033[0m\033[31m"
+            yellow = "\033[0m\033[33m"
 
         print("\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"%(bold,normal,dim,__version__))
         if(havekeys):
@@ -1186,14 +1716,24 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         if (count <= counts):  # alternate between 6666 and 6667 ports
             try:
                 data, addr = client.recvfrom(4048)
-            except:
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                if verbose:
+                    print("\n**User Break**")
+                exit()
+            except Exception as err:
                 # Timeout
                 count = count + 1
                 continue
         else:
             try:
                 data, addr = clients.recvfrom(4048)
-            except:
+            except KeyboardInterrupt as err:
+                log.debug('Keyboard Interrupt - Exiting')
+                if verbose:
+                    print("\n**User Break**")
+                exit()
+            except Exception as err:
                 # Timeout
                 counts = counts + 1
                 continue
@@ -1208,6 +1748,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                 result = result.decode()
 
             result = json.loads(result)
+            log.debug("Valid UDP Packet: %r" % result)
 
             note = 'Valid'
             ip = result['ip']
@@ -1219,6 +1760,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                 print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
             result = {"ip": ip}
             note = "Unknown"
+            log.debug("Invalid UDP Packet: %r" % result)
 
         # check to see if we have seen this device before and add to devices array
         if appenddevice(result, devices) == False:
@@ -1236,35 +1778,56 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
                     pass
             if(verbose):
                 if(dname == ""):    
-                    print("%s%s Device Found%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    normal, version, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    print("Unknown v%s%s Device%s   Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s" % (
+                    normal, version, dim, productKey, note, subbold, ip, cyan, gwId, red, dkey, yellow, version))
                 else:
-                    print("%s%s%s [%s payload]: %s%s%s\n    ID = %s, Product ID = %s, Version = %s" % (
-                    normal, dname, dim, note, subbold, ip, dim, gwId, productKey, version))
+                    print("%s%s%s  Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s,  %sLocal Key = %s,  %sVersion = %s" % (
+                    normal, dname, dim, productKey, note, subbold, ip, cyan, gwId, red, dkey, yellow, version))
+
             try:
-                if(version == '3.1'):
-                    # Version 3.1 - no device key requires - poll for status data points
-                    d = OutletDevice(gwId, ip, dkey)
-                    d.set_version(3.1)
-                    dpsdata = d.status()
-                    devices[ip]['dps'] = dpsdata
-                    if(verbose):
-                        print("    Status: %s" % dpsdata['dps'])
-                else:
-                    # Version 3.3+ requires device key
-                    if(dkey != ""):
+                if poll:
+                    time.sleep(0.1) # give device a break before polling
+                    if(version == '3.1'):
+                        # Version 3.1 - no device key requires - poll for status data points
                         d = OutletDevice(gwId, ip, dkey)
-                        d.set_version(3.3)
+                        d.set_version(3.1)
                         dpsdata = d.status()
-                        devices[ip]['dps'] = dpsdata
-                        if(verbose):
-                            print(dim + "    Status: %s" % dpsdata['dps'])      
-                    else:                      
-                        if(verbose):
-                            print(alertdim + "    No Stats - Device Key required to poll for status" + dim)
+                        if 'dps' not in dpsdata:
+                            if(verbose):
+                                if 'Error' in dpsdata:
+                                    print("%s    Access rejected by %s: %s" % (alertdim, ip, dpsdata['Error']))
+                                else:
+                                    print("%s    Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                            devices[ip]['err'] = 'Unable to poll'
+                        else:
+                            devices[ip]['dps'] = dpsdata
+                            if(verbose):
+                                print("    Status: %s" % dpsdata['dps'])
+                    else:
+                        # Version 3.3+ requires device key
+                        if(dkey != ""):
+                            d = OutletDevice(gwId, ip, dkey)
+                            d.set_version(3.3)
+                            dpsdata = d.status()
+                            if 'dps' not in dpsdata:
+                                if verbose:
+                                    if 'Error' in dpsdata:
+                                        print("%s    Access rejected by %s: %s" % (alertdim, ip, dpsdata['Error']))
+                                    else:
+                                        print("%s    Check DEVICE KEY - Invalid response from %s: %r" % (alertdim, ip, dpsdata))
+                                devices[ip]['err'] = 'Unable to poll' 
+                            else:
+                                devices[ip]['dps'] = dpsdata
+                                if(verbose):
+                                    print(dim + "    Status: %s" % dpsdata['dps'])      
+                        else:                      
+                            if(verbose):
+                                print("%s    No Stats for %s: DEVICE KEY required to poll for status%s" % (alertdim, ip, dim))
+                    # else
+                # if poll
             except:
                 if(verbose):
-                    print(alertdim + "    No Stats for %s: Unable to poll" % ip)
+                    print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
                 devices[ip]['err'] = 'Unable to poll'
             if(dname != ""):
                 devices[ip]['name'] = dname
@@ -1279,267 +1842,6 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True):
         print("                    \n%sScan Complete!  Found %s devices.\n" %
               (normal, len(devices)))
 
+    clients.close()
+    client.close()
     return(devices)
-
-
-# TinyTuya Setup Wizard
-
-def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
-    """Tuya IoT Platform Data Access
-
-    Parameters:
-        * region     Tuya API Server Region: us, eu, cn, in
-        * apiKey     Tuya Platform Developer ID
-        * apiSecret  Tuya Platform Developer secret 
-        * uri        Tuya Platform URI for this call
-        * token      Tuya OAuth Token
-
-    Playload Construction - Header Data:
-        Parameter 	  Type    Required	Description
-        client_id	  String     Yes	client_id
-        signature     String     Yes	HMAC-SHA256 Signature (see below)
-        sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
-        t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
-        lang	      String	 No	    Language. It is zh by default in China and en in other areas.
-        access_token  String     *      Required for service management calls
-
-    Signature Details:
-        * OAuth Token Request: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
-        * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
-
-    URIs:
-        * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
-        * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
-        * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
-
-    """
-    url = "https://openapi.tuya%s.com/v1.0/%s" % (apiRegion,uri)
-    now = int(time.time()*1000)
-    if(token==None):
-        payload = apiKey + str(now)
-    else:
-        payload = apiKey + token + str(now)
-
-    # Sign Payload
-    signature = hmac.new(
-        apiSecret.encode('utf-8'),
-        msg=payload.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest().upper()
-
-    # Create Header Data
-    headers = {}
-    headers['client_id'] = apiKey
-    headers['sign_method'] = 'HMAC-SHA256'
-    headers['t'] = str(now)
-    headers['sign'] = signature
-    if(token != None):
-        headers['access_token'] = token
-
-    # Get Token
-    response = requests.get(url, headers=headers)
-    try:
-        response_dict = json.loads(response.content.decode())
-    except:
-        try:
-            response_dict = json.loads(response.content)
-        except:
-            print("Failed to get valid JSON response")
-
-    return(response_dict)
-
-def wizard(color=True):
-    """
-    TinyTuya Setup Wizard Tuya based WiFi smart devices
-
-    Parameter:
-        color = True or False, print output in color [Default: True]
-
-    Description
-        Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
-        the Device IDs and their Local KEYs.  It will save the credentials and the device
-        data in the tinytuya.json and devices.json configuration files respectively.
-
-        HOW to set up your Tuya IoT Developer account: iot.tuya.com:
-        https://github.com/jasonacox/tinytuya#get-the-tuya-device-local-key
-
-    Credits
-    * Tuya API Documentation
-        https://developer.tuya.com/en/docs/iot/open-api/api-list/api?id=K989ru6gtvspg
-    * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
-        The TuyAPI/CLI wizard inspired and informed this python version.
-    """
-
-    # Get Configuration Data
-    CONFIGFILE = 'tinytuya.json'
-    DEVICEFILE = 'devices.json'
-    SNAPSHOTFILE = 'snapshot.json'
-    config = {}
-    config['apiKey'] = ''
-    config['apiSecret'] = ''
-    config['apiRegion'] = ''
-    config['apiDeviceID'] = ''
-    needconfigs = True
-    try:
-        # Load defaults
-        with open(CONFIGFILE) as f:
-            config = json.load(f)
-    except:
-        # First Time Setup
-        pass
-    
-    if(color == False):
-        # Disable Terminal Color Formatting
-        bold = subbold = normal = dim = alert = alertdim = ""
-    else:
-        # Terminal Color Formatting
-        bold = "\033[0m\033[97m\033[1m"
-        subbold = "\033[0m\033[32m"
-        normal = "\033[97m\033[0m"
-        dim = "\033[0m\033[97m\033[2m"
-        alert = "\033[0m\033[91m\033[1m"
-        alertdim = "\033[0m\033[91m\033[2m"
-
-    print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (version) + normal)
-    print('')
-
-    if(config['apiKey'] != '' and config['apiSecret'] != '' and
-            config['apiRegion'] != '' and config['apiDeviceID'] != ''):
-        needconfigs = False
-        print("    " + subbold + "Existing settings:" + dim +
-              "\n        API Key=%s \n        Secret=%s\n        DeviceID=%s\n        Region=%s" %
-              (config['apiKey'], config['apiSecret'], config['apiDeviceID'],
-               config['apiRegion']))
-        print('')
-        answer = input(subbold + '    Use existing credentials ' +
-                       normal + '(Y/n): ')
-        if(answer[0:1].lower() == 'n'):
-            needconfigs = True
-
-    if(needconfigs):
-        # Ask user for config settings
-        print('')
-        config['apiKey'] = input(subbold + "    Enter " + bold + "API Key" + subbold +
-                                 " from tuya.com: " + normal)
-        config['apiSecret'] = input(subbold + "    Enter " + bold + "API Secret" + subbold +
-                                    " from tuya.com: " + normal)
-        config['apiDeviceID'] = input(subbold +
-                                      "    Enter " + bold + "any Device ID" + subbold +
-                                      " currently registered in Tuya App (used to pull full list): " + normal)
-        # TO DO - Determine apiRegion based on Device - for now, ask
-        config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
-                                    " (Options: us, eu, cn or in): " + normal)
-        # Write Config
-        json_object = json.dumps(config, indent=4)
-        with open(CONFIGFILE, "w") as outfile:
-            outfile.write(json_object)
-        print(bold + "\n>> Configuration Data Saved to " + CONFIGFILE)
-        print(dim + json_object)
-
-    KEY = config['apiKey']
-    SECRET = config['apiSecret']
-    DEVICEID = config['apiDeviceID']
-    REGION = config['apiRegion']        # us, eu, cn, in
-    LANG = 'en'                         # en or zh
-
-    # Get Oauth Token from tuyaPlatform
-    uri = 'token?grant_type=1'
-    response_dict = tuyaPlatform(REGION, KEY, SECRET,uri)
-    token = response_dict['result']['access_token']
-
-    # Get UID from sample Device ID 
-    uri = 'devices/%s' % DEVICEID
-    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
-    uid = response_dict['result']['uid']
-
-    # Use UID to get list of all Devices for User
-    uri = 'users/%s/devices' % uid
-    json_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
- 
-    # Filter to only Name, ID and Key
-    tuyadevices = []
-    for i in json_data['result']:
-        item = {}
-        item['name'] = i['name'].strip()
-        item['id'] = i['id']
-        item['key'] = i['local_key']
-        tuyadevices.append(item)
-
-    # Display device list
-    print("\n\n" + bold + "Device Listing\n" + dim)
-    output = json.dumps(tuyadevices, indent=4)  # sort_keys=True)
-    print(output)
-
-    # Save list to devices.json
-    print(bold + "\n>> " + normal + "Saving list to " + DEVICEFILE)
-    with open(DEVICEFILE, "w") as outfile:
-        outfile.write(output)
-    print(dim + "    %d registered devices saved" % len(tuyadevices))
-
-    # Find out if we should poll all devices
-    answer = input(subbold + '\nPoll local devices? ' +
-                   normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
-        # Scan network for devices and provide polling data
-        print(normal + "\nScanning local network for Tuya devices...")
-        devices = deviceScan(False, 20)
-        print("    %s%s local devices discovered%s" %
-              (dim, len(devices), normal))
-        print("")
-
-        def getIP(d, gwid):
-            for ip in d:
-                if (gwid == d[ip]['gwId']):
-                    return (ip, d[ip]['version'])
-            return (0, 0)
-
-        polling = []
-        print("Polling local devices...")
-        for i in tuyadevices:
-            item = {}
-            name = i['name']
-            (ip, ver) = getIP(devices, i['id'])
-            item['name'] = name
-            item['ip'] = ip
-            item['ver'] = ver
-            item['id'] = i['id']
-            item['key'] = i['key']
-            if (ip == 0):
-                print("    %s[%s] - %s%s - %sError: No IP found%s" %
-                      (subbold, name, dim, ip, alert, normal))
-            else:
-                try:
-                    d = OutletDevice(i['id'], ip, i['key'])
-                    if ver == "3.3":
-                        d.set_version(3.3)
-                    data = d.status()
-                    if data:
-                        item['dps'] = data
-                        state = alertdim + "Off" + dim
-                        # print(data)
-                        try:
-                            if(data['dps']['1'] == True):
-                                state = bold + "On" + dim
-                            print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                  (subbold, name, dim, ip, state, data['dps']))
-                        except:
-                            print("    %s[%s] - %s%s - %sNo Response" %
-                                  (subbold, name, dim, ip, alertdim))
-                    else:
-                        print("    %s[%s] - %s%s - %sNo Response" %
-                              (subbold, name, dim, ip, alertdim))
-                except:
-                    print("    %s[%s] - %s%s - %sNo Response" %
-                          (subbold, name, dim, ip, alertdim))
-            polling.append(item)
-        # for loop
-
-        # Save polling data snapsot
-        current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4) 
-        print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
-        with open(SNAPSHOTFILE, "w") as outfile:
-            outfile.write(output)
-
-    print("\nDone.\n")
-    return

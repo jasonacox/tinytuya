@@ -6,8 +6,6 @@ TinyTuya Setup Wizard Tuya based WiFi smart devices
 Author: Jason A. Cox
 For more information see https://github.com/jasonacox/tinytuya
 
-B E T A
-
 Description
     Setup Wizard will prompt the user for Tuya IoT Developer credentials and will gather all 
     registered Device IDs and their Local KEYs.  It will save the credentials and the device
@@ -16,8 +14,6 @@ Description
 
     HOW to set up your Tuya IoT Developer account: iot.tuya.com:
     https://github.com/jasonacox/tinytuya#get-the-tuya-device-local-key
-
-    This standalone script will eventually be available in the module: tinytuya.wizard()
 
 Credits
 * Tuya API Documentation
@@ -201,12 +197,22 @@ def wizard(color=True):
 
     # Get Oauth Token from tuyaPlatform
     uri = 'token?grant_type=1'
-    response_dict = tuyaPlatform(REGION, KEY, SECRET,uri)
+    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri)
+
+    if not response_dict['success']:
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+        return
+
     token = response_dict['result']['access_token']
 
     # Get UID from sample Device ID 
     uri = 'devices/%s' % DEVICEID
     response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
+
+    if not response_dict['success']:
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+        return
+
     uid = response_dict['result']['uid']
 
     # Use UID to get list of all Devices for User
@@ -270,15 +276,22 @@ def wizard(color=True):
                     if ver == "3.3":
                         d.set_version(3.3)
                     data = d.status()
-                    if data:
+                    if 'dps' in data:
                         item['dps'] = data
                         state = alertdim + "Off" + dim
-                        # print(data)
                         try:
-                            if(data['dps']['1'] == True):
-                                state = bold + "On" + dim
-                            print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                  (subbold, name, dim, ip, state, data['dps']))
+                            if '1' in data['dps'] or '20' in data['dps']:
+                                if '1' in data['dps']:
+                                        if data['dps']['1'] == True:
+                                            state = bold + "On" + dim
+                                if '20' in data['dps']:
+                                        if data['dps']['20'] == True:
+                                            state = bold + "On" + dim
+                                print("    %s[%s] - %s%s - %s - DPS: %r" %
+                                    (subbold, name, dim, ip, state, data['dps']))
+                            else:
+                                print("    %s[%s] - %s%s - DPS: %r" %
+                                    (subbold, name, dim, ip, data['dps']))
                         except:
                             print("    %s[%s] - %s%s - %sNo Response" %
                                   (subbold, name, dim, ip, alertdim))
