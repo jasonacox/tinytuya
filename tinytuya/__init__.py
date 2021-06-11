@@ -705,6 +705,9 @@ class XenonDevice(object):
         else:
             self.dps_to_request.update({str(index): None for index in dp_indicies})
             
+    def set_bulb_type(self, type):
+        self.bulb_type = type
+        
     def set_version(self, version):
         self.version = version
 
@@ -1079,7 +1082,8 @@ class BulbDevice(Device):
 
     This class supports two types of bulbs with different DPS mappings and functions:
         Type A - Uses DPS index 1-5
-        Type B - Uses DPS index 20-27 (no index 1)
+        Type B - Uses DPS index 20-27 (no index 1)        
+        Type C - Same as Type A except that it is using DPS 2 for brightness, which ranges from 0-1000.  These are the Feit branded dimmers found at Costco.
 
     Init Args:
         dev_id (str): The device id.
@@ -1088,14 +1092,14 @@ class BulbDevice(Device):
 
     """
     # Two types of Bulbs - TypeA uses DPS 1-5, TypeB uses DPS 20-24
-    DPS_INDEX_ON = {'A': '1', 'B': '20'}         
-    DPS_INDEX_MODE = {'A': '2', 'B': '21'}
-    DPS_INDEX_BRIGHTNESS = {'A': '3', 'B': '22'}
-    DPS_INDEX_COLOURTEMP = {'A': '4', 'B': '23'}
-    DPS_INDEX_COLOUR = {'A': '5', 'B': '24'}
-    DPS_INDEX_SCENE = {'A': '2', 'B': '25'}
-    DPS_INDEX_TIMER = {'A': None, 'B': '26'}
-    DPS_INDEX_MUSIC = {'A': None, 'B': '27'}
+    DPS_INDEX_ON = {'A': '1', 'B': '20', 'C': '1'}         
+    DPS_INDEX_MODE = {'A': '2', 'B': '21', 'C': '1'}
+    DPS_INDEX_BRIGHTNESS = {'A': '3', 'B': '22', 'C': '2'}
+    DPS_INDEX_COLOURTEMP = {'A': '4', 'B': '23', 'C': None}
+    DPS_INDEX_COLOUR = {'A': '5', 'B': '24', 'C': None}
+    DPS_INDEX_SCENE = {'A': '2', 'B': '25', 'C': None}
+    DPS_INDEX_TIMER = {'A': None, 'B': '26', 'C': None}
+    DPS_INDEX_MUSIC = {'A': None, 'B': '27', 'C': None}
     
     DPS = 'dps'
     DPS_MODE_WHITE = 'white'
@@ -1240,6 +1244,7 @@ class BulbDevice(Device):
         Attempt to determine BulbDevice Type: A or B based on:
             Type A has keys 1-5
             Type B has keys 20-29
+            Type C is Feit type bulbs from costco
         """
         self.version = version
 
