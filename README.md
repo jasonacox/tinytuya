@@ -164,8 +164,9 @@ Classes
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
-        (h,s,v) = colour_hsv()
+        (h,s,v) = colour_hsv():
         result = state():
+        set_bulb_type(type):          # type is A, B or C
 ```
 
 ### TinyTuya Error Codes

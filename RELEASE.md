@@ -6,6 +6,11 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.6 - TBD
+
+* PyPi Version 1.2.7
+* Added Bulb type C and manual setting function `set_bulb_type(type)` (PR #54)
+
 ## v1.2.6 - Improved Error Handling
 
 * PyPi Version 1.2.6
