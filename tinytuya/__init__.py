@@ -605,6 +605,7 @@ class XenonDevice(object):
                 dev_type,
                 self.dev_type,
             )
+            time.sleep(0.1)
             return self._send_receive(payload, minresponse)
 
         return result
