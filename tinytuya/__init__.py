@@ -195,6 +195,7 @@ ERR_PAYLOAD = 904
 ERR_OFFLINE = 905
 ERR_STATE = 906
 ERR_FUNCTION = 907
+ERR_DEVTYPE = 907
 
 error_codes = {
     ERR_JSON: 'Invalid JSON Response from Device',
@@ -205,6 +206,7 @@ error_codes = {
     ERR_OFFLINE: 'Network Error: Device Unreachable',
     ERR_STATE: 'Device in Unknown State',
     ERR_FUNCTION: 'Function Not Supported by Device',
+    ERR_DEVTYPE: 'Device22 Detected: Retry Command',
     None: 'Unknown Error'
 }
 
@@ -597,16 +599,14 @@ class XenonDevice(object):
             log.debug("unexpected result unpacking tuya payload")
             result = error_json(ERR_PAYLOAD)
 
-        # Did we detect a device22 device? Try again.
+        # Did we detect a device22 device? Return ERR_DEVTYPE error.
         if dev_type != self.dev_type:
             log.debug(
-                "Re-send %s due to device type change (%s -> %s)",
-                payload,
+                "Device22 detected and updated (%s -> %s) - Update payload and try again",
                 dev_type,
                 self.dev_type,
             )
-            time.sleep(0.1)
-            return self._send_receive(payload, minresponse)
+            result = error_json(ERR_DEVTYPE)
 
         return result
     
@@ -898,7 +898,15 @@ class Device(XenonDevice):
         payload = self.generate_payload(DP_QUERY)
 
         data = self._send_receive(payload)
-        log.debug('status received data=%r', data)
+        log.debug('status() received data=%r', data)
+        # Error handling 
+        if 'Err' in data:
+            if data['Err'] == str(ERR_DEVTYPE):
+                # Device22 detected and change - resend with new payload
+                log.debug('status() rebuilding payload for device22')
+                payload = self.generate_payload(DP_QUERY)
+                data = self._send_receive(payload)       
+
         return data
 
     def set_status(self, on, switch=1):
