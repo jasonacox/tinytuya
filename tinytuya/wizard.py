@@ -126,6 +126,7 @@ def wizard(color=True):
     # Get Configuration Data
     CONFIGFILE = 'tinytuya.json'
     DEVICEFILE = 'devices.json'
+    RAWFILE = 'tuya-raw.json'
     SNAPSHOTFILE = 'snapshot.json'
     config = {}
     config['apiKey'] = ''
@@ -238,6 +239,14 @@ def wizard(color=True):
     with open(DEVICEFILE, "w") as outfile:
         outfile.write(output)
     print(dim + "    %d registered devices saved" % len(tuyadevices))
+
+    # Save raw TuyaPlatform data to tuya-raw.json
+    print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
+    try:
+        with open(RAWFILE, "w") as outfile:
+            outfile.write(json.dumps(json_data, indent=4))
+    except:
+        print('\n\n' + bold + 'Unable to save raw file' + dim )  
 
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
