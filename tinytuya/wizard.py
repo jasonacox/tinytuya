@@ -65,11 +65,15 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
         * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
         * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
 
+    REFERENCE: https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
+
     """
     url = "https://openapi.tuya%s.com/v1.0/%s" % (apiRegion,uri)
     now = int(time.time()*1000)
+    headers = {}
     if(token==None):
         payload = apiKey + str(now)
+        headers['secret'] = apiSecret
     else:
         payload = apiKey + token + str(now)
 
@@ -81,11 +85,11 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
     ).hexdigest().upper()
 
     # Create Header Data
-    headers = {}
     headers['client_id'] = apiKey
-    headers['sign_method'] = 'HMAC-SHA256'
-    headers['t'] = str(now)
     headers['sign'] = signature
+    headers['t'] = str(now)
+    headers['sign_method'] = 'HMAC-SHA256'
+    
     if(token != None):
         headers['access_token'] = token
 
