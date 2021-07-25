@@ -15,11 +15,6 @@ DEVICEIP = "10.0.1.99"
 DEVICEKEY = "0123456789abcdef"
 DEVICEVERS = "3.3"
 
-DEVICEID = "26056530b8f009013cc3"
-DEVICEIP = "10.0.1.244"
-DEVICEKEY = "cd7a80204718ac56"
-DEVICEVERS = "3.3"
-
 print("TinyTuya - Smart Bulb String Scenes Test [%s]\n" % tinytuya.__version__)
 print('TESTING: Device %s at %s with key %s version %s' %
       (DEVICEID, DEVICEIP, DEVICEKEY, DEVICEVERS))
@@ -46,8 +41,8 @@ if("dps" in data):
     if("25" in data["dps"]):
         print('\n   [Bulb Type B] String based scenes compatible smartbulb detected.')
 
-        # Example: Color rotation mode
-        print('    Scene - Color Rotation Mode')
+        # Example: Color rotation 
+        print('    Scene - Color Rotation')
         d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
         time.sleep(10)
 
@@ -55,6 +50,10 @@ if("dps" in data):
         print('    Scene - Reading Light')
         d.set_value(25, '010e0d0000000000000003e803e8')
         time.sleep(5)
+
+        # You can pull the scene strings from your smartbulb by running the async_send_receive.py script
+        # and using the SmartLife app to change between scenes.  
+
     else:
         print('\n   [Bulb Type A] Your smartbulb does not appear to support string based scenes.')
 
