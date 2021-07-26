@@ -43,6 +43,8 @@ while(True):
 
     # print(" > Send DPS Update Request < ")
     # payload = d.generate_payload(tinytuya.UPDATEDPS,['18','19','20'])
+    # Some Tuya devices will not accept the DPS index values for UPDATEDPS - try:
+    # payload = d.generate_payload(tinytuya.UPDATEDPS)
     # d.send(payload)
     
     # # See if any data is available
