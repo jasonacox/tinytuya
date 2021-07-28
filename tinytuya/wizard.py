@@ -37,7 +37,7 @@ try:
 except NameError:
     pass
 
-def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
+def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorithm=True, body=None, headers=None):
     """Tuya IoT Platform Data Access
 
     Parameters:
@@ -70,13 +70,20 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None):
     """
     url = "https://openapi.tuya%s.com/v1.0/%s" % (apiRegion,uri)
     now = int(time.time()*1000)
-    headers = {}
+    headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
     if(token==None):
         payload = apiKey + str(now)
         headers['secret'] = apiSecret
     else:
         payload = apiKey + token + str(now)
-
+    
+    # If running the post 6-30-2021 signing algorithm update the payload to include it's data
+    if new_sign_algorithm: payload += ('GET\n' +                                                                # HTTPMethod
+                                       hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
+                                       ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
+                                                for key in headers.get("Signature-Headers", "").split(":")
+                                                if key in headers]) + '\n' +
+                                       '/' + url.split('//', 1)[-1].split('/', 1)[-1])  
     # Sign Payload
     signature = hmac.new(
         apiSecret.encode('utf-8'),

@@ -106,7 +106,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 6)
+version_tuple = (1, 2, 7)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 

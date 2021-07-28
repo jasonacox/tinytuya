@@ -6,9 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.6 - TBD
+## v1.2.7 - New Tuya Cloud IoT Setup Wizard
 
 * PyPi Version 1.2.7
+* Updated setup `wizard` to support new Tuya Cloud signing method (Issue #57) 
 * Added Bulb type C and manual setting function `set_bulb_type(type)` (PR #54)
 * Wizard creates `tuya-raw.json` to record raw response from Tuya IoT Platform
 * Fixed device22 bug on retry - Now returns ERR_DEVTYPE error, status() includes auto-retry (#56)
