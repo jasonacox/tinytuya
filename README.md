@@ -11,7 +11,7 @@ This python module controls and monitors [Tuya](https://en.tuya.com/) compatible
 
 [Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to poll status and issue commands to these devices.
 
-![TinyTuya Diagram](./docs/TinyTuya-diagram.svg)
+![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
 NOTE: This module requires the devices to have already been **activated** by Smart Life App (or similar).
 
