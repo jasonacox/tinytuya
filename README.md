@@ -63,21 +63,25 @@ Follow the instructions below to get the *Local_Key*:
 
 3. **Set up a Tuya Account**:
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.
-    * Click on "Cloud" icon -> Create a project (remember the Authorization Key: *API ID* and *Secret* for below)
-    * Click on "Cloud" icon -> select your project -> Project Overview -> Linked Device -> Link devices by App Account (tab)
-    * Click 'Add App Account' and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
-    * **IMPORTANT** Under "API Management" -> "API Products" and ensure the API groups have status "Subscribed": Smart Home Devices Management, Authorization and Smart Home Family Management ([see screenshot here](https://user-images.githubusercontent.com/836718/111419675-1d0d3f80-86a7-11eb-81ad-f6078ee391fe.png)) - Make sure you authorize your Project to use these 3 API groups:
-        - Click each of the API boxes
-        - Click "Projects" tab
-        - Click "**New Authorization**" button
-        - Select your Project from the dropdown and click OK ([see screenshot here](https://user-images.githubusercontent.com/836718/111578175-d5eb8100-8770-11eb-93b3-46342b1a67fa.png))
+    * Click on "Cloud" icon -> Create Cloud Project (Skip the configuration wizard) (remember the Authorization Key: *API ID* and *Secret* for below)
+    * Click on "Cloud" icon -> Select your project -> Devices -> Add Device
+    * Click `Add Device with IoT Device Management App` and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
+    * **IMPORTANT** Under "Service API" ensure the API groups are listed: `Smart Home Devices Management`, `Authorization` and `Smart Home Family Management` ([see screenshot here](https://user-images.githubusercontent.com/38729644/128742250-9b2a0c0e-4f5b-4886-8279-cd50bfeedcf8.png)) - Make sure you authorize your Project to use these 3 API groups:
+        - Click "Service API" tab
+        - Click "**Go to Authorize**" button
+        - Select the API Groups from the dropdown and click `Subscribe` ([see screenshot here](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
+
 
 4. **Run Setup Wizard**:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the  *Local_Keys* for all of your registered devices:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
-    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project noted above.  It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
+    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project.
+        * Go to [iot.tuya.com](https://iot.tuya.com/), choose your project and click `Overview`
+            * API Key: Access ID/Client ID
+            * API Secret: Access Secret/Client Secret
+    * It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
     * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device.
     * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.scanDevices()` or when running `python -m tinytuya` to scan your local network.  
     * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
