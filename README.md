@@ -242,6 +242,48 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
     #    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
     d.set_white(1000,10)
 
+    # Set Bulb to Scene Mode
+    d.set_mode('scene')
+
+    # Scene Example: Set Color Rotation Scene
+    d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+
+```
+### Example Device Monitor
+
+You can set up a persistent connection to a device and then monitor the state changes with a continual loop. This is helpful for troubleshooting and discovering DPS indexes.
+
+```python
+import tinytuya
+
+d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
+d.set_version(3.3)
+d.set_socketPersistent(True)
+
+print(" > Send Request for Status < ")
+payload = d.generate_payload(tinytuya.DP_QUERY)
+d.send(payload)
+
+print(" > Begin Monitor Loop <")
+while(True):
+    # See if any data is available
+    data = d.receive()
+    print('Received Payload: %r' % data)
+
+    # Send keyalive heartbeat
+    print(" > Send Heartbeat Ping < ")
+    payload = d.generate_payload(tinytuya.HEART_BEAT)
+    d.send(payload)
+
+    # NOTE If you are not seeing updates, you can force them - uncomment:
+    # print(" > Send Request for Status < ")
+    # payload = d.generate_payload(tinytuya.DP_QUERY)
+    # d.send(payload)
+
+    # NOTE Some smart plugs require an UPDATEDPS command to update power data
+    # print(" > Send DPS Update Request < ")
+    # payload = d.generate_payload(tinytuya.UPDATEDPS)
+    # d.send(payload)    
 ```
 
 ### Encryption notes
