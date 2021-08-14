@@ -251,7 +251,7 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
 ```
 ### Example Device Monitor
 
-You can set up a persistent connection to a device and then monitor the state changes with a continual loop. This is helpful for troubleshooting and discovering DPS indexes.
+You can set up a persistent connection to a device and then monitor the state changes with a continual loop. This is helpful for troubleshooting and discovering DPS values.
 
 ```python
 import tinytuya
@@ -341,6 +341,16 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products. 
 
 The following table represents several of the standard Tuya DPS values and their properties. It represents data compiled from Tuya documentation and self-discovery. Devices may vary. Feedback or additional data would would be appreciated.  Please submit a Issue or Pull Request if you have additional data that would be helpful for others.
+
+DPS Read and Set Example:
+```python
+# Read Value of DPS 25
+data = d.status()  
+print("Value of DPS 25 is ", data['dps']['25'])
+
+# Set Value of DPS 25
+d.set_value(25, '010e0d0000000000000003e803e8')
+```
 
 ### Version 3.1 Devices
 
