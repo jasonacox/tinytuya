@@ -285,6 +285,7 @@ def set_debug(toggle=True, color=True):
         else:
             logging.basicConfig(format='%(levelname)s:%(message)s',level=logging.DEBUG)
         log.setLevel(logging.DEBUG)
+        log.debug("TinyTuya [%s]\n" % __version__)
     else:
         log.setLevel(logging.NOTSET)
 
@@ -1251,7 +1252,7 @@ class BulbDevice(Device):
         """
         Set the Tuya device version 3.1 or 3.3 for BulbDevice
         Attempt to determine BulbDevice Type: A or B based on:
-            Type A has keys 1-5
+            Type A has keys 1-5 (default)
             Type B has keys 20-29
             Type C is Feit type bulbs from costco
         """
@@ -1259,15 +1260,18 @@ class BulbDevice(Device):
 
         # Try to determine type of BulbDevice Type based on DPS indexes
         status = self.status()
-        if 'dps' in status:
-            if '1' not in status['dps']:
+        if(status != None):
+            if 'dps' in status:
+                if '1' not in status['dps']:
+                    self.bulb_type = 'B'
+                if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in status['dps']:
+                    self.has_brightness = True
+                if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in status['dps']:
+                    self.has_colourtemp = True
+                if self.DPS_INDEX_COLOUR[self.bulb_type] in status['dps']:
+                    self.has_colour = True
+            else:
                 self.bulb_type = 'B'
-            if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in status['dps']:
-                self.has_brightness = True
-            if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in status['dps']:
-                self.has_colourtemp = True
-            if self.DPS_INDEX_COLOUR[self.bulb_type] in status['dps']:
-                self.has_colour = True
         else:
             # response has no dps
             self.bulb_type = 'B'
@@ -1481,7 +1485,7 @@ class BulbDevice(Device):
 
         # Determine which mode bulb is in and adjust accordingly
         state = self.state()
-        data = error_json(ERR_STATE,"set_brightness: Unknown bulb state.")
+        data = None
 
         if 'mode' in state:
             if state['mode'] == 'white':
@@ -1501,7 +1505,10 @@ class BulbDevice(Device):
                 (h,s,v) = self.colour_hsv()
                 data = self.set_hsv(h,s,value)
         
-        return data
+        if(data != None):
+            return data
+        else:
+            return error_json(ERR_STATE,"set_brightness: Unknown bulb state.")
 
     def set_colourtemp_percentage(self, colourtemp=100):
         """
