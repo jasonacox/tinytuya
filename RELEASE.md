@@ -6,16 +6,12 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.9 - Scan Bug Fix
-
-* PyPi Version 1.2.9
-* Fix bug in scan when color=False (Issue #63)
-
 ## v1.2.8 - BulbDevice
 
 * PyPi Version 1.2.8
 * Added additional error checking for BulbDevice type selection
 * Added TinyTuya version logging for debug mode
+* Fix bug in scan when color=False (Issue #63)
 
 ## v1.2.7 - New Tuya Cloud IoT Setup Wizard
 
