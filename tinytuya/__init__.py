@@ -106,7 +106,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 8)
+version_tuple = (1, 2, 9)
 version = __version__ = '%d.%d.%d' % version_tuple
 __author__ = 'jasonacox'
 
@@ -1698,7 +1698,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
     if(verbose):
         if(color == False):
             # Disable Terminal Color Formatting
-            bold = subbold = normal = dim = alert = alertdim = ""
+            bold = subbold = normal = dim = alert = alertdim = cyan = red = yellow = ""
         else:
             # Terminal Color Formatting
             bold = "\033[0m\033[97m\033[1m"
