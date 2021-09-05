@@ -294,6 +294,17 @@ These devices uses AES encryption which is not available in the Python standard 
  2) PyCrypto
  3) pyaes (note Python 2.x support requires https://github.com/ricmoo/pyaes/pull/13)
 
+### Command Line
+
+```
+    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
+
+      command = scan        Scan local network for Tuya devices.
+      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
+      max_retry             Maximum number of retries to find Tuya devices [Default=15]
+      -nocolor              Disable color text output.
+      -h                    Show usage.
+```
 
 ### Scan Tool 
 The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
@@ -458,6 +469,12 @@ d.set_value(25, '010e0d0000000000000003e803e8')
 |11|Power-on state setting|enum|off, on, memory||
 |12|Indicator status setting|enum|none, relay, pos||
 |13|Backlight switch|bool|True/False||
+
+#### Version 3.3 - Universal IR Controller with Temp/Humidity
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+|101|Current Temperature|integer|0-600|10x Celsius|
+|102|Current Humidity|integer|0-100|%|
 
 #### Version 3.3 - Sensor Type
 
