@@ -6,6 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.9 - Not Released
+
+* Added Error Handling in class Device(XenonDevice) for conditions where response is None (Issue #68)
+
 ## v1.2.8 - BulbDevice
 
 * PyPi Version 1.2.8
