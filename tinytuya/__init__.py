@@ -901,7 +901,7 @@ class Device(XenonDevice):
         data = self._send_receive(payload)
         log.debug('status() received data=%r', data)
         # Error handling 
-        if 'Err' in data:
+        if data and 'Err' in data:
             if data['Err'] == str(ERR_DEVTYPE):
                 # Device22 detected and change - resend with new payload
                 log.debug('status() rebuilding payload for device22')
