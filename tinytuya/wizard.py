@@ -272,8 +272,9 @@ def wizard(color=True):
 
         def getIP(d, gwid):
             for ip in d:
-                if (gwid == d[ip]['gwId']):
-                    return (ip, d[ip]['version'])
+                if 'gwId' in d[ip]:
+                    if (gwid == d[ip]['gwId']):
+                        return (ip, d[ip]['version'])
             return (0, 0)
 
         polling = []
