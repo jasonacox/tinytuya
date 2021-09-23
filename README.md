@@ -535,10 +535,10 @@ NOTE (*) - The range can vary depending on the device. As an example, for dimmer
 
 ## Credits
 
-  * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
+  * TuyAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
     For protocol reverse engineering, additional protocol reverse engineering from jepsonrob and clach04
   * PyTuya https://github.com/clach04/python-tuya by clach04
-    The origin of this python module (now abandoned), nijave pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
+    The origin of this python module (now abandoned), nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
   * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
 
