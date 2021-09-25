@@ -596,9 +596,13 @@ class XenonDevice(object):
             # Data available seqno cmd retcode payload crc
             log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
-        except:
-            log.debug("unexpected result unpacking tuya payload")
+        except socket.error as e: 
+            log.debug("device caused socket error, ignoring %s" % e)
+        except ValueError:
+            log.debug("error unpacking tuya JSON payload")
             result = error_json(ERR_PAYLOAD)
+        except:
+            log.debug("unexpected error occurred, ignoring")
 
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
         if dev_type != self.dev_type:
@@ -1678,6 +1682,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
             havekeys = True
+            log.debug('loaded=%s [%d devices]' % (DEVICEFILE, len(tuyadevices)))
     except:
         # No Device info
         pass
@@ -1724,6 +1729,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
     spinnerx = 0
     spinner = "|/-\\|"
 
+    log.debug('listening for UDP 6666 and 6667')
     while (count + counts) <= maxretry:
         note = 'invalid'
         if(verbose):
@@ -1765,7 +1771,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
                 result = result.decode()
 
             result = json.loads(result)
-            log.debug("Valid UDP Packet: %r" % result)
+            log.debug("Received valid UDP packet: %r" % result)
 
             note = 'Valid'
             ip = result['ip']
@@ -1858,7 +1864,7 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
     if(verbose):
         print("                    \n%sScan Complete!  Found %s devices.\n" %
               (normal, len(devices)))
-
+    log.debug("Scan complete with %s devices found" % len(devices))
     clients.close()
     client.close()
     return(devices)
