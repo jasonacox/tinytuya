@@ -593,16 +593,12 @@ class XenonDevice(object):
         # and return payload decrypted
         try:
             msg = unpack_message(data)
-            # Data available seqno cmd retcode payload crc
+            # Data available: seqno cmd retcode payload crc
             log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
-        except socket.error as e: 
-            log.debug("device caused socket error, ignoring %s" % e)
-        except ValueError:
-            log.debug("error unpacking tuya JSON payload")
-            result = error_json(ERR_PAYLOAD)
         except:
-            log.debug("unexpected error occurred, ignoring")
+            log.debug("error unpacking or decoding tuya JSON payload")
+            result = error_json(ERR_PAYLOAD)
 
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
         if dev_type != self.dev_type:
@@ -640,6 +636,13 @@ class XenonDevice(object):
 
             log.debug('decrypted 3.3 payload=%r', payload)
             # Try to detect if device22 found
+            log.debug("payload type = %s" % type(payload))
+            if not isinstance(payload, str):
+                try:
+                    payload = payload.decode()
+                except:
+                    log.debug("payload was not string type and decoding failed")
+                    return error_json(ERR_JSON,payload)
             if "data unvalid" in payload:
                 self.dev_type = "device22"
                 # set at least one DPS
