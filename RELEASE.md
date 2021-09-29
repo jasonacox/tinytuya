@@ -6,9 +6,11 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.9 - Not Released
+## v1.2.9 - Edge Case Device Support
 
+* PyPi Version 1.2.9
 * Added Error Handling in class Device(XenonDevice) for conditions where response is None (Issue #68)
+* Added edge-case handler in `_decode_payload()` to decode non-string type decrypted payload (Issue #67)
 
 ## v1.2.8 - BulbDevice
 
