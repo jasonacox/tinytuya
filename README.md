@@ -84,7 +84,7 @@ Follow the instructions below to get the *Local_Key*:
             * API Secret: Access Secret/Client Secret
     * It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
     * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device.
-    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.scanDevices()` or when running `python -m tinytuya` to scan your local network.  
+    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.deviceScan()` or when running `python -m tinytuya` to scan your local network.  
     * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
 
 Notes:
@@ -109,7 +109,7 @@ After importing tinytuya, you create a device handle for the device you want to 
 ### TinyTuya Module Classes and Functions 
 ```
 Global Functions
-    devices = scanDevices()            # returns dictionary of devices found on local network
+    devices = deviceScan()             # returns dictionary of devices found on local network
     scan()                             # interactive scan of local network
     wizard()                           # interactive setup wizard
 
