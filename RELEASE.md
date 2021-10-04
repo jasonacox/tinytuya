@@ -6,6 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.3.0 - Unreleased 
+
+* Added ability to disable device auto-detect (default vs device22) via `disabledetect=True`.
+
 ## v1.2.9 - Edge Case Device Support
 
 * PyPi Version 1.2.9

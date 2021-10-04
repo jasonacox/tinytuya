@@ -436,6 +436,7 @@ class XenonDevice(object):
         self.version = 3.1
         self.retry = True
         self.dev_type = dev_type
+        self.disabledetect = False  # if True do not detect device22
         self.port = 6668  # default - do not expect caller to pass in
         self.socket = None
         self.socketPersistent = False
@@ -643,7 +644,7 @@ class XenonDevice(object):
                 except:
                     log.debug("payload was not string type and decoding failed")
                     return error_json(ERR_JSON,payload)
-            if "data unvalid" in payload:
+            if not self.disabledetect and "data unvalid" in payload:
                 self.dev_type = "device22"
                 # set at least one DPS
                 self.dps_to_request = {"1": None}
