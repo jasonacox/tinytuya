@@ -8,7 +8,16 @@
 
 ## v1.2.10 - Unreleased 
 
-* Added ability to disable device auto-detect (default vs device22) via `disabledetect=True`.
+* Added ability to disable device auto-detect (default vs device22) via `d.disabledetect=True`.
+* Wizard: Added new data center regions for Tuya Cloud
+Code | Region | Endpoint
+-- | -- | --
+cn | China Data Center | https://openapi.tuyacn.com
+us | Western America Data Center | https://openapi.tuyaus.com
+us-e | Eastern America Data Center | https://openapi-ueaz.tuyaus.com
+eu | Central Europe Data Center | https://openapi.tuyaeu.com
+eu-w | Western Europe Data Center | https://openapi-weaz.tuyaeu.com
+in | India Data Center | https://openapi.tuyain.com
 
 ## v1.2.9 - Edge Case Device Support
 
