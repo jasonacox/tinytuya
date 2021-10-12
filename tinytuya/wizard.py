@@ -41,7 +41,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     """Tuya IoT Platform Data Access
 
     Parameters:
-        * region     Tuya API Server Region: us, eu, cn, in
+        * region     Tuya API Server Region: us, eu, cn, in, us-e, eu-w
         * apiKey     Tuya Platform Developer ID
         * apiSecret  Tuya Platform Developer secret 
         * uri        Tuya Platform URI for this call
@@ -68,7 +68,24 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     REFERENCE: https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
 
     """
-    url = "https://openapi.tuya%s.com/v1.0/%s" % (apiRegion,uri)
+    # Set hostname based on apiRegion
+    apiRegion = apiRegion.lower()
+    urlhost = "openapi.tuyacn.com"          # China Data Center
+    if(apiRegion == "us"):
+        urlhost = "openapi.tuyaus.com"      # Western America Data Center
+    if(apiRegion == "us-e"):
+        urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
+    if(apiRegion == "eu"):
+        urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
+    if(apiRegion == "eu-w"):
+        urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
+    if(apiRegion == "in"):
+        urlhost = "openapi.tuyain.com"      # India Datacenter
+
+    # Build URL
+    url = "https://%s/v1.0/%s" % (urlhost, uri)
+
+    # Build Header
     now = int(time.time()*1000)
     headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
     if(token==None):
@@ -192,8 +209,15 @@ def wizard(color=True):
                                       "    Enter " + bold + "any Device ID" + subbold +
                                       " currently registered in Tuya App (used to pull full list): " + normal)
         # TO DO - Determine apiRegion based on Device - for now, ask
+        print("\n      " + subbold + "Region List" + dim +
+              "\n        cn\tChina Data Center" +
+              "\n        us\tUS - Western America Data Center" +
+              "\n        us-e\tUS - Eastern America Data Center" +
+              "\n        eu\tCentral Europe Data Center" +
+              "\n        eu-w\tWestern Europe Data Center" +
+              "\n        in\tIndia Data Center\n")
         config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
-                                    " (Options: us, eu, cn or in): " + normal)
+                                    " (Options: cn, us, us-e, eu, eu-w, or in): " + normal)
         # Write Config
         json_object = json.dumps(config, indent=4)
         with open(CONFIGFILE, "w") as outfile:
