@@ -80,7 +80,7 @@ Follow the instructions below to get the *Local_Key*:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
-    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (us, eu, cn or in) from your Tuya IoT project.
+    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (cn, us, us-e, eu, eu-w, or in) from your Tuya IoT project.
         * Go to [iot.tuya.com](https://iot.tuya.com/), choose your project and click `Overview`
             * API Key: Access ID/Client ID
             * API Secret: Access Secret/Client Secret
