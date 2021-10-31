@@ -10,7 +10,7 @@
 
 * PyPi Version 1.2.10
 * Added ability to disable device auto-detect (default vs device22) via `d.disabledetect=True`.
-* Wizard: Added new data center regions for Tuya Cloud:
+* Wizard: Added new data center regions for Tuya Cloud: (Issues #66 #75)
 
 Code | Region | Endpoint
 -- | -- | --
