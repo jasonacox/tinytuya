@@ -6,8 +6,9 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.10 - Unreleased 
+## v1.2.10 - Wizard Update for New Tuya Regions 
 
+* PyPi Version 1.2.10
 * Added ability to disable device auto-detect (default vs device22) via `d.disabledetect=True`.
 * Wizard: Added new data center regions for Tuya Cloud:
 
