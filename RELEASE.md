@@ -6,6 +6,14 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.2.11 - TBD 
+
+* Added retries option to setup wizard with default of `25`:
+
+```bash
+python3 -m tinytuya wizard 50   # Set retry to 50 (default 25)
+```
+
 ## v1.2.10 - Wizard Update for New Tuya Regions 
 
 * PyPi Version 1.2.10

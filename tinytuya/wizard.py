@@ -129,12 +129,13 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
 
     return(response_dict)
 
-def wizard(color=True):
+def wizard(color=True, retries=25):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
     Parameter:
         color = True or False, print output in color [Default: True]
+        retries = Number of retries to find IP address of Tuya Devices
 
     Description
         Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
@@ -289,7 +290,7 @@ def wizard(color=True):
     if(answer[0:1].lower() != 'n'):
         # Scan network for devices and provide polling data
         print(normal + "\nScanning local network for Tuya devices...")
-        devices = tinytuya.deviceScan(False, 20)
+        devices = tinytuya.deviceScan(False, retries)
         print("    %s%s local devices discovered%s" %
               (dim, len(devices), normal))
         print("")
@@ -302,7 +303,7 @@ def wizard(color=True):
             return (0, 0)
 
         polling = []
-        print("Polling local devices...")
+        print("Polling local devices (retry %d times)..." % retries)
         for i in tuyadevices:
             item = {}
             name = i['name']

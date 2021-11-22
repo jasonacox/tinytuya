@@ -46,7 +46,7 @@ if(state == 0):
 
 # State 1 = Run Setup Wizard
 if(state == 1):
-    wizard.wizard(color)
+    wizard.wizard(color, retries)
 
 # State 2 = Show Usage
 if(state == 2):
