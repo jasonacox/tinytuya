@@ -129,7 +129,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
 
     return(response_dict)
 
-def wizard(color=True, retries=25):
+def wizard(color=True, retries=None):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
@@ -288,8 +288,12 @@ def wizard(color=True, retries=25):
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
     if(answer[0:1].lower() != 'n'):
+        # Set retries based on number of devices if undefined
+        if(retries == None):
+            retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
+
         # Scan network for devices and provide polling data
-        print(normal + "\nScanning local network for Tuya devices...")
+        print(normal + "\nScanning local network for Tuya devices (retry %d times)..." % retries)
         devices = tinytuya.deviceScan(False, retries)
         print("    %s%s local devices discovered%s" %
               (dim, len(devices), normal))
@@ -303,7 +307,7 @@ def wizard(color=True, retries=25):
             return (0, 0)
 
         polling = []
-        print("Polling local devices (retry %d times)..." % retries)
+        print("Polling local devices...")
         for i in tuyadevices:
             item = {}
             name = i['name']

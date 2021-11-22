@@ -18,9 +18,10 @@ import tinytuya
 import sys
 from . import wizard
 
-retries = 0
+retries = tinytuya.MAXCOUNT
 state = 0
 color = True
+retriesprovided = False
 
 for i in sys.argv:
     if(i==sys.argv[0]):
@@ -34,19 +35,23 @@ for i in sys.argv:
     else:
         try:
             retries = int(i)
+            retriesprovided = True
         except:
             state = 2
 
 # State 0 = Run Scan
 if(state == 0):
-    if retries > 0:
+    if(retriesprovided):
         tinytuya.scan(retries, color)
     else:
         tinytuya.scan(color=color)
 
 # State 1 = Run Setup Wizard
 if(state == 1):
-    wizard.wizard(color, retries)
+    if(retriesprovided):
+        wizard.wizard(color, retries)
+    else:
+        wizard.wizard(color)
 
 # State 2 = Show Usage
 if(state == 2):

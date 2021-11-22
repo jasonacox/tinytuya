@@ -8,10 +8,23 @@
 
 ## v1.2.11 - TBD 
 
-* Added retries option to setup wizard with default of `25`:
+* Added retries logic to `wizard` and `scan` to honor value set by command line or default to a value based on the number of devices (if known):
 
 ```bash
-python3 -m tinytuya wizard 50   # Set retry to 50 (default 25)
+# Explicit value set via command line
+python3 -m tinytuya wizard 50   # Set retry to 50 
+python3 -m tinytuya scan 50     
+
+# Use automatic computed value
+python3 -m tinytuya wizard      # Compute a default
+python3 -m tinytuya scan        
+
+# Example output
+TinyTuya (Tuya device scanner) [1.2.11]
+
+[Loaded devices.json - 32 devices]
+
+Scanning on UDP ports 6666 and 6667 for devices (47 retries)...
 ```
 
 ## v1.2.10 - Wizard Update for New Tuya Regions 

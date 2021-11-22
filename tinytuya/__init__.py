@@ -1638,7 +1638,7 @@ def appenddevice(newdevice, devices):
 
 # Scan function shortcut
 
-def scan(maxretry=MAXCOUNT, color=True):
+def scan(maxretry=None, color=True):
     """Scans your network for Tuya devices with output to stdout
     """
     d = deviceScan(True, maxretry, color)
@@ -1646,7 +1646,7 @@ def scan(maxretry=MAXCOUNT, color=True):
 # Scan function
 
 
-def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
+def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1687,9 +1687,16 @@ def deviceScan(verbose=False, maxretry=MAXCOUNT, color=True, poll=True):
             tuyadevices = json.load(f)
             havekeys = True
             log.debug('loaded=%s [%d devices]' % (DEVICEFILE, len(tuyadevices)))
+            # If no maxretry value set, base it on number of devices
+            if(maxretry == None):
+                maxretry = len(tuyadevices) + MAXCOUNT
     except:
         # No Device info
         pass
+
+    # If no maxretry value set use default
+    if(maxretry == None):
+        maxretry = MAXCOUNT
 
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(
