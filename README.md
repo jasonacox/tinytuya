@@ -111,11 +111,11 @@ After importing tinytuya, you create a device handle for the device you want to 
 ### TinyTuya Module Classes and Functions 
 ```
 Global Functions
-    devices = deviceScan()             # returns dictionary of devices found on local network
-    scan()                             # interactive scan of local network
-    wizard()                           # interactive setup wizard
+    devices = deviceScan()             # Returns dictionary of devices found on local network
+    scan()                             # Interactive scan of local network
+    wizard()                           # Interactive setup wizard
     set_debug(toggle, color)           # Activate verbose debugging output
-    
+
 Classes
     OutletDevice(dev_id, address, local_key=None, dev_type='default')
     CoverDevice(dev_id, address, local_key=None, dev_type='default')
@@ -186,7 +186,7 @@ Functions:
 Starting with v1.2.0 TinyTuya functions will return error details in the JSON data responses instead of raising exceptions.  The format for this response:
 
 ```json
-{ "Error":"Invalid JSON Payload", "Err":"900", "Payload":"{Tuya Message}" }'
+{ "Error":"Invalid JSON Payload", "Err":"900", "Payload":"{Tuya Message}" }
 ```
 
 The "Err" number will be one of these:
@@ -542,11 +542,11 @@ NOTE (*) - The range can vary depending on the device. As an example, for dimmer
 
 ## Credits
 
-  * TuyAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
-    For protocol reverse engineering, additional protocol reverse engineering from jepsonrob and clach04
-  * PyTuya https://github.com/clach04/python-tuya by clach04
-    The origin of this python module (now abandoned), nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
-  * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
+  * TuyAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes.
+    Protocol reverse engineering from jepsonrob and clach04.
+  * PyTuya https://github.com/clach04/python-tuya by clach04. 
+    The origin of this python module (now abandoned). Thanks to nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
+  * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio. 
     Updated pytuya to support devices with Device IDs of 22 characters
 
 ## Related Projects
