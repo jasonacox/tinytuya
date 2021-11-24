@@ -88,7 +88,7 @@ Follow the instructions below to get the *Local_Key*:
     * It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
     * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device. 
     * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json` that  TinyTuya will use this file to provide additional details to scan results from `tinytuya.deviceScan()` or when running `python -m tinytuya scan` to scan your local network. The wizard also creates a local file `tuya-raw.json` that contains the entire payload from Tuya Cloud.
-    * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
+    * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on record and create a `snapshot.json` file with the results.
 
 Notes:
 * If you ever reset or re-pair your smart devices, the *Local_Key* will be reset and you will need to repeat the steps above.
@@ -125,29 +125,35 @@ Classes
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
 
- Functions:
+Functions:
 
-    json = status()                    # returns json payload
-    set_version(version)               # 3.1 [default] or 3.3
-    set_socketPersistent(False/True)   # False [default] or True
-    set_socketNODELAY(False/True)      # False or True [default]
-    set_socketRetryLimit(integer)      # retry count limit [default 5]
-    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
-    set_dpsUsed(dpsUsed)               # set data points (DPs)
-    set_retry(retry=True)              # retry if response payload is truncated
-    set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
-    set_value(index, value)            # Set int value of any index.
-    heartbeat()                        # Send heartbeat to device
-    updatedps(index=[1])               # Send updatedps command to device
-    turn_on(switch=1)                  # Turn on device / switch #
-    turn_off(switch=1)                 # Turn off
-    set_timer(num_secs)                # Set timer for num_secs
+  Configuration Settings: 
+
+    set_version(version)               # Set device version 3.1 [default] or 3.3 (all new devices)
+    set_socketPersistent(False/True)   # Keep connect open with device: False [default] or True
+    set_socketNODELAY(False/True)      # Add cooldown period for slow Tuya devices: False or True [default]
+    set_socketRetryLimit(integer)      # Set retry count limit [default 5]
+    set_socketTimeout(s)               # Set connection timeout in seconds [default 5]
+    set_dpsUsed(dpsUsed)               # Set data points (DPs) to expect (rarely needed)
+    set_retry(retry=True)              # Force retry if response payload is truncated
+    set_sendWait(num_secs)             # Seconds to wait after sending for a response
     set_debug(toggle, color)           # Activate verbose debugging output
-    set_sendWait(num_secs)             # Seconds to wait after sending for response
+    set_bulb_type(type):               # For BulbDevice, set type to A, B or C
+
+  Device Commands:
+
+    status()                           # Fetch status of device (json payload)
     detect_available_dps()             # Return list of DPS available from device
+    set_status(on, switch=1)           # Control status of the device to 'on' or 'off' (bool)
+    set_value(index, value)            # Send and set value of any DPS/index on device.
+    heartbeat()                        # Send heartbeat to device
+    updatedps(index=[1])               # Send updatedps command to device to refresh DPS values
+    turn_on(switch=1)                  # Turn on device / switch #
+    turn_off(switch=1)                 # Turn off device
+    set_timer(num_secs)                # Set timer for num_secs on devices (if supported)
     generate_payload(command, data)    # Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
-    receive()                          # Receive payload from device
+     receive()                         # Receive payload from device
 
     OutletDevice:
         set_dimmer(percentage):
@@ -173,7 +179,6 @@ Classes
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv():
         result = state():
-        set_bulb_type(type):          # type is A, B or C
 ```
 
 ### TinyTuya Error Codes
