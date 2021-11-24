@@ -114,7 +114,8 @@ Global Functions
     devices = deviceScan()             # returns dictionary of devices found on local network
     scan()                             # interactive scan of local network
     wizard()                           # interactive setup wizard
-
+    set_debug(toggle, color)           # Activate verbose debugging output
+    
 Classes
     OutletDevice(dev_id, address, local_key=None, dev_type='default')
     CoverDevice(dev_id, address, local_key=None, dev_type='default')
@@ -137,7 +138,6 @@ Functions:
     set_dpsUsed(dpsUsed)               # Set data points (DPs) to expect (rarely needed)
     set_retry(retry=True)              # Force retry if response payload is truncated
     set_sendWait(num_secs)             # Seconds to wait after sending for a response
-    set_debug(toggle, color)           # Activate verbose debugging output
     set_bulb_type(type):               # For BulbDevice, set type to A, B or C
 
   Device Commands:
@@ -153,7 +153,7 @@ Functions:
     set_timer(num_secs)                # Set timer for num_secs on devices (if supported)
     generate_payload(command, data)    # Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
-     receive()                         # Receive payload from device
+    receive()                          # Receive payload from device
 
     OutletDevice:
         set_dimmer(percentage):
