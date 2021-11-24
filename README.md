@@ -52,7 +52,7 @@ TinyTuya has a built in setup Wizard that uses the Tuya IoT Cloud Platform to ge
 
 Follow the instructions below to get the *Local_Key*:
 
-1. Download the "Smart Life" App, available for iPhone or Android. Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  
+1. Download the *Smart Life App*, available for iPhone or Android. Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  
     * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
     * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
 
@@ -65,10 +65,10 @@ Follow the instructions below to get the *Local_Key*:
 3. **Set up a Tuya Account**:
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.  *NOTE: Tuya makes changes to their portal and this process frequently so details may vary. Please create an [issue](https://github.com/jasonacox/tinytuya/issues) or [pull request](https://github.com/jasonacox/tinytuya/pulls) with screenshots if we need to update these instructions.*
     * Click on "Cloud" icon -> "Create Cloud Project"
-      1. Remember the "Data Center" you select and pick only one.  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png))
+      1. Remember the "Data Center" you select.  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png))  *NOTE: Some in the UK have reported needing to select the Central Europe region for some reason.*
       2. Skip the configuration wizard but remember the Authorization Key: *API ID* and *Secret* for below ([screenshot](https://user-images.githubusercontent.com/836718/138598788-f74d2fe8-57fa-439c-8003-18735a44e7e5.png)).
-    * Click on "Cloud" icon -> Select your project -> Devices -> "Add Device" button (alternatively you can use last tab "Link Tuya App Account") ([see screenshot](https://user-images.githubusercontent.com/836718/138599218-e2202d7b-d9a0-4b18-bf40-c01567944da3.png))
-    * Click `Add Device with IoT Device Management App` ([screenshot](https://user-images.githubusercontent.com/836718/138599473-066bb1b7-99b7-4540-983a-a0397b199448.png)) and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your "Smart Life" app into your Tuya IoT project.
+    * Click on "Cloud" icon -> Select your project -> **Devices** -> **Link Tuya App Account**) ([see screenshot](https://user-images.githubusercontent.com/836718/138599218-e2202d7b-d9a0-4b18-bf40-c01567944da3.png))
+    * Click **Add App Account** ([screenshot](https://user-images.githubusercontent.com/836718/138599473-066bb1b7-99b7-4540-983a-a0397b199448.png)) and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
     * **IMPORTANT** Under "Service API" ensure this API is listed: `IoT Core` - Make sure you authorize your Project to use that API:
         - Click "Service API" tab
         - Click "**Go to Authorize**" button
@@ -80,19 +80,18 @@ Follow the instructions below to get the *Local_Key*:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
-    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (cn, us, us-e, eu, eu-w, or in) from your Tuya IoT project.
-        * Go to [iot.tuya.com](https://iot.tuya.com/), choose your project and click `Overview`
+    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (cn, us, us-e, eu, eu-w, or in) from your Tuya IoT project as set in Step 3 above.
+        * To find those again, go to [iot.tuya.com](https://iot.tuya.com/), choose your project and click `Overview`
             * API Key: Access ID/Client ID
             * API Secret: Access Secret/Client Secret
     * It will also ask for a sample *Device ID*.  Use one from step 2 above or found in the Device List on your Tuya IoT project.
-    * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device.
-    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json`.  TinyTuya will use this file to provide additional details to scan results from `tinytuya.deviceScan()` or when running `python -m tinytuya` to scan your local network.  
+    * The **Wizard** will poll the Tuya IoT Cloud Platform and print a JSON list of all your registered devices with the "name", "id" and "key" of your registered device(s). The "key"s in this list are the Devices' *Local_Key* you will use to access your device. 
+    * In addition to displaying the list of devices, **Wizard** will create a local file `devices.json` that  TinyTuya will use this file to provide additional details to scan results from `tinytuya.deviceScan()` or when running `python -m tinytuya scan` to scan your local network. The wizard also creates a local file `tuya-raw.json` that contains the entire payload from Tuya Cloud.
     * The **Wizard** will ask if you want to poll all the devices. If you do, it will display the status of all devices on records and create a `snapshot.json` file with the results.
 
 Notes:
 * If you ever reset or re-pair your smart devices, the *Local_Key* will be reset and you will need to repeat the steps above.
 * The TinyTuya *Wizard* was inspired by the TuyAPI CLI which is an alternative way to fetch the *Local_Keys*: `npm i @tuyapi/cli -g` and run `tuya-cli wizard`  
-* For a helpful video walk-through of getting the *Local_Keys* you can also watch this great _Tech With Eddie_ YouTube tutorial: <https://youtu.be/oq0JL_wicKg>.
 
 
 ## Programming with TinyTuya
