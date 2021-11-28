@@ -6,7 +6,7 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.11 - TBD 
+## v1.2.11 - Updated Scan and Wizard Retry Logic 
 
 * Added retries logic to `wizard` and `scan` to honor value set by command line or default to a value based on the number of devices (if known):
 
