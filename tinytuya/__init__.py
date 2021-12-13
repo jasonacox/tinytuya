@@ -106,7 +106,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 11)
+version_tuple = (1, 2, 12)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -1150,13 +1150,11 @@ class BulbDevice(Device):
     DPS_INDEX_SCENE = {"A": "2", "B": "25", "C": None}
     DPS_INDEX_TIMER = {"A": None, "B": "26", "C": None}
     DPS_INDEX_MUSIC = {"A": None, "B": "27", "C": None}
-
     DPS = "dps"
     DPS_MODE_WHITE = "white"
     DPS_MODE_COLOUR = "colour"
     DPS_MODE_SCENE = "scene"
     DPS_MODE_MUSIC = "music"
-    #
     DPS_MODE_SCENE_1 = "scene_1"  # nature
     DPS_MODE_SCENE_2 = "scene_2"
     DPS_MODE_SCENE_3 = "scene_3"  # rave
