@@ -111,7 +111,8 @@ version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)  # Uncomment to Debug
+# Uncomment the following to set debug mode or call set_debug()
+# logging.basicConfig(level=logging.DEBUG)  
 
 log.debug("%s version %s", __name__, __version__)
 log.debug("Python %s on %s", sys.version, sys.platform)
