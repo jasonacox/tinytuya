@@ -71,6 +71,7 @@
         getstatus(deviceid)
         getfunctions(deviceid)
         getproperties(deviceid)
+        getdps(deviceid)
         sendcommand(deviceid, commands)
 
  Credits
