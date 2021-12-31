@@ -6,15 +6,15 @@
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
 
- Classes
+ Local Control Classes
     OutletDevice(dev_id, address, local_key=None, dev_type='default')
     CoverDevice(dev_id, address, local_key=None, dev_type='default')
     BulbDevice(dev_id, address, local_key=None, dev_type='default')
-
         dev_id (str): Device ID e.g. 01234567891234567890
         address (str): Device Network IP Address e.g. 10.0.1.99
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
+    Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
  Functions
     json = status()                    # returns json payload
@@ -64,6 +64,14 @@
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
+    
+    Cloud
+        setregion(apiRegion)
+        getdevices(verbose=False)
+        getstatus(deviceid)
+        getfunctions(deviceid)
+        getproperties(deviceid)
+        sendcommand(deviceid, commands)
 
  Credits
   * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
@@ -106,7 +114,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 2, 12)
+version_tuple = (1, 3, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -196,7 +204,12 @@ ERR_PAYLOAD = 904
 ERR_OFFLINE = 905
 ERR_STATE = 906
 ERR_FUNCTION = 907
-ERR_DEVTYPE = 907
+ERR_DEVTYPE = 908
+ERR_CLOUDKEY = 909
+ERR_CLOUDRESP = 910
+ERR_CLOUDTOKEN = 911
+ERR_PARAMS = 912
+ERR_CLOUD = 913
 
 error_codes = {
     ERR_JSON: "Invalid JSON Response from Device",
@@ -208,12 +221,15 @@ error_codes = {
     ERR_STATE: "Device in Unknown State",
     ERR_FUNCTION: "Function Not Supported by Device",
     ERR_DEVTYPE: "Device22 Detected: Retry Command",
+    ERR_CLOUDKEY: "Missing Tuya Cloud Key and Secret",
+    ERR_CLOUDRESP: "Invalid JSON Response from Cloud",
+    ERR_CLOUDTOKEN: "Unable to Get Cloud Token",
+    ERR_PARAMS: "Missing Function Parameters",
+    ERR_CLOUD: "Error Response from Tuya Cloud",
     None: "Unknown Error",
 }
 
 # Cryptography Helpers
-
-
 class AESCipher(object):
     def __init__(self, key):
         self.bs = 16
@@ -264,8 +280,6 @@ class AESCipher(object):
 
 
 # Misc Helpers
-
-
 def bin2hex(x, pretty=False):
     if pretty:
         space = " "
@@ -277,13 +291,11 @@ def bin2hex(x, pretty=False):
         result = "".join("%02X%s" % (y, space) for y in x)
     return result
 
-
 def hex2bin(x):
     if IS_PY2:
         return x.decode("hex")
     else:
         return bytes.fromhex(x)
-
 
 def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""
@@ -298,7 +310,6 @@ def set_debug(toggle=True, color=True):
         log.debug("TinyTuya [%s]\n" % __version__)
     else:
         log.setLevel(logging.NOTSET)
-
 
 def pack_message(msg):
     """Pack a TuyaMessage into bytes."""
@@ -319,7 +330,6 @@ def pack_message(msg):
     )
     return buffer
 
-
 def unpack_message(data):
     """Unpack bytes into a TuyaMessage."""
     header_len = struct.calcsize(MESSAGE_RECV_HEADER_FMT)
@@ -332,14 +342,12 @@ def unpack_message(data):
     crc, _ = struct.unpack(MESSAGE_END_FMT, data[-end_len:])
     return TuyaMessage(seqno, cmd, retcode, payload, crc)
 
-
 def has_suffix(payload):
     """Check to see if payload has valid Tuya suffix"""
     if len(payload) < 4:
         return False
     log.debug("buffer %r = %r", payload[-4:], SUFFIX_BIN)
     return payload[-4:] == SUFFIX_BIN
-
 
 def error_json(number=None, payload=None):
     """Return error details in JSON"""
@@ -412,6 +420,10 @@ payload_dict = {
     },
 }
 
+
+########################################################
+#             Local Classes and Functions
+########################################################
 
 class XenonDevice(object):
     def __init__(
@@ -1725,8 +1737,6 @@ def decrypt_udp(msg):
 
 
 # Return positive number or zero
-
-
 def floor(x):
     if x > 0:
         return x
@@ -1747,16 +1757,12 @@ def appenddevice(newdevice, devices):
 
 
 # Scan function shortcut
-
-
 def scan(maxretry=None, color=True):
     """Scans your network for Tuya devices with output to stdout"""
     d = deviceScan(True, maxretry, color)
 
 
 # Scan function
-
-
 def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
@@ -1860,6 +1866,8 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
         if verbose:
             print("%sScanning... %s\r" % (dim, spinner[spinnerx]), end="")
             spinnerx = (spinnerx + 1) % 4
+            sys.stdout.flush()
+            time.sleep(0.1)
 
         if count <= counts:  # alternate between 6666 and 6667 ports
             try:
@@ -2042,3 +2050,281 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
     clients.close()
     client.close()
     return devices
+
+########################################################
+#             Cloud Classes and Functions
+########################################################
+
+class Cloud(object):
+    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True):
+        """
+        Tuya Cloud IoT Platform Access
+
+        Args:
+            dev_id (str): The device id.
+            address (str): The network address.
+            local_key (str, optional): The encryption key. Defaults to None.
+
+        Playload Construction - Header Data:
+            Parameter 	  Type    Required	Description
+            client_id	  String     Yes	client_id
+            signature     String     Yes	HMAC-SHA256 Signature (see below)
+            sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
+            t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
+            lang	      String	 No	    Language. It is zh by default in China and en in other areas.
+            access_token  String     *      Required for service management calls
+
+        Signature Details:
+            * OAuth Token Request: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
+            * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
+
+        URIs:
+            * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
+            * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
+            * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
+
+        REFERENCE: 
+            * https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
+            * https://iot.tuya.com/cloud/products/detail
+        """
+        # Class Variables
+        self.CONFIGFILE = 'tinytuya.json'
+        self.apiRegion = apiRegion
+        self.apiKey = apiKey
+        self.apiSecret = apiSecret
+        self.apiDeviceID = apiDeviceID
+        self.urlhost = ''
+        self.uid = None     # Tuya Cloud User ID
+        self.token = None
+        self.new_sign_algorithm = new_sign_algorithm
+
+        if apiKey is None or apiSecret is None:
+            try:
+                # Load defaults from config file if available
+                config = {}
+                with open(self.CONFIGFILE) as f:
+                    config = json.load(f)
+                    self.apiRegion = config['apiRegion']
+                    self.apiKey = config['apiKey'] 
+                    self.apiSecret = config['apiSecret'] 
+                    self.apiDeviceID = config['apiDeviceID']
+            except:
+                return error_json(
+                    ERR_CLOUDKEY,
+                    "Tuya Cloud Key and Secret required",
+                )
+
+        self.setregion(apiRegion)
+        # Attempt to connect to cloud and get token
+        self.token = self._gettoken()
+    
+    def setregion(self, apiRegion=None):
+        # Set hostname based on apiRegion
+        if apiRegion is None:
+            apiRegion = self.apiRegion
+        self.apiRegion = apiRegion.lower()
+        self.urlhost = "openapi.tuyacn.com"          # China Data Center
+        if(self.apiRegion == "us"):
+            self.urlhost = "openapi.tuyaus.com"      # Western America Data Center
+        if(self.apiRegion == "us-e"):
+            self.urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
+        if(self.apiRegion == "eu"):
+            self.urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
+        if(self.apiRegion == "eu-w"):
+            self.urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
+        if(self.apiRegion == "in"):
+            self.urlhost = "openapi.tuyain.com"      # India Datacenter
+
+    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0'):
+        """
+        Handle GET and POST requests to Tuya Cloud 
+        """
+        # Build URL and Header
+        url = "https://%s/%s/%s" % (self.urlhost, ver, uri)
+        headers = {}
+        body = {}
+        if action == 'POST':
+            body = json.dumps(post)
+            headers['Content-type'] = 'application/json'
+        else:
+            action = 'GET'
+        now = int(time.time()*1000)
+        headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
+        if(self.token==None):
+            payload = self.apiKey + str(now)
+            headers['secret'] = self.apiSecret
+        else:
+            payload = self.apiKey + self.token + str(now)
+        
+        # If running the post 6-30-2021 signing algorithm update the payload to include it's data
+        if self.new_sign_algorithm: 
+            payload += ('%s\n' % action +                                                # HTTPMethod
+                hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
+                ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
+                            for key in headers.get("Signature-Headers", "").split(":")
+                            if key in headers]) + '\n' +
+                '/' + url.split('//', 1)[-1].split('/', 1)[-1])  
+        # Sign Payload
+        signature = hmac.new(
+            self.apiSecret.encode('utf-8'),
+            msg=payload.encode('utf-8'),
+            digestmod=hashlib.sha256
+        ).hexdigest().upper()
+
+        # Create Header Data
+        headers['client_id'] = self.apiKey
+        headers['sign'] = signature
+        headers['t'] = str(now)
+        headers['sign_method'] = 'HMAC-SHA256'
+        
+        if(self.token != None):
+            headers['access_token'] = self.token
+
+        # Send Request to Cloud and Get Response
+        if action == 'GET':
+            response = requests.get(url, headers=headers)
+        else:
+            log.debug(
+                "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
+            )
+            response = requests.post(url, headers=headers, data=body)
+        try:
+            response_dict = json.loads(response.content.decode())
+        except:
+            try:
+                response_dict = json.loads(response.content)
+            except:
+                return error_json(
+                    ERR_CLOUDKEY,
+                    "Cloud _tuyaplatform() invalid response: %r" % response.content,
+                )
+        return(response_dict)
+
+    def _gettoken(self):
+        # Get Oauth Token from tuyaPlatform
+        response_dict = self._tuyaplatform('token?grant_type=1')
+
+        if not response_dict['success']:
+                return error_json(
+                    ERR_CLOUDTOKEN,
+                    "Cloud _gettoken() failed: %r" % response_dict['msg'],
+                )
+
+        self.token = response_dict['result']['access_token']
+        return(self.token)
+
+    def _getuid(self, deviceid=None):
+        # Get user ID (UID) for deviceid
+        if deviceid is None:
+            return error_json(
+                ERR_PARAMS,
+                "_getuid() requires deviceID parameter"
+            )
+        uri = 'devices/%s' % deviceid
+        response_dict = self._tuyaplatform(uri)
+
+        if not response_dict['success']:
+            log.debug(
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+            )
+            return None
+        uid = response_dict['result']['uid']
+        return(uid)
+        
+    def getdevices(self, verbose=False):
+        """
+        Return dictionary of all devices. 
+        If verbose is true, return full Tuya device 
+        details.
+        """
+        uid = self._getuid(self.apiDeviceID)
+        if uid is None:
+            return error_json(
+                ERR_CLOUD,
+                "Unable to get device list"
+            )
+        # Use UID to get list of all Devices for User
+        uri = 'users/%s/devices' % uid
+        json_data = self._tuyaplatform(uri)
+
+        if verbose:
+            return(json_data)
+        else:
+            # Filter to only Name, ID and Key
+            tuyadevices = []
+            for i in json_data['result']:
+                item = {}
+                item['name'] = i['name'].strip()
+                item['id'] = i['id']
+                item['key'] = i['local_key']
+                tuyadevices.append(item)
+            return(tuyadevices)
+
+    def _getdevice(self, param='status', deviceid=None):
+        if deviceid is None:
+            return error_json(
+                ERR_PARAMS,
+                "Missing DeviceID Parameter"
+            )
+        uri = 'iot-03/devices/%s/%s' % (deviceid, param)
+        response_dict = self._tuyaplatform(uri)
+
+        if not response_dict['success']:
+            log.debug(
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+            )
+        return(response_dict)
+    
+    def getstatus(self, deviceid=None):
+        """
+        Get the status of the device. 
+        """
+        return(self._getdevice('status', deviceid))
+
+    def getfunctions(self, deviceid=None):
+        """
+        Get the functions of the device. 
+        """
+        return(self._getdevice('functions', deviceid))
+
+    def getproperties(self, deviceid=None):
+        """
+        Get the properties of the device. 
+        """
+        return(self._getdevice('specification', deviceid))
+
+    def getdps(self, deviceid=None):
+        """
+        Get the specifications including DPS IDs of the device. 
+        """
+        if deviceid is None:
+            return error_json(
+                ERR_PARAMS,
+                "Missing DeviceID Parameter"
+            )
+        uri = 'devices/%s/specifications' % (deviceid)
+        response_dict = self._tuyaplatform(uri, ver='v1.1')
+
+        if not response_dict['success']:
+            log.debug(
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+            )
+        return(response_dict)
+
+    def sendcommand(self, deviceid=None, commands=None):
+        """
+        Send a command to the device
+        """
+        if deviceid is None or commands is None:
+            return error_json(
+                ERR_PARAMS,
+                "Missing DeviceID and Command Parameters"
+            )
+        uri = 'iot-03/devices/%s/commands' % (deviceid)
+        response_dict = self._tuyaplatform(uri,action='POST',post=commands)
+
+        if not response_dict['success']:
+            log.debug(
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+            )
+        return(response_dict)

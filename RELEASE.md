@@ -6,10 +6,49 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.2.12 - TBD
+## v1.3.0 - Tuya Cloud Support
 
 * Code format cleanup and readability improvements (pull request #91)
-* TODO - Add Tuya Cloud functions
+* Upgrade - Add Tuya Cloud support and functions (#87 #95)
+
+```python
+import tinytuya
+
+c = tinytuya.Cloud(
+        apiRegion="us", 
+        apiKey="xxxxxxxxxxxxxxxxxxxx", 
+        apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
+        apiDeviceID="xxxxxxxxxxxxxxxxxxID")
+
+# Display list of devices
+devices = c.getdevices()
+print("Device List: %r" % devices)
+
+# Select a Device ID to Test
+id = "xxxxxxxxxxxxxxxxxxID"
+
+# Display DPS IDs of Device
+result = c.getdps(id)
+print("DPS IDs of device:\n", result)
+
+# Display Status of Device
+result = c.getstatus(id)
+print("Status of device:\n", result)
+
+# Send Command - This example assumes a basic switch
+commands = {
+	'commands': [{
+		'code': 'switch_1',
+		'value': True
+	}, {
+		'code': 'countdown_1',
+		'value': 0
+	}]
+}
+print("Sending command...")
+result = c.sendcommand(id,commands)
+print("Results\n:", result)
+```
 
 ## v1.2.11 - Updated Scan and Wizard Retry Logic
 

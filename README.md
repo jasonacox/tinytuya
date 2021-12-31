@@ -8,9 +8,9 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module controls and monitors [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN).  This is a compatible replacement for the `pytuya` PyPi module.
+This python module controls and monitors [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud).  This is a compatible replacement for the `pytuya` PyPi module.
 
-[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to poll status and issue commands to these devices.
+[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a socket based way to poll status and issue commands to these devices. Starting with v1.3.0, TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
@@ -120,11 +120,12 @@ Classes
     OutletDevice(dev_id, address, local_key=None, dev_type='default')
     CoverDevice(dev_id, address, local_key=None, dev_type='default')
     BulbDevice(dev_id, address, local_key=None, dev_type='default')
-
         dev_id (str): Device ID e.g. 01234567891234567890
         address (str): Device Network IP Address e.g. 10.0.1.99 or 0.0.0.0 to auto-find
         local_key (str, optional): The encryption key. Defaults to None.
         dev_type (str): Device type for payload options (see below)
+    Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
+
 
 Functions:
 
@@ -179,6 +180,14 @@ Functions:
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv():
         result = state():
+    
+    Cloud
+        setregion(apiRegion)
+        getdevices(verbose=False)
+        getstatus(deviceid)
+        getfunctions(deviceid)
+        getproperties(deviceid)
+        sendcommand(deviceid, commands)
 ```
 
 ### TinyTuya Error Codes
@@ -199,6 +208,12 @@ The "Err" number will be one of these:
 * 905 (ERR_OFFLINE) - Network Error: Device Unreachable
 * 906 (ERR_STATE) - Device in Unknown State
 * 907 (ERR_FUNCTION) - Function Not Supported by Device
+* 908 (ERR_DEVTYPE) - Device22 Detected: Retry Command
+* 909 (ERR_CLOUDKEY) - Missing Tuya Cloud Key and Secret
+* 910 (ERR_CLOUDRESP) - Invalid JSON Response from Cloud
+* 911 (ERR_CLOUDTOKEN) - Unable to Get Cloud Token
+* 912 (ERR_PARAMS) - Missing Function Parameters
+* 913 (ERR_CLOUD) - Error Response from Tuya Cloud
 
 ### Example Usage
 
@@ -292,6 +307,51 @@ while(True):
     # print(" > Send DPS Update Request < ")
     # payload = d.generate_payload(tinytuya.UPDATEDPS)
     # d.send(payload)    
+```
+
+### Tuya Cloud Access
+
+You can poll and manage Tuya devices using the `Cloud` class and functions.
+
+```python
+import tinytuya
+
+# Connect to Tuya Cloud
+# c = tinytuya.Cloud()  # uses tinytuya.json 
+c = tinytuya.Cloud(
+        apiRegion="us", 
+        apiKey="xxxxxxxxxxxxxxxxxxxx", 
+        apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
+        apiDeviceID="xxxxxxxxxxxxxxxxxxID")
+
+# Display list of devices
+devices = c.getdevices()
+print("Device List: %r" % devices)
+
+# Select a Device ID to Test
+id = "xxxxxxxxxxxxxxxxxxID"
+
+# Display Properties of Device
+result = c.getproperties(id)
+print("Properties of device:\n", result)
+
+# Display Status of Device
+result = c.getstatus(id)
+print("Status of device:\n", result)
+
+# Send Command - Turn on switch
+commands = {
+	'commands': [{
+		'code': 'switch_1',
+		'value': True
+	}, {
+		'code': 'countdown_1',
+		'value': 0
+	}]
+}
+print("Sending command...")
+result = c.sendcommand(id,commands)
+print("Results\n:", result)
 ```
 
 ### Encryption notes
