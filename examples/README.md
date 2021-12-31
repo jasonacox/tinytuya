@@ -40,3 +40,7 @@ turn_off('Dining Room')
 time.sleep(2)
 turn_on('Dining Room')
 ```
+
+## Tuya Cloud API Examples
+
+[cloud.py](cloud.py) -  Example that uses the Tinytuya `Cloud` class and functions to access the Tuya Cloud API to pull device information and control the device via the cloud.

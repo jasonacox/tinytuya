@@ -6,10 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.3.0 - Tuya Cloud Support
+## v1.3.0 - TuyaCloud API Support
 
 * Code format cleanup and readability improvements (pull request #91)
-* Upgrade - Add Tuya Cloud support and functions (#87 #95)
+* Upgrade - Add TuyaCloud API support and functions (#87 #95)
 
 ```python
 import tinytuya
