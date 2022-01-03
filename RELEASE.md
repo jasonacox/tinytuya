@@ -6,8 +6,14 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.3.1 - TuyaCloud API Support
+
+* PyPi Version 1.3.1
+* Added TuyaCloud token expiration detection and renewal logic (Issue #94)
+
 ## v1.3.0 - TuyaCloud API Support
 
+* PyPi Version 1.3.0
 * Code format cleanup and readability improvements (pull request #91)
 * Upgrade - Add TuyaCloud API support and functions (#87 #95)
 
@@ -52,6 +58,7 @@ print("Results\n:", result)
 
 ## v1.2.11 - Updated Scan and Wizard Retry Logic
 
+* PyPi Version 1.2.11
 * Added retries logic to `wizard` and `scan` to honor value set by command line or default to a value based on the number of devices (if known):
 
 ```bash
