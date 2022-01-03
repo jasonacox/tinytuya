@@ -2136,7 +2136,7 @@ class Cloud(object):
         if(self.apiRegion == "in"):
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
 
-    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0'):
+    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False):
         """
         Handle GET and POST requests to Tuya Cloud 
         """
@@ -2184,11 +2184,28 @@ class Cloud(object):
         # Send Request to Cloud and Get Response
         if action == 'GET':
             response = requests.get(url, headers=headers)
+            log.debug(
+                "GET: response code=%d text=%s token=%s" % (response.status_code, response.text, self.token)
+            )
         else:
             log.debug(
                 "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
             )
             response = requests.post(url, headers=headers, data=body)
+        
+        # Check to see if token is expired
+        if "token invalid" in response.text:
+            if recursive is True:
+                log.debug("Failed 2nd attempt to renew token - Aborting")
+                return None
+            log.debug("Token Expired - Try to renew")
+            token = self._gettoken()
+            if "err" in token:
+                log.debug("Failed to renew token")
+                return None
+            else:
+                return self._tuyaplatform(uri, action, post, ver, True)
+
         try:
             response_dict = json.loads(response.content.decode())
         except:
@@ -2199,10 +2216,12 @@ class Cloud(object):
                     ERR_CLOUDKEY,
                     "Cloud _tuyaplatform() invalid response: %r" % response.content,
                 )
+        # Check to see if token is expired
         return(response_dict)
 
     def _gettoken(self):
         # Get Oauth Token from tuyaPlatform
+        self.token = None
         response_dict = self._tuyaplatform('token?grant_type=1')
 
         if not response_dict['success']:
