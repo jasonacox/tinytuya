@@ -553,7 +553,7 @@ class XenonDevice(object):
                         time.sleep(0.1)
                         data = self.socket.recv(1024)  # try to fetch new payload
                     success = True
-                    log.debug("received data=%r", data)
+                    log.debug("received data=%r", binascii.hexlify(data))
                 # legacy/default mode avoids persisting socket across commands
                 if not self.socketPersistent:
                     self.socket.close()
@@ -938,7 +938,7 @@ class XenonDevice(object):
         msg = TuyaMessage(self.seqno, int(command_hb, 16), 0, payload, 0)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg)
-        log.debug("payload generated=%r", buffer)
+        log.debug("payload generated=%r",binascii.hexlify(buffer))
         return buffer
 
 
