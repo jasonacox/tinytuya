@@ -6,6 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.3.2 - TBD
+
+* Debug - Updated debug output for payloads to formatted hexadecimal (pull request #98)
+
 ## v1.3.1 - TuyaCloud API Support
 
 * PyPi Version 1.3.1
