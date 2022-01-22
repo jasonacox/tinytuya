@@ -52,9 +52,7 @@ TinyTuya has a built in setup Wizard that uses the Tuya IoT Cloud Platform to ge
 
 Follow the instructions below to get the *Local_Key*:
 
-1. Download the *Smart Life App*, available for iPhone or Android. Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  
-    * https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8
-    * https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en
+1. Download the *Smart Life App* or *Tuya Smart App*, available for [iPhone](https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8) or [Android](https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en). Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).
 
 2. Run the TinyTuya scan to get a list of Tuya devices on your network along with their device *Address*, *Device ID* and *Version* number (3.1 or 3.3):
     ```bash
@@ -65,11 +63,12 @@ Follow the instructions below to get the *Local_Key*:
 3. **Set up a Tuya Account**:
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/) and log in.  *NOTE: Tuya makes changes to their portal and this process frequently so details may vary. Please create an [issue](https://github.com/jasonacox/tinytuya/issues) or [pull request](https://github.com/jasonacox/tinytuya/pulls) with screenshots if we need to update these instructions.*
     * Click on "Cloud" icon -> "Create Cloud Project"
-      1. Remember the "Data Center" you select.  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png)). If you see no devices show up after the completion of this step, you will need to select a different data center and create a new project until you see your paired devices from the *Smart Life App* show up. ([screenshot](https://user-images.githubusercontent.com/35581194/148679597-391adecb-a271-453b-90c0-c64cdfad42e4.png))
+      1. Remember the "Data Center" you select.  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png)).
       2. Skip the configuration wizard but remember the Authorization Key: *API ID* and *Secret* for below ([screenshot](https://user-images.githubusercontent.com/836718/138598788-f74d2fe8-57fa-439c-8003-18735a44e7e5.png)).
     * Click on "Cloud" icon -> Select your project -> **Devices** -> **Link Tuya App Account**) ([see screenshot](https://user-images.githubusercontent.com/836718/138599218-e2202d7b-d9a0-4b18-bf40-c01567944da3.png))
     * Click **Add App Account** ([screenshot](https://user-images.githubusercontent.com/836718/138599473-066bb1b7-99b7-4540-983a-a0397b199448.png)) and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button [..] in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
-    * **IMPORTANT** Under "Service API" ensure these APIs are listed: `IoT Core`, `Authorization` and `Smart Home Scene Linkage`. To be sure, click subscribe again on every service.  Very important: **disable popup blockers** otherwise subscribing won't work without providing any indication of a failure. Make sure you authorize your Project to use those APIs:
+    * **NO DEVICES?** If no devices show up after scanning the QR code, you will need to select a different data center and create a new project until you see your paired devices from the *Smart Life App* show up. ([screenshot](https://user-images.githubusercontent.com/35581194/148679597-391adecb-a271-453b-90c0-c64cdfad42e4.png)). The data center may not be the most logical. As an example, several in the UK have reported needing to select "Central Europe" instead of "Western Europe".
+    * **SERVICE API:** Under "Service API" ensure these APIs are listed: `IoT Core`, `Authorization` and `Smart Home Scene Linkage`. To be sure, click subscribe again on every service.  Very important: **disable popup blockers** otherwise subscribing won't work without providing any indication of a failure. Make sure you authorize your Project to use those APIs:
         - Click "Service API" tab
         - Click "**Go to Authorize**" button
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
