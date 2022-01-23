@@ -1,7 +1,7 @@
 # TinyTuya
 
-![Licence](https://img.shields.io/github/license/jasonacox/tinytuya)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/tinytuya)
+![License](https://img.shields.io/github/license/jasonacox/tinytuya)
+![PyPI Downloads](https://img.shields.io/pypi/dm/tinytuya)
 [![Build Status](https://app.travis-ci.com/jasonacox/tinytuya.svg?branch=master)](https://app.travis-ci.com/jasonacox/tinytuya)
 [![PyPI version](https://badge.fury.io/py/tinytuya.svg)](https://badge.fury.io/py/tinytuya)
 [![CI](https://github.com/jasonacox/tinytuya/actions/workflows/test.yml/badge.svg)](https://github.com/jasonacox/tinytuya/actions/workflows/test.yml)
