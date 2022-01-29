@@ -347,7 +347,7 @@ def has_suffix(payload):
     """Check to see if payload has valid Tuya suffix"""
     if len(payload) < 4:
         return False
-    log.debug("buffer %r = %r" % (payload[-4:], SUFFIX_BIN))
+    log.debug("buffer %r = %r", payload[-4:], SUFFIX_BIN)
     return payload[-4:] == SUFFIX_BIN
 
 def error_json(number=None, payload=None):
@@ -549,11 +549,11 @@ class XenonDevice(object):
                     data = self.socket.recv(1024)
                     # device may send null ack (28 byte) response before a full response
                     if self.retry and len(data) <= minresponse:
-                        log.debug("received null payload (%r), fetch new one" % data)
+                        log.debug("received null payload (%r), fetch new one", data)
                         time.sleep(0.1)
                         data = self.socket.recv(1024)  # try to fetch new payload
                     success = True
-                    log.debug("received data=%r HEX" % binascii.hexlify(data))
+                    log.debug("received data=%r", binascii.hexlify(data))
                 # legacy/default mode avoids persisting socket across commands
                 if not self.socketPersistent:
                     self.socket.close()
@@ -630,7 +630,7 @@ class XenonDevice(object):
         try:
             msg = unpack_message(data)
             # Data available: seqno cmd retcode payload crc
-            log.debug("raw unpacked message = %r" % msg)
+            log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
         except:
             log.debug("error unpacking or decoding tuya JSON payload")
@@ -639,15 +639,16 @@ class XenonDevice(object):
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
         if dev_type != self.dev_type:
             log.debug(
-                "Device22 detected and updated (%s -> %s) - Update payload and try again" %
-                (dev_type, self.dev_type)
+                "Device22 detected and updated (%s -> %s) - Update payload and try again",
+                dev_type,
+                self.dev_type,
             )
             result = error_json(ERR_DEVTYPE)
 
         return result
 
     def _decode_payload(self, payload):
-        log.debug("decode payload=%r" % payload)
+        log.debug("decode payload=%r", payload)
         cipher = AESCipher(self.local_key)
 
         if payload.startswith(PROTOCOL_VERSION_BYTES_31):
@@ -663,15 +664,15 @@ class XenonDevice(object):
                 PROTOCOL_VERSION_BYTES_33
             ):
                 payload = payload[len(PROTOCOL_33_HEADER) :]
-                log.debug("removing 3.3=%r" % payload)
+                log.debug("removing 3.3=%r", payload)
             try:
-                log.debug("decrypting=%r" % payload)
+                log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
             except:
-                log.debug("incomplete payload=%r" % payload)
+                log.debug("incomplete payload=%r", payload)
                 return None
 
-            log.debug("decrypted 3.3 payload=%r" % payload)
+            log.debug("decrypted 3.3 payload=%r", payload)
             # Try to detect if device22 found
             log.debug("payload type = %s" % type(payload))
             if not isinstance(payload, str):
@@ -685,17 +686,17 @@ class XenonDevice(object):
                 # set at least one DPS
                 self.dps_to_request = {"1": None}
                 log.debug(
-                    "'data unvalid' error detected: switching to dev_type %r" %
-                    self.dev_type
+                    "'data unvalid' error detected: switching to dev_type %r",
+                    self.dev_type,
                 )
                 return None
         elif not payload.startswith(b"{"):
-            log.debug("Unexpected payload=%r" % payload)
+            log.debug("Unexpected payload=%r", payload)
             return error_json(ERR_PAYLOAD, payload)
 
         if not isinstance(payload, str):
             payload = payload.decode()
-        log.debug("decoded results=%r" % payload)
+        log.debug("decoded results=%r", payload)
         try:
             json_payload = json.loads(payload)
         except:
@@ -900,7 +901,7 @@ class XenonDevice(object):
         # if spaces are not removed device does not respond!
         payload = payload.replace(" ", "")
         payload = payload.encode("utf-8")
-        log.debug("building payload=%r" % payload)
+        log.debug("building payload=%r", payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
@@ -937,7 +938,7 @@ class XenonDevice(object):
         msg = TuyaMessage(self.seqno, int(command_hb, 16), 0, payload, 0)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg)
-        log.debug("payload generated=%r HEX" % binascii.hexlify(buffer))
+        log.debug("payload generated=%r",binascii.hexlify(buffer))
         return buffer
 
 
@@ -947,11 +948,11 @@ class Device(XenonDevice):
 
     def status(self):
         """Return device status."""
-        log.debug("status() entry (dev_type is %s)" % self.dev_type)
+        log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(DP_QUERY)
 
         data = self._send_receive(payload)
-        log.debug("status() received data=%r" % data)
+        log.debug("status() received data=%r", data)
         # Error handling
         if data and "Err" in data:
             if data["Err"] == str(ERR_DEVTYPE):
@@ -976,7 +977,7 @@ class Device(XenonDevice):
         payload = self.generate_payload(CONTROL, {switch: on})
 
         data = self._send_receive(payload)
-        log.debug("set_status received data=%r" % data)
+        log.debug("set_status received data=%r", data)
 
         return data
 
@@ -988,7 +989,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         payload = self.generate_payload(AP_CONFIG)
         data = self._send_receive(payload, 0)
-        log.debug("product received data=%r" % data)
+        log.debug("product received data=%r", data)
         return data
 
     def heartbeat(self):
@@ -999,7 +1000,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         payload = self.generate_payload(HEART_BEAT)
         data = self._send_receive(payload, 0)
-        log.debug("heartbeat received data=%r" % data)
+        log.debug("heartbeat received data=%r", data)
         return data
 
     def updatedps(self, index=[1]):
@@ -1009,11 +1010,11 @@ class Device(XenonDevice):
         Args:
             index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
         """
-        log.debug("updatedps() entry (dev_type is %s)" % self.dev_type)
+        log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
         data = self._send_receive(payload, 0)
-        log.debug("updatedps received data=%r" % data)
+        log.debug("updatedps received data=%r", data)
         return data
 
     def set_value(self, index, value):
@@ -1062,7 +1063,7 @@ class Device(XenonDevice):
         payload = self.generate_payload(CONTROL, {dps_id: num_secs})
 
         data = self._send_receive(payload)
-        log.debug("set_timer received data=%r" % data)
+        log.debug("set_timer received data=%r", data)
         return data
 
 
@@ -2188,7 +2189,7 @@ class Cloud(object):
             )
         else:
             log.debug(
-                "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body)
+                "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
             )
             response = requests.post(url, headers=headers, data=body)
         
@@ -2244,7 +2245,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg']
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
             )
             return None
         uid = response_dict['result']['uid']
@@ -2290,7 +2291,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg']
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
             )
         return(response_dict)
     
@@ -2326,7 +2327,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg']
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
             )
         return(response_dict)
 
@@ -2344,6 +2345,6 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg']
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
             )
         return(response_dict)
