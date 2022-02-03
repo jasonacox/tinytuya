@@ -9,6 +9,7 @@
 ## v1.3.2 - TBD
 
 * Debug - Updated debug output for payloads to formatted hexadecimal (pull request #98)
+* Scan - Terminal color fix for 3.1 devices.
 
 ## v1.3.1 - TuyaCloud API Support
 

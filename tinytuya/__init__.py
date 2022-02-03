@@ -1997,7 +1997,7 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
                         else:
                             devices[ip]["dps"] = dpsdata
                             if verbose:
-                                print("    Status: %s" % dpsdata["dps"])
+                                print(dim + "    Status: %s" % dpsdata["dps"])
                     else:
                         # Version 3.3+ requires device key
                         if dkey != "":
