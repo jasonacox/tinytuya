@@ -10,6 +10,7 @@
 
 * Debug - Updated debug output for payloads to formatted hexadecimal (pull request #98)
 * Scan - Terminal color fix for 3.1 devices.
+* Error Handling added for `set_timer()` function (Issue #87)
 
 ## v1.3.1 - TuyaCloud API Support
 

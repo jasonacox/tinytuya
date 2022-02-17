@@ -1055,10 +1055,14 @@ class Device(XenonDevice):
         # Query status, pick last device id as that is probably the timer
         if dps_id == 0:
             status = self.status()
-            devices = status["dps"]
-            devices_numbers = list(devices.keys())
-            devices_numbers.sort()
-            dps_id = devices_numbers[-1]
+            if "dps" in status:
+                devices = status["dps"]
+                devices_numbers = list(devices.keys())
+                devices_numbers.sort()
+                dps_id = devices_numbers[-1]
+            else:
+                log.debug("set_timer received error=%r", status)
+                return status
 
         payload = self.generate_payload(CONTROL, {dps_id: num_secs})
 
