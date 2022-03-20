@@ -14,6 +14,8 @@ Code examples using `tinytuya` module to control various Tuya devices.
 
 Tested devices:  Peteme Smart Light Bulbs, Wi-Fi - [link](https://www.amazon.com/gp/product/B07MKDLV1V/)
 
+[galaxy_projector.py](galaxy_projector.py) This script tests controlling a Galaxy Projector from [galaxylamps.co](https://eu.galaxylamps.co/collections/all/products/galaxy-projector)
+
 ## Continuous Monitor
 
 [monitor.py](monitor.py) - This script uses a loop to listen to a Tuya device for any state changes.  
