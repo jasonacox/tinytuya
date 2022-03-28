@@ -30,9 +30,14 @@ import json
 import pprint
 import logging
 import tinytuya
-import netifaces
-import nmap
-from getmac import get_mac_address
+try:
+    import netifaces
+    import nmap
+    from getmac import get_mac_address
+    SCANLIBS = True
+except:
+    # Disable nmap scanning
+    SCANLIBS = False
 
 # Backward compatability for python2
 try:
@@ -133,13 +138,14 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
 
     return(response_dict)
 
-def wizard(color=True, retries=None):
+def wizard(color=True, retries=None, forcescan=False):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
     Parameter:
         color = True or False, print output in color [Default: True]
         retries = Number of retries to find IP address of Tuya Devices
+        forcescan = True or False, use namp to scan local devices for IP and mac addresses
 
     Description
         Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
@@ -161,6 +167,7 @@ def wizard(color=True, retries=None):
     DEVICEFILE = 'devices.json'
     RAWFILE = 'tuya-raw.json'
     SNAPSHOTFILE = 'snapshot.json'
+    global SCANLIBS 
     config = {}
     config['apiKey'] = ''
     config['apiSecret'] = ''
@@ -189,6 +196,13 @@ def wizard(color=True, retries=None):
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
     print('')
+
+    if forcescan:
+        if not SCANLIBS:
+            print(alert + '    ERROR: force network scanning requested but not available - disabled.\n' + dim)
+            forcescan = False
+        else:
+            print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
     if(config['apiKey'] != '' and config['apiSecret'] != '' and
             config['apiRegion'] != '' and config['apiDeviceID'] != ''):
@@ -265,18 +279,25 @@ def wizard(color=True, retries=None):
     json_mac_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
 
     # Get list of all local ip addresses
-    ip_list = dict()
-    gws = netifaces.gateways()
-    gw  = gws['default'][netifaces.AF_INET]
-    gw_ip = gw[0].split('.')
-    mask = next((n["netmask"] for n in netifaces.ifaddresses(gw[1])[netifaces.AF_INET] if "netmask" in n), "N/A").split('.')
-    ip_masked = ".".join(str(int(gw_ip[i]) & int(mask[i])) for i in range(len(gw_ip)))
-    mask_bits = sum(bin(int(i)).count("1") for i in mask)
-    nm = nmap.PortScanner()
-    nm.scan(hosts=ip_masked + '/' + str(mask_bits), arguments='-n -sn -PE -PA 6668 -T 4')
-    for ip in nm.all_hosts():
-        mac = get_mac_address(ip=ip)
-        ip_list[mac] = ip
+    if forcescan:
+        try:
+            # Warn user of scan duration
+            print("\n" + bold + "Scanning local network.  This may take a while..." + dim)
+            ip_list = dict()
+            gws = netifaces.gateways()
+            gw  = gws['default'][netifaces.AF_INET]
+            gw_ip = gw[0].split('.')
+            mask = next((n["netmask"] for n in netifaces.ifaddresses(gw[1])[netifaces.AF_INET] if "netmask" in n), "N/A").split('.')
+            ip_masked = ".".join(str(int(gw_ip[i]) & int(mask[i])) for i in range(len(gw_ip)))
+            mask_bits = sum(bin(int(i)).count("1") for i in mask)
+            nm = nmap.PortScanner()
+            nm.scan(hosts=ip_masked + '/' + str(mask_bits), arguments='-n -sn -PE -PA 6668 -T 4')
+            for ip in nm.all_hosts():
+                mac = get_mac_address(ip=ip)
+                ip_list[mac] = ip
+        except:
+            print('\n' + alert + '    Error scanning network - Ignoring' + dim)
+            forcescan = False
 
     # Filter to only Name, ID and Key, IP and mac-address
     tuyadevices = []
@@ -285,8 +306,13 @@ def wizard(color=True, retries=None):
         item['name'] = i['name'].strip()
         item['id'] = i['id']
         item['key'] = i['local_key']
-        item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-        item['ip'] = ip_list[item['mac']]
+        if forcescan:
+            try:
+                item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
+                item['ip'] = ip_list[item['mac']]
+            except:
+                # Unable to look up mac address - ignore
+                pass
         tuyadevices.append(item)
 
     # Display device list
