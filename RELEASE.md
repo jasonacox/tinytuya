@@ -11,7 +11,8 @@
 * Debug - Updated debug output for payloads to formatted hexadecimal (pull request #98)
 * Scan - Terminal color fix for 3.1 devices.
 * Error Handling added for `set_timer()` function (Issue #87)
-* Add wizard `-force` option to perform network scan for device IP and mac addresses.
+* Add wizard capability to pull mac addresses from TuyaPlatform in devices.json (Issue #117)
+* Add wizard `-force` option to perform network scan for device IP addresses (Issue #117)
 
 ```bash
 python -m tinytuya wizard -force
