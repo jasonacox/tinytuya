@@ -66,7 +66,7 @@ if(state == 2):
     print("      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.")
     print("      max_retry             Maximum number of retries to find Tuya devices [Default=15]")
     print("      -nocolor              Disable color text output.")
-    print("      -force                Force network scan for local devices IP and mac addresses.")
+    print("      -force                Force network scan for devices IP addresses.")
     print("      -h                    Show usage.")
     print("")
 

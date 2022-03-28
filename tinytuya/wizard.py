@@ -145,7 +145,7 @@ def wizard(color=True, retries=None, forcescan=False):
     Parameter:
         color = True or False, print output in color [Default: True]
         retries = Number of retries to find IP address of Tuya Devices
-        forcescan = True or False, use namp to scan local devices for IP and mac addresses
+        forcescan = True or False, force network scan for device IP addresses
 
     Description
         Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
@@ -308,9 +308,9 @@ def wizard(color=True, retries=None, forcescan=False):
         item['key'] = i['local_key']
         try:
             item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-            item['ip'] = ip_list[item['mac']]
+            if forcescan:
+                item['ip'] = ip_list[item['mac']]
         except:
-            # Unable to look up mac address - ignore
             pass
         tuyadevices.append(item)
 
