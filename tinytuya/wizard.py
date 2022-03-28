@@ -30,6 +30,9 @@ import json
 import pprint
 import logging
 import tinytuya
+import netifaces
+import nmap
+from getmac import get_mac_address
 
 # Backward compatability for python2
 try:
@@ -64,6 +67,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
         * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
         * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
         * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
+        * Get Device info = https://openapi.tuyaus.com/v1.0/devices/factory-infos
 
     REFERENCE: https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
 
@@ -255,14 +259,34 @@ def wizard(color=True, retries=None):
     # Use UID to get list of all Devices for User
     uri = 'users/%s/devices' % uid
     json_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
- 
-    # Filter to only Name, ID and Key
+
+    # Use Device ID to get MAC addresses
+    uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
+    json_mac_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
+
+    # Get list of all local ip addresses
+    ip_list = dict()
+    gws = netifaces.gateways()
+    gw  = gws['default'][netifaces.AF_INET]
+    gw_ip = gw[0].split('.')
+    mask = next((n["netmask"] for n in netifaces.ifaddresses(gw[1])[netifaces.AF_INET] if "netmask" in n), "N/A").split('.')
+    ip_masked = ".".join(str(int(gw_ip[i]) & int(mask[i])) for i in range(len(gw_ip)))
+    mask_bits = sum(bin(int(i)).count("1") for i in mask)
+    nm = nmap.PortScanner()
+    nm.scan(hosts=ip_masked + '/' + str(mask_bits), arguments='-n -sn -PE -PA 6668 -T 4')
+    for ip in nm.all_hosts():
+        mac = get_mac_address(ip=ip)
+        ip_list[mac] = ip
+
+    # Filter to only Name, ID and Key, IP and mac-address
     tuyadevices = []
     for i in json_data['result']:
         item = {}
         item['name'] = i['name'].strip()
         item['id'] = i['id']
         item['key'] = i['local_key']
+        item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
+        item['ip'] = ip_list[item['mac']]
         tuyadevices.append(item)
 
     # Display device list
