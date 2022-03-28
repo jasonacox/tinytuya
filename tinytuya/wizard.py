@@ -306,13 +306,12 @@ def wizard(color=True, retries=None, forcescan=False):
         item['name'] = i['name'].strip()
         item['id'] = i['id']
         item['key'] = i['local_key']
-        if forcescan:
-            try:
-                item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-                item['ip'] = ip_list[item['mac']]
-            except:
-                # Unable to look up mac address - ignore
-                pass
+        try:
+            item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
+            item['ip'] = ip_list[item['mac']]
+        except:
+            # Unable to look up mac address - ignore
+            pass
         tuyadevices.append(item)
 
     # Display device list
