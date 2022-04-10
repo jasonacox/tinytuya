@@ -27,16 +27,14 @@ import time
 import hmac
 import hashlib
 import json
-import pprint
-import logging
 import tinytuya
+import socket
+import ipaddress
 try:
-    import netifaces
-    import nmap
     from getmac import get_mac_address
     SCANLIBS = True
 except:
-    # Disable nmap scanning
+    # Disable force scanning
     SCANLIBS = False
 
 # Backward compatability for python2
@@ -44,6 +42,14 @@ try:
     input = raw_input
 except NameError:
     pass
+
+# Helper Functions
+def getmyIP():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    r = s.getsockname()[0]
+    s.close()
+    return r
 
 def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorithm=True, body=None, headers=None):
     """Tuya IoT Platform Data Access
@@ -167,8 +173,14 @@ def wizard(color=True, retries=None, forcescan=False):
     DEVICEFILE = 'devices.json'
     RAWFILE = 'tuya-raw.json'
     SNAPSHOTFILE = 'snapshot.json'
-    global SCANLIBS 
+
+    # Defaults
+    DEFAULT_NETWORK = '192.168.0.0/24'
+    TCPTIMEOUT = 0.4
+    TCPPORT = 6668
+
     config = {}
+    ip_list = {}
     config['apiKey'] = ''
     config['apiSecret'] = ''
     config['apiRegion'] = ''
@@ -182,24 +194,16 @@ def wizard(color=True, retries=None, forcescan=False):
         # First Time Setup
         pass
     
-    if(color == False):
-        # Disable Terminal Color Formatting
-        bold = subbold = normal = dim = alert = alertdim = ""
-    else:
-        # Terminal Color Formatting
-        bold = "\033[0m\033[97m\033[1m"
-        subbold = "\033[0m\033[32m"
-        normal = "\033[97m\033[0m"
-        dim = "\033[0m\033[97m\033[2m"
-        alert = "\033[0m\033[91m\033[1m"
-        alertdim = "\033[0m\033[91m\033[2m"
+    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
     print('')
 
     if forcescan:
         if not SCANLIBS:
-            print(alert + '    ERROR: force network scanning requested but not available - disabled.\n' + dim)
+            print(alert + 
+                '    ERROR: force network scanning requested but not available - disabled.\n' 
+                '           (Requires: pip install getmac)\n' + dim)
             forcescan = False
         else:
             print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
@@ -278,23 +282,41 @@ def wizard(color=True, retries=None, forcescan=False):
     uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
     json_mac_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
 
-    # Get list of all local ip addresses
     if forcescan:
+        # Force Scan - Get list of all local ip addresses
+        try: 
+            # Fetch my IP address and assume /24 network
+            ip = getmyIP()
+            network = ipaddress.IPv4Interface(u''+ip+'/24').network
+        except:
+            network = DEFAULT_NETWORK
+            ip = None
+            print(alert + 
+                'ERROR: Unable to get your IP address and network automatically.\n' 
+                '       (using %s)' % network + normal)
+        
         try:
             # Warn user of scan duration
             print("\n" + bold + "Scanning local network.  This may take a while..." + dim)
-            ip_list = dict()
-            gws = netifaces.gateways()
-            gw  = gws['default'][netifaces.AF_INET]
-            gw_ip = gw[0].split('.')
-            mask = next((n["netmask"] for n in netifaces.ifaddresses(gw[1])[netifaces.AF_INET] if "netmask" in n), "N/A").split('.')
-            ip_masked = ".".join(str(int(gw_ip[i]) & int(mask[i])) for i in range(len(gw_ip)))
-            mask_bits = sum(bin(int(i)).count("1") for i in mask)
-            nm = nmap.PortScanner()
-            nm.scan(hosts=ip_masked + '/' + str(mask_bits), arguments='-n -sn -PE -PA 6668 -T 4')
-            for ip in nm.all_hosts():
-                mac = get_mac_address(ip=ip)
-                ip_list[mac] = ip
+            print(bold + '\n    Running Scan...' + dim)
+            # Loop through each host
+            for addr in ipaddress.IPv4Network(network):
+                # Fetch my IP address and assume /24 network
+                print(dim + '\r      Host: ' + subbold + '%s ...' % addr + normal, end='')
+                a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                a_socket.settimeout(TCPTIMEOUT)
+                location = (str(addr), tinytuya.TCPPORT)
+                result_of_check = a_socket.connect_ex(location)
+                if result_of_check == 0:
+                    # TODO: Verify Tuya Device
+                    ip = "%s" % addr
+                    mac = get_mac_address(ip=ip)
+                    ip_list[ip] = mac
+                    print(" Found Device [%s]" % mac)
+                a_socket.close()
+            
+            print(dim + '\r      Done                           ' +normal + 
+                        '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
         except:
             print('\n' + alert + '    Error scanning network - Ignoring' + dim)
             forcescan = False
