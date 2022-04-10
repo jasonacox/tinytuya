@@ -6,13 +6,14 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.3.2 - TBD
+## v1.4.0 - TBD
 
 * Debug - Updated debug output for payloads to formatted hexadecimal (pull request #98)
 * Scan - Terminal color fix for 3.1 devices.
 * Error Handling added for `set_timer()` function (Issue #87)
 * Add wizard capability to pull mac addresses from TuyaPlatform in devices.json (Issue #117)
 * Add wizard `-force` option to perform network scan for device IP addresses (Issue #117)
+* Separated scan functions into `scanner.py` file.
 
 ```bash
 python -m tinytuya wizard -force

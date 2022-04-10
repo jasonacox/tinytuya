@@ -17,6 +17,7 @@
 import tinytuya
 import sys
 from . import wizard
+from . import scanner
 
 retries = tinytuya.MAXCOUNT
 state = 0
@@ -45,16 +46,16 @@ for i in sys.argv:
 # State 0 = Run Scan
 if(state == 0):
     if(retriesprovided):
-        tinytuya.scan(retries, color)
+        scanner.scan(maxretry=retries, color=color, forcescan=force)
     else:
-        tinytuya.scan(color=color)
+        scanner.scan(color=color, forcescan=force)
 
 # State 1 = Run Setup Wizard
 if(state == 1):
     if(retriesprovided):
-        wizard.wizard(color, retries, force)
+        wizard.wizard(color=color, retries=retries, forcescan=force)
     else:
-        wizard.wizard(color, forcescan=force)
+        wizard.wizard(color=color, forcescan=force)
 
 # State 2 = Show Usage
 if(state == 2):
@@ -66,7 +67,7 @@ if(state == 2):
     print("      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.")
     print("      max_retry             Maximum number of retries to find Tuya devices [Default=15]")
     print("      -nocolor              Disable color text output.")
-    print("      -force                Force network scan for devices IP addresses.")
+    print("      -force                Force network scan for device IP addresses.")
     print("      -h                    Show usage.")
     print("")
 

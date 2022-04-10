@@ -115,7 +115,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 3, 2)
+version_tuple = (1, 4, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -131,6 +131,13 @@ if Crypto is None:
 else:
     log.debug("Using PyCrypto %r", Crypto.version_info)
     log.debug("Using PyCrypto from %r", Crypto.__file__)
+
+# Globals for Scanning
+MAXCOUNT = 15   # How many tries before stopping
+UDPPORT = 6666  # Tuya 3.1 UDP Port
+UDPPORTS = 6667 # Tuya 3.3 encrypted UDP Port
+TCPPORT = 6668  # Tuya TCP Local Port
+TIMEOUT = 3.0   # Seconds to wait for a broadcast
 
 # Tuya Command Types
 UDP = 0  # HEAT_BEAT_CMD
@@ -451,7 +458,7 @@ class XenonDevice(object):
         self.retry = True
         self.dev_type = dev_type
         self.disabledetect = False  # if True do not detect device22
-        self.port = 6668  # default - do not expect caller to pass in
+        self.port = TCPPORT  # default - do not expect caller to pass in
         self.socket = None
         self.socketPersistent = False
         self.socketNODELAY = True
@@ -1709,15 +1716,6 @@ class BulbDevice(Device):
 
 # Utility Functions
 
-# SCAN network for Tuya devices
-MAXCOUNT = 15  # How many tries before stopping
-UDPPORT = 6666  # Tuya 3.1 UDP Port
-UDPPORTS = 6667  # Tuya 3.3 encrypted UDP Port
-TIMEOUT = 3.0  # Seconds to wait for a broadcast
-
-# UDP packet payload decryption - credit to tuya-convert
-
-
 def pad(s):
     return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
 
@@ -1734,6 +1732,7 @@ def decrypt(msg, key):
     return unpad(AES.new(key, AES.MODE_ECB).decrypt(msg)).decode()
 
 
+# UDP packet payload decryption - credit to tuya-convert
 udpkey = md5(b"yGAdlopoPVldABfn").digest()
 
 
@@ -1760,15 +1759,34 @@ def appenddevice(newdevice, devices):
     devices[newdevice["ip"]] = newdevice
     return False
 
+# Terminal color helper
+def termcolor(color=True):
+    if color is False:
+        # Disable Terminal Color Formatting
+        bold = subbold = normal = dim = alert = alertdim = cyan = red = yellow = ""
+    else:
+        # Terminal Color Formatting
+        bold = "\033[0m\033[97m\033[1m"
+        subbold = "\033[0m\033[32m"
+        normal = "\033[97m\033[0m"
+        dim = "\033[0m\033[97m\033[2m"
+        alert = "\033[0m\033[91m\033[1m"
+        alertdim = "\033[0m\033[91m\033[2m"
+        cyan = "\033[0m\033[36m"
+        red = "\033[0m\033[31m"
+        yellow = "\033[0m\033[33m"
+    return(bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow)
+
 
 # Scan function shortcut
-def scan(maxretry=None, color=True):
+def scan(maxretry=None, color=True, forcescan=False):
     """Scans your network for Tuya devices with output to stdout"""
-    d = deviceScan(True, maxretry, color)
+    from . import scanner
+    scanner.scan(maxretry=maxretry, color=color, forcescan=forcescan)
 
 
 # Scan function
-def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
+def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1777,6 +1795,7 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
         maxretry = The number of loops to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
+        forcescan = True or False, force network scan for device IP addresses
 
     Response:
         devices = Dictionary of all devices found
@@ -1791,270 +1810,9 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True):
             dps = devices[ip]['dps']
 
     """
-    DEVICEFILE = "devices.json"
-    havekeys = False
-    tuyadevices = []
+    from . import scanner
+    return scanner.devices(verbose=verbose, maxretry=maxretry, color=color, poll=poll, forcescan=forcescan)
 
-    # Lookup Tuya device info by (id) returning (name, key)
-    def tuyaLookup(deviceid):
-        for i in tuyadevices:
-            if i["id"] == deviceid:
-                return (i["name"], i["key"])
-        return ("", "")
-
-    # Check to see if we have additional Device info
-    try:
-        # Load defaults
-        with open(DEVICEFILE) as f:
-            tuyadevices = json.load(f)
-            havekeys = True
-            log.debug("loaded=%s [%d devices]" % (DEVICEFILE, len(tuyadevices)))
-            # If no maxretry value set, base it on number of devices
-            if maxretry is None:
-                maxretry = len(tuyadevices) + MAXCOUNT
-    except:
-        # No Device info
-        pass
-
-    # If no maxretry value set use default
-    if maxretry is None:
-        maxretry = MAXCOUNT
-
-    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
-    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    client.bind(("", UDPPORT))
-    client.settimeout(TIMEOUT)
-    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
-    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    clients.bind(("", UDPPORTS))
-    clients.settimeout(TIMEOUT)
-
-    if verbose:
-        if color is False:
-            # Disable Terminal Color Formatting
-            bold = subbold = normal = dim = alert = alertdim = cyan = red = yellow = ""
-        else:
-            # Terminal Color Formatting
-            bold = "\033[0m\033[97m\033[1m"
-            subbold = "\033[0m\033[32m"
-            normal = "\033[97m\033[0m"
-            dim = "\033[0m\033[97m\033[2m"
-            alert = "\033[0m\033[91m\033[1m"
-            alertdim = "\033[0m\033[91m\033[2m"
-            cyan = "\033[0m\033[36m"
-            red = "\033[0m\033[31m"
-            yellow = "\033[0m\033[33m"
-
-        print(
-            "\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"
-            % (bold, normal, dim, __version__)
-        )
-        if havekeys:
-            print("%s[Loaded devices.json - %d devices]\n" % (dim, len(tuyadevices)))
-        print(
-            "%sScanning on UDP ports %s and %s for devices (%s retries)...%s\n"
-            % (subbold, UDPPORT, UDPPORTS, maxretry, normal)
-        )
-
-    # globals
-    devices = {}
-    count = 0
-    counts = 0
-    spinnerx = 0
-    spinner = "|/-\\|"
-
-    log.debug("listening for UDP 6666 and 6667")
-    while (count + counts) <= maxretry:
-        note = "invalid"
-        if verbose:
-            print("%sScanning... %s\r" % (dim, spinner[spinnerx]), end="")
-            spinnerx = (spinnerx + 1) % 4
-            sys.stdout.flush()
-            time.sleep(0.1)
-
-        if count <= counts:  # alternate between 6666 and 6667 ports
-            try:
-                data, addr = client.recvfrom(4048)
-            except KeyboardInterrupt as err:
-                log.debug("Keyboard Interrupt - Exiting")
-                if verbose:
-                    print("\n**User Break**")
-                exit()
-            except Exception as err:
-                # Timeout
-                count = count + 1
-                continue
-        else:
-            try:
-                data, addr = clients.recvfrom(4048)
-            except KeyboardInterrupt as err:
-                log.debug("Keyboard Interrupt - Exiting")
-                if verbose:
-                    print("\n**User Break**")
-                exit()
-            except Exception as err:
-                # Timeout
-                counts = counts + 1
-                continue
-        ip = addr[0]
-        gwId = productKey = version = dname = dkey = ""
-        result = data
-        try:
-            result = data[20:-8]
-            try:
-                result = decrypt_udp(result)
-            except:
-                result = result.decode()
-
-            result = json.loads(result)
-            log.debug("Received valid UDP packet: %r" % result)
-
-            note = "Valid"
-            ip = result["ip"]
-            gwId = result["gwId"]
-            productKey = result["productKey"]
-            version = result["version"]
-        except:
-            if verbose:
-                print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
-            result = {"ip": ip}
-            note = "Unknown"
-            log.debug("Invalid UDP Packet: %r" % result)
-
-        # check to see if we have seen this device before and add to devices array
-        if appenddevice(result, devices) is False:
-
-            # new device found - back off count if we keep getting new devices
-            if version == "3.1":
-                count = floor(count - 1)
-            else:
-                counts = floor(counts - 1)
-            if havekeys:
-                try:
-                    # Try to pull name and key data
-                    (dname, dkey) = tuyaLookup(gwId)
-                except:
-                    pass
-            if verbose:
-                if dname == "":
-                    print(
-                        "Unknown v%s%s Device%s   Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s"
-                        % (
-                            normal,
-                            version,
-                            dim,
-                            productKey,
-                            note,
-                            subbold,
-                            ip,
-                            cyan,
-                            gwId,
-                            red,
-                            dkey,
-                            yellow,
-                            version,
-                        )
-                    )
-                else:
-                    print(
-                        "%s%s%s  Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s,  %sLocal Key = %s,  %sVersion = %s"
-                        % (
-                            normal,
-                            dname,
-                            dim,
-                            productKey,
-                            note,
-                            subbold,
-                            ip,
-                            cyan,
-                            gwId,
-                            red,
-                            dkey,
-                            yellow,
-                            version,
-                        )
-                    )
-
-            try:
-                if poll:
-                    time.sleep(0.1)  # give device a break before polling
-                    if version == "3.1":
-                        # Version 3.1 - no device key requires - poll for status data points
-                        d = OutletDevice(gwId, ip, dkey)
-                        d.set_version(3.1)
-                        dpsdata = d.status()
-                        if "dps" not in dpsdata:
-                            if verbose:
-                                if "Error" in dpsdata:
-                                    print(
-                                        "%s    Access rejected by %s: %s"
-                                        % (alertdim, ip, dpsdata["Error"])
-                                    )
-                                else:
-                                    print(
-                                        "%s    Invalid response from %s: %r"
-                                        % (alertdim, ip, dpsdata)
-                                    )
-                            devices[ip]["err"] = "Unable to poll"
-                        else:
-                            devices[ip]["dps"] = dpsdata
-                            if verbose:
-                                print(dim + "    Status: %s" % dpsdata["dps"])
-                    else:
-                        # Version 3.3+ requires device key
-                        if dkey != "":
-                            d = OutletDevice(gwId, ip, dkey)
-                            d.set_version(3.3)
-                            dpsdata = d.status()
-                            if "dps" not in dpsdata:
-                                if verbose:
-                                    if "Error" in dpsdata:
-                                        print(
-                                            "%s    Access rejected by %s: %s"
-                                            % (alertdim, ip, dpsdata["Error"])
-                                        )
-                                    else:
-                                        print(
-                                            "%s    Check DEVICE KEY - Invalid response from %s: %r"
-                                            % (alertdim, ip, dpsdata)
-                                        )
-                                devices[ip]["err"] = "Unable to poll"
-                            else:
-                                devices[ip]["dps"] = dpsdata
-                                if verbose:
-                                    print(dim + "    Status: %s" % dpsdata["dps"])
-                        else:
-                            if verbose:
-                                print(
-                                    "%s    No Stats for %s: DEVICE KEY required to poll for status%s"
-                                    % (alertdim, ip, dim)
-                                )
-                    # else
-                # if poll
-            except:
-                if verbose:
-                    print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
-                devices[ip]["err"] = "Unable to poll"
-            if dname != "":
-                devices[ip]["name"] = dname
-                devices[ip]["key"] = dkey
-        else:
-            if version == "3.1":
-                count = count + 1
-            else:
-                counts = counts + 1
-
-    if verbose:
-        print(
-            "                    \n%sScan Complete!  Found %s devices.\n"
-            % (normal, len(devices))
-        )
-    log.debug("Scan complete with %s devices found" % len(devices))
-    clients.close()
-    client.close()
-    return devices
 
 ########################################################
 #             Cloud Classes and Functions

@@ -381,6 +381,7 @@ These devices uses AES encryption which is not available in the Python standard 
       command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
       max_retry             Maximum number of retries to find Tuya devices [Default=15]
       -nocolor              Disable color text output.
+      -force                Force network scan for device IP addresses.
       -h                    Show usage.
 ```
 
