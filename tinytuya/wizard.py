@@ -44,6 +44,17 @@ try:
 except NameError:
     pass
 
+# Get Configuration Data
+CONFIGFILE = 'tinytuya.json'
+DEVICEFILE = 'devices.json'
+RAWFILE = 'tuya-raw.json'
+SNAPSHOTFILE = 'snapshot.json'
+
+# Defaults
+DEFAULT_NETWORK = '192.168.0.0/24'
+TCPTIMEOUT = 0.4
+TCPPORT = tinytuya.TCPPORT
+
 # Helper Functions
 def getmyIP():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -169,17 +180,6 @@ def wizard(color=True, retries=None, forcescan=False):
         The TuyAPI/CLI wizard inspired and informed this python version.
     """
 
-    # Get Configuration Data
-    CONFIGFILE = 'tinytuya.json'
-    DEVICEFILE = 'devices.json'
-    RAWFILE = 'tuya-raw.json'
-    SNAPSHOTFILE = 'snapshot.json'
-
-    # Defaults
-    DEFAULT_NETWORK = '192.168.0.0/24'
-    TCPTIMEOUT = 0.4
-    TCPPORT = 6668
-
     config = {}
     ip_list = {}
     config['apiKey'] = ''
@@ -253,7 +253,6 @@ def wizard(color=True, retries=None, forcescan=False):
     SECRET = config['apiSecret']
     DEVICEID = config['apiDeviceID']
     REGION = config['apiRegion']        # us, eu, cn, in
-    LANG = 'en'                         # en or zh
 
     # Get Oauth Token from tuyaPlatform
     uri = 'token?grant_type=1'
@@ -306,7 +305,7 @@ def wizard(color=True, retries=None, forcescan=False):
                 print(dim + '\r      Host: ' + subbold + '%s ...' % addr + normal, end='')
                 a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 a_socket.settimeout(TCPTIMEOUT)
-                location = (str(addr), tinytuya.TCPPORT)
+                location = (str(addr), TCPPORT)
                 result_of_check = a_socket.connect_ex(location)
                 if result_of_check == 0:
                     # TODO: Verify Tuya Device

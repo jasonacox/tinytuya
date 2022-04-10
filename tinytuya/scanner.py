@@ -51,6 +51,11 @@ DEFAULT_NETWORK = '192.168.0.0/24'
 DEVICEFILE = "devices.json"
 SNAPSHOTFILE = "tuyascan.json"
 TCPTIMEOUT = 0.4
+TCPPORT = tinytuya.TCPPORT      # Tuya TCP Local Port
+MAXCOUNT = tinytuya.MAXCOUNT    # How many tries before stopping
+UDPPORT = tinytuya.UDPPORT      # Tuya 3.1 UDP Port
+UDPPORTS = tinytuya.UDPPORTS    # Tuya 3.3 encrypted UDP Port
+TIMEOUT = tinytuya.TIMEOUT      # Socket Timeout 
 
 # Logging
 log = logging.getLogger(__name__)
@@ -135,13 +140,13 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    client.bind(("", tinytuya.UDPPORT))
-    client.settimeout(tinytuya.TIMEOUT)
+    client.bind(("", UDPPORT))
+    client.settimeout(TIMEOUT)
     # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
     clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    clients.bind(("", tinytuya.UDPPORTS))
-    clients.settimeout(tinytuya.TIMEOUT)
+    clients.bind(("", UDPPORTS))
+    clients.settimeout(TIMEOUT)
 
     if verbose:
         print(
@@ -152,7 +157,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             print("%s[Loaded devices.json - %d devices]\n" % (dim, len(tuyadevices)))
         print(
             "%sScanning on UDP ports %s and %s for devices (%s retries)...%s\n"
-            % (subbold, tinytuya.UDPPORT, tinytuya.UDPPORTS, maxretry, normal)
+            % (subbold, UDPPORT, UDPPORTS, maxretry, normal)
         )
 
     if forcescan:
@@ -201,7 +206,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                     print(dim + '\r      Host: ' + subbold + '%s ...' % addr + normal, end='')
                 a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 a_socket.settimeout(TCPTIMEOUT)
-                location = (str(addr), tinytuya.TCPPORT)
+                location = (str(addr), TCPPORT)
                 result_of_check = a_socket.connect_ex(location)
                 if result_of_check == 0:
                     # TODO: Verify Tuya Device
