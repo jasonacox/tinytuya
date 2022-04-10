@@ -22,6 +22,7 @@ Credits
     The TuyAPI/CLI wizard inspired and informed this python version.
 """
 # Modules
+from __future__ import print_function
 import requests
 import time
 import hmac
