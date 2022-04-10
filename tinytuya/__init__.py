@@ -1786,7 +1786,7 @@ def scan(maxretry=None, color=True, forcescan=False):
 
 
 # Scan function
-def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False):
+def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1811,7 +1811,7 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
 
     """
     from . import scanner
-    return scanner.devices(verbose=verbose, maxretry=maxretry, color=color, poll=poll, forcescan=forcescan)
+    return scanner.devices(verbose=verbose, maxretry=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
 
 
 ########################################################

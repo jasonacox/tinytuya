@@ -73,7 +73,7 @@ def scan(maxretry=None, color=True, forcescan=False):
 
 
 # Scan function
-def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False):
+def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -82,7 +82,8 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         maxretry = The number of loops to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
-        forcescan = True or false, force network scan for device IP addresses
+        forcescan = True or False, force network scan for device IP addresses
+        byID = True or False, return dictionary by ID, otherwise by IP (default)
 
     Response:
         devices = Dictionary of all devices found
@@ -394,13 +395,18 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             else:
                 counts = counts + 1
 
+    # Create dictionary by id
+    ids = {}
+    for device in devices:
+        id=devices[device]['gwId']
+        ids[id] = devices[device]
     if verbose:
         print(
             "                    \n%sScan Complete!  Found %s devices."
             % (normal, len(devices))
         )
         # Save polling data snapshot
-        current = {'timestamp' : time.time(), 'devices' : devices}
+        current = {'timestamp' : time.time(), 'devices' : devices, 'ids' : ids}
         output = json.dumps(current, indent=4) 
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE + "\n")
         with open(SNAPSHOTFILE, "w") as outfile:
@@ -409,7 +415,10 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     log.debug("Scan complete with %s devices found" % len(devices))
     clients.close()
     client.close()
-    return devices
+    if byID:
+        return ids
+    else:
+        return devices
 
 
 if __name__ == '__main__':
