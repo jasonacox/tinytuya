@@ -14,9 +14,22 @@
 * Add wizard capability to pull mac addresses from TuyaPlatform in devices.json (Issue #117)
 * Add wizard `-force` option to perform network scan for device IP addresses (Issue #117)
 * Separated scan functions into `scanner.py` file.
+* NEW: Added command line functions:
+    * devices - Display and poll all registered devices for status (using devices.json). This will force a network scan for IP address changes and will create snapshot.json.
+    * snapshot - Display and poll all devices as listed snapshot.json. This assume IP address are the same as the last snapshot.
+    * json - Same as snapshot but respond with a JSON payload.
 
 ```bash
+# Run wizard using brute force scan for IP addresses
 python -m tinytuya wizard -force
+
+# New Interactive Command Line Options
+python -m tinytuya devices
+python -m tinytuya snapshot
+
+# Non-Interactive poll with JSON response
+python -m tinytuya json
+
 ```
 
 ## v1.3.1 - TuyaCloud API Support
