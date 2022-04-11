@@ -379,6 +379,9 @@ These devices uses AES encryption which is not available in the Python standard 
 
       command = scan        Scan local network for Tuya devices.
       command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
+      command = devices     Scan all devices listed in devices.json file.
+      command = snapshot    Scan devices listed in snapshot.json file.
+      command = json        Scan devices listed in snapshot.json file [JSON].
       max_retry             Maximum number of retries to find Tuya devices [Default=15]
       -nocolor              Disable color text output.
       -force                Force network scan for device IP addresses.
@@ -388,16 +391,28 @@ These devices uses AES encryption which is not available in the Python standard 
 ### Scan Tool 
 The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
 
-You can run the scanner from the command line using this:
+You can run the scanner from the command line using these interactive commands:
   ```bash
-  python -m tinytuya
+  # Listen for Tuya Devices and match to devices.json if available
+  python -m tinytuya scan
+
+  # The above creates a snapshot.json file with IP addresses for devices
+  # You can use this command to get a rapid poll of status of all devices
+  python -m tinytuya snapshot
+
+  # The sames thing as above but with a non-interactive JSON response
+  python -m tinytuya json
+
+  # List all register devices discovered from Wizard and poll them
+  python -m tinytuya devices
+
   ```
 
 By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
 
   ```bash
   # command line
-  python -m tinytuya 50
+  python -m tinytuya scan 50
   ```
 
   ```python
