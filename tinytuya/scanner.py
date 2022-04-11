@@ -668,6 +668,9 @@ def snapshotjson():
         with open(SNAPSHOTFILE) as json_file:
             data = json.load(json_file)
     except:
+        current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
+        output = json.dumps(current, indent=4) 
+        print(output)
         return
 
     devices = sorted(data["devices"], key=lambda x: x['name'])
