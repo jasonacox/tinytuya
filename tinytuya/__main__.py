@@ -38,6 +38,10 @@ for i in sys.argv:
         force = True
     elif(i.lower() == "snapshot"):
         state = 2
+    elif(i.lower() == "devices"):
+        state = 3
+    elif(i.lower() == "json"):
+        state = 4
     else:
         try:
             retries = int(i)
@@ -45,7 +49,7 @@ for i in sys.argv:
         except:
             state = 10
 
-# State 0 = Run Scan
+# State 0 = Run Network Scan
 if(state == 0):
     if(retriesprovided):
         scanner.scan(maxretry=retries, color=color, forcescan=force)
@@ -59,9 +63,20 @@ if(state == 1):
     else:
         wizard.wizard(color=color, forcescan=force)
 
-# State 2 = Run Snapshot Display
+# State 2 = Snapshot Display and Scan
 if(state == 2):
     scanner.snapshot(color=color)
+
+# State 3 = Scan All Devices
+if(state == 3):
+    if(retriesprovided):
+        scanner.alldevices(color=color, retries=retries)
+    else:
+        scanner.alldevices(color=color)
+
+# State 4 = Scan All Devices
+if(state == 4):
+    scanner.snapshotjson()
 
 # State 10 = Show Usage
 if(state == 10):
@@ -71,7 +86,9 @@ if(state == 10):
     print("")
     print("      command = scan        Scan local network for Tuya devices.")
     print("      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.")
+    print("      command = devices     Scan all devices listed in devices.json file.")
     print("      command = snapshot    Scan devices listed in snapshot.json file.")
+    print("      command = json        Scan devices listed in snapshot.json file [JSON].")
     print("      max_retry             Maximum number of retries to find Tuya devices [Default=15]")
     print("      -nocolor              Disable color text output.")
     print("      -force                Force network scan for device IP addresses.")
