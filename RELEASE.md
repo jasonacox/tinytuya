@@ -15,9 +15,9 @@
 * Add wizard `-force` option to perform network scan for device IP addresses (Issue #117)
 * Separated scan functions into `scanner.py` file.
 * NEW: Added command line functions:
-    * devices - Display and poll all registered devices for status (using devices.json). This will force a network scan for IP address changes and will create snapshot.json.
-    * snapshot - Display and poll all devices as listed snapshot.json. This assume IP address are the same as the last snapshot.
-    * json - Same as snapshot but respond with a JSON payload.
+    * `devices` - Display and poll all registered devices for status (using devices.json). This will force a network scan for IP address changes and will create snapshot.json.
+    * `snapshot` - Display and poll all devices as listed snapshot.json. This assume IP address are the same as the last snapshot.
+    * `json` - Same as snapshot but respond with a JSON payload.
 
 ```bash
 # Run wizard using brute force scan for IP addresses
