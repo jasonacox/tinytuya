@@ -132,12 +132,20 @@ else:
     log.debug("Using PyCrypto %r", Crypto.version_info)
     log.debug("Using PyCrypto from %r", Crypto.__file__)
 
-# Globals for Scanning
-MAXCOUNT = 15   # How many tries before stopping
-UDPPORT = 6666  # Tuya 3.1 UDP Port
-UDPPORTS = 6667 # Tuya 3.3 encrypted UDP Port
-TCPPORT = 6668  # Tuya TCP Local Port
-TIMEOUT = 3.0   # Seconds to wait for a broadcast
+# Globals Network Settings
+MAXCOUNT = 15       # How many tries before stopping
+UDPPORT = 6666      # Tuya 3.1 UDP Port
+UDPPORTS = 6667     # Tuya 3.3 encrypted UDP Port
+TCPPORT = 6668      # Tuya TCP Local Port
+TIMEOUT = 3.0       # Seconds to wait for a broadcast
+TCPTIMEOUT = 0.4    # Seconds to wait for socket open for scanning
+DEFAULT_NETWORK = '192.168.0.0/24'
+
+# Configuration Files
+CONFIGFILE = 'tinytuya.json'
+DEVICEFILE = 'devices.json'
+RAWFILE = 'tuya-raw.json'
+SNAPSHOTFILE = 'snapshot.json'
 
 # Tuya Command Types
 UDP = 0  # HEAT_BEAT_CMD
