@@ -308,6 +308,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             suffix = dim + ", MAC = " + mac + ""
             if verbose:
                 if dname == "":
+                    dname = gwId
                     devicename = "Unknown v%s%s Device%s" % (normal, version, dim)
                 else:
                     devicename = normal + dname + dim
@@ -394,24 +395,41 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 devices[ip]["key"] = dkey
             if mac != "":
                 devices[ip]["mac"] = mac
+            devices[ip]["id"] = gwId
+            devices[ip]["ver"] = version
         else:
             if version == "3.1":
                 count = count + 1
             else:
                 counts = counts + 1
 
+    # Ensure devices dictionary has superset of all devices found
+    for ip in ip_list:
+        devices[ip]["mac"] = ip_list[ip]
     # Create dictionary by id
     ids = {}
     for device in devices:
         id=devices[device]['gwId']
         ids[id] = devices[device]
+    # Ensure dictionary by id is superset
+    for device in tuyadevices:
+        try:
+            id = device["id"]
+            ids[id]["name"] = device["name"]
+            ids[id]["key"] = device["key"]
+            ids[id]["mac"] = device["mac"]
+        except:
+            pass
     if verbose:
         print(
             "                    \n%sScan Complete!  Found %s devices."
             % (normal, len(devices))
         )
-        # Save polling data snapshot
-        current = {'timestamp' : time.time(), 'devices' : devices, 'ids' : ids}
+        # Save polling data into snapshot format
+        devicesarray = []
+        for item in devices:
+            devicesarray.append(devices[item])
+        current = {'timestamp' : time.time(), 'devices' : devicesarray, 'ids' : ids}
         output = json.dumps(current, indent=4) 
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE + "\n")
         with open(SNAPSHOTFILE, "w") as outfile:
@@ -424,6 +442,111 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         return ids
     else:
         return devices
+
+
+# Scan Devices in tuyascan.json
+def snapshot(color=True):
+    """Uses snapshot.json to scan devices
+
+    Parameters:
+        color = True or False, print output in color [Default: True]
+    """
+    # Terminal formatting
+    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+
+    print(
+        "\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"
+        % (bold, normal, dim, tinytuya.__version__)
+    )
+
+    try:
+        with open(SNAPSHOTFILE) as json_file:
+            data = json.load(json_file)
+    except:
+        print("%s ERROR: Missing %s file\n" % (alert, SNAPSHOTFILE))
+        return
+
+    print("%sLoaded %s - %d devices:\n" % (dim, SNAPSHOTFILE, len(data["ids"])))
+
+    # Print a table with all devices
+    table = []
+    print("%-25s %-24s %-16s %-17s %-5s" % ("Name","ID", "IP","Key","Version"))
+    for id in sorted(data["devices"], key=lambda x: x['name']):
+        device = id # data["ids"][id]
+        print("%-25.25s %-24s %-16s %-17s %-5s" % (
+            device["name"],
+            device["id"],
+            device["ip"],
+            device["key"],
+            device["ver"]))
+
+    devices = sorted(data["devices"], key=lambda x: x['name'])
+
+    """
+    # Print status of everything
+    for item in data["devices"]:
+        print("\nDevice: %s" % item["name"])
+        d = tinytuya.OutletDevice(item["id"], item["ip"], item["key"])
+        d.set_version(float(item["ver"]))
+        status = d.status()  
+        print(status)
+
+    """
+
+    # Find out if we should poll all devices
+    answer = input(subbold + '\nPoll local devices? ' +
+                   normal + '(Y/n): ')
+    if(answer[0:1].lower() != 'n'):
+        print("")
+        print("%sPolling %s local devices from last snapshot..." % (normal, len(devices)))
+        for i in devices:
+            item = {}
+            name = i['name']
+            ip = i['ip']
+            ver = i['ver']
+            item['name'] = name
+            item['ip'] = ip
+            item['ver'] = ver
+            item['id'] = i['id']
+            item['key'] = i['key']
+            if (ip == 0):
+                print("    %s[%s] - %s%s - %sError: No IP found%s" %
+                      (subbold, name, dim, ip, alert, normal))
+            else:
+                try:
+                    d = tinytuya.OutletDevice(i['id'], ip, i['key'])
+                    if ver == "3.3":
+                        d.set_version(3.3)
+                    data = d.status()
+                    if 'dps' in data:
+                        item['dps'] = data
+                        state = alertdim + "Off" + dim
+                        try:
+                            if '1' in data['dps'] or '20' in data['dps']:
+                                if '1' in data['dps']:
+                                        if data['dps']['1'] == True:
+                                            state = bold + "On" + dim
+                                if '20' in data['dps']:
+                                        if data['dps']['20'] == True:
+                                            state = bold + "On" + dim
+                                print("    %s[%s] - %s%s - %s - DPS: %r" %
+                                    (subbold, name, dim, ip, state, data['dps']))
+                            else:
+                                print("    %s[%s] - %s%s - DPS: %r" %
+                                    (subbold, name, dim, ip, data['dps']))
+                        except:
+                            print("    %s[%s] - %s%s - %sNo Response" %
+                                  (subbold, name, dim, ip, alertdim))
+                    else:
+                        print("    %s[%s] - %s%s - %sNo Response" %
+                              (subbold, name, dim, ip, alertdim))
+                except:
+                    print("    %s[%s] - %s%s - %sNo Response" %
+                          (subbold, name, dim, ip, alertdim))
+        # for loop
+    # if poll
+    print("\nDone.\n")
+    return
 
 
 if __name__ == '__main__':

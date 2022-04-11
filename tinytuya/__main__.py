@@ -36,12 +36,14 @@ for i in sys.argv:
         color = False
     elif(i.lower() == "-force"):
         force = True
+    elif(i.lower() == "snapshot"):
+        state = 2
     else:
         try:
             retries = int(i)
             retriesprovided = True
         except:
-            state = 2
+            state = 10
 
 # State 0 = Run Scan
 if(state == 0):
@@ -57,14 +59,19 @@ if(state == 1):
     else:
         wizard.wizard(color=color, forcescan=force)
 
-# State 2 = Show Usage
+# State 2 = Run Snapshot Display
 if(state == 2):
+    scanner.snapshot(color=color)
+
+# State 10 = Show Usage
+if(state == 10):
     print("TinyTuya [%s]\n" % (tinytuya.version))
     print("Usage:\n")
     print("    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]")
     print("")
     print("      command = scan        Scan local network for Tuya devices.")
     print("      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.")
+    print("      command = snapshot    Scan devices listed in snapshot.json file.")
     print("      max_retry             Maximum number of retries to find Tuya devices [Default=15]")
     print("      -nocolor              Disable color text output.")
     print("      -force                Force network scan for device IP addresses.")
