@@ -44,16 +44,16 @@ try:
 except NameError:
     pass
 
-# Get Configuration Data
-CONFIGFILE = 'tinytuya.json'
-DEVICEFILE = 'devices.json'
-RAWFILE = 'tuya-raw.json'
-SNAPSHOTFILE = 'snapshot.json'
+# Configuration Files
+DEVICEFILE = tinytuya.DEVICEFILE
+SNAPSHOTFILE = tinytuya.SNAPSHOTFILE
+CONFIGFILE = tinytuya.CONFIGFILE
+RAWFILE = tinytuya.RAWFILE
 
-# Defaults
-DEFAULT_NETWORK = '192.168.0.0/24'
-TCPTIMEOUT = 0.4
-TCPPORT = tinytuya.TCPPORT
+# Global Network Configs
+DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
+TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
+TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 
 # Helper Functions
 def getmyIP():
