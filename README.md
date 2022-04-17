@@ -29,19 +29,16 @@ This python module controls and reads state of [Tuya](https://en.tuya.com/) comp
 
 NOTE: This module requires the devices to have already been **activated** by Smart Life App.
 
-## TinyTuya Setup  
+## TinyTuya Installation  
 
-Install pip and python modules if you haven't already.
+TinyTuya supports python versions 2.7 and 3.x (recommended). You can install it using the python pip package manager ([see here](https://pip.pypa.io/en/stable/installation/)):
 
 ```bash
-# Install PIP
- sudo apt-get install python-crypto python-pip  # for some RPi or Linux systems
+  # Install TinyTuya
+  python -m pip install tinytuya
+```
 
- # Install TinyTuya
- python -m pip install tinytuya
- ```
-
-The PyPI module will attempt to install `pycryptodome` if you don't have it. The modules `pycrypto`, `Crypto` or `pyaes` could be used instead.
+Pip will attempt to install `pycryptodome` and `requests` if not already installed. The modules `pycrypto`, `Crypto` or `pyaes` could be used instead.
 
 ## Tuya Device Preparation
 
