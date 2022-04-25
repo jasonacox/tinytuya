@@ -63,7 +63,7 @@ def getmyIP():
     s.close()
     return r
 
-def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorithm=True, body=None, headers=None):
+def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorithm=True, body=None, headers=None, version="1.0"):
     """Tuya IoT Platform Data Access
 
     Parameters:
@@ -110,7 +110,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
         urlhost = "openapi.tuyain.com"      # India Datacenter
 
     # Build URL
-    url = "https://%s/v1.0/%s" % (urlhost, uri)
+    url = "https://%s/v%s/%s" % (urlhost, version, uri)
 
     # Build Header
     now = int(time.time()*1000)
