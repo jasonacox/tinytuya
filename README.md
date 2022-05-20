@@ -499,11 +499,18 @@ d.set_value(25, '010e0d0000000000000003e803e8')
 |19|Power|integer|0-50000|W|
 |20|Voltage|integer|0-5000|V|
 |21|Test Bit|integer|0-5|n/a|
-|22|Voltage coe|integer|0-1000000||
-|23|Current coe|integer|0-1000000||
-|24|Power coe|integer|0-1000000||
-|25|Electricity coe|integer|0-1000000||
+|22|Voltage coeff.|integer|0-1000000||
+|23|Current coeff.|integer|0-1000000||
+|24|Power coeff.|integer|0-1000000||
+|25|Electricity coeff.|integer|0-1000000||
 |26|Fault|fault|ov_cr||
+|38|Power-on state setting|enum|off, on, memory||
+|39|Overcharge Switch|bool|True/False||
+|40|Indicator status setting|enum|none, on, relay, pos||
+|41|Child Lock|bool|True/False||
+|42|UNKNOWN||||
+|43|UNKNOWN||||
+|44|UNKNOWN||||
 
 #### Version 3.3 - Dimmer Switch
 | DP ID        | Function Point | Type        | Range       | Units |
