@@ -26,21 +26,21 @@ retriesprovided = False
 force = False
 
 for i in sys.argv:
-    if(i==sys.argv[0]):
+    if i==sys.argv[0]:
         continue
-    if(i.lower() == "wizard"):
+    if i.lower() == "wizard":
         state = 1
-    elif(i.lower() == "scan"):
+    elif i.lower() == "scan":
         state = 0
-    elif(i.lower() == "-nocolor"):
+    elif i.lower() == "-nocolor":
         color = False
-    elif(i.lower() == "-force"):
+    elif i.lower() == "-force":
         force = True
-    elif(i.lower() == "snapshot"):
+    elif i.lower() == "snapshot":
         state = 2
-    elif(i.lower() == "devices"):
+    elif i.lower() == "devices":
         state = 3
-    elif(i.lower() == "json"):
+    elif i.lower() == "json":
         state = 4
     else:
         try:
@@ -50,36 +50,36 @@ for i in sys.argv:
             state = 10
 
 # State 0 = Run Network Scan
-if(state == 0):
-    if(retriesprovided):
+if state == 0:
+    if retriesprovided:
         scanner.scan(maxretry=retries, color=color, forcescan=force)
     else:
         scanner.scan(color=color, forcescan=force)
 
 # State 1 = Run Setup Wizard
-if(state == 1):
-    if(retriesprovided):
+if state == 1:
+    if retriesprovided:
         wizard.wizard(color=color, retries=retries, forcescan=force)
     else:
         wizard.wizard(color=color, forcescan=force)
 
 # State 2 = Snapshot Display and Scan
-if(state == 2):
+if state == 2:
     scanner.snapshot(color=color)
 
 # State 3 = Scan All Devices
-if(state == 3):
-    if(retriesprovided):
+if state == 3:
+    if retriesprovided:
         scanner.alldevices(color=color, retries=retries)
     else:
         scanner.alldevices(color=color)
 
 # State 4 = Scan All Devices
-if(state == 4):
+if state == 4:
     scanner.snapshotjson()
 
 # State 10 = Show Usage
-if(state == 10):
+if state == 10:
     print("TinyTuya [%s]\n" % (tinytuya.version))
     print("Usage:\n")
     print("    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]")

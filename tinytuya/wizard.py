@@ -99,15 +99,15 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     # Set hostname based on apiRegion
     apiRegion = apiRegion.lower()
     urlhost = "openapi.tuyacn.com"          # China Data Center
-    if(apiRegion == "us"):
+    if apiRegion == "us":
         urlhost = "openapi.tuyaus.com"      # Western America Data Center
-    if(apiRegion == "us-e"):
+    if apiRegion == "us-e":
         urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-    if(apiRegion == "eu"):
+    if apiRegion == "eu":
         urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-    if(apiRegion == "eu-w"):
+    if apiRegion == "eu-w":
         urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-    if(apiRegion == "in"):
+    if apiRegion == "in":
         urlhost = "openapi.tuyain.com"      # India Datacenter
 
     # Build URL
@@ -116,7 +116,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     # Build Header
     now = int(time.time()*1000)
     headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-    if(token==None):
+    if token==None:
         payload = apiKey + str(now)
         headers['secret'] = apiSecret
     else:
@@ -142,7 +142,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     headers['t'] = str(now)
     headers['sign_method'] = 'HMAC-SHA256'
 
-    if(token != None):
+    if token != None:
         headers['access_token'] = token
 
     # Get Token
@@ -155,7 +155,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
         except:
             print("Failed to get valid JSON response")
 
-    return(response_dict)
+    return response_dict
 
 def wizard(color=True, retries=None, forcescan=False):
     """
@@ -210,7 +210,7 @@ def wizard(color=True, retries=None, forcescan=False):
         else:
             print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
-    if(config['apiKey'] != '' and config['apiSecret'] != '' and
+    if (config['apiKey'] != '' and config['apiSecret'] != '' and
             config['apiRegion'] != '' and config['apiDeviceID'] != ''):
         needconfigs = False
         print("    " + subbold + "Existing settings:" + dim +
@@ -220,10 +220,10 @@ def wizard(color=True, retries=None, forcescan=False):
         print('')
         answer = input(subbold + '    Use existing credentials ' +
                        normal + '(Y/n): ')
-        if(answer[0:1].lower() == 'n'):
+        if answer[0:1].lower() == 'n':
             needconfigs = True
 
-    if(needconfigs):
+    if needconfigs:
         # Ask user for config settings
         print('')
         config['apiKey'] = input(subbold + "    Enter " + bold + "API Key" + subbold +
@@ -359,9 +359,9 @@ def wizard(color=True, retries=None, forcescan=False):
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
+    if answer[0:1].lower() != 'n':
         # Set retries based on number of devices if undefined
-        if(retries == None):
+        if retries == None:
             retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
 
         # Scan network for devices and provide polling data
@@ -374,7 +374,7 @@ def wizard(color=True, retries=None, forcescan=False):
         def getIP(d, gwid):
             for ip in d:
                 if 'gwId' in d[ip]:
-                    if (gwid == d[ip]['gwId']):
+                    if gwid == d[ip]['gwId']:
                         return (ip, d[ip]['version'])
             return (0, 0)
 
@@ -389,7 +389,7 @@ def wizard(color=True, retries=None, forcescan=False):
             item['ver'] = ver
             item['id'] = i['id']
             item['key'] = i['key']
-            if (ip == 0):
+            if ip == 0:
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
             else:

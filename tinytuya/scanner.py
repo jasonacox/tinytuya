@@ -483,7 +483,7 @@ def snapshot(color=True):
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
+    if answer[0:1].lower() != 'n':
         print("")
         print("%sPolling %s local devices from last snapshot..." % (normal, len(devices)))
         for i in devices:
@@ -499,7 +499,7 @@ def snapshot(color=True):
             item['ver'] = ver
             item['id'] = i['id']
             item['key'] = i['key']
-            if (ip == 0):
+            if ip == 0:
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
             else:
@@ -576,9 +576,9 @@ def alldevices(color=True, retries=None):
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
+    if answer[0:1].lower() != 'n':
         # Set retries based on number of devices if undefined
-        if(retries == None):
+        if retries == None:
             retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
 
         # Scan network for devices and provide polling data
@@ -591,7 +591,7 @@ def alldevices(color=True, retries=None):
         def getIP(d, gwid):
             for ip in d:
                 if 'gwId' in d[ip]:
-                    if (gwid == d[ip]['gwId']):
+                    if gwid == d[ip]['gwId']:
                         return (ip, d[ip]['version'])
             return (0, 0)
 
@@ -609,7 +609,7 @@ def alldevices(color=True, retries=None):
             item['key'] = i['key']
             if "mac" in i:
                 item['mac'] = i['mac']
-            if (ip == 0):
+            if ip == 0:
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
             else:
@@ -689,7 +689,7 @@ def snapshotjson():
         item['key'] = i['key']
         if "mac" in i:
             item['mac'] = i['mac']
-        if (ip == 0):
+        if ip == 0:
             item['error'] = "No IP"
         else:
             try:

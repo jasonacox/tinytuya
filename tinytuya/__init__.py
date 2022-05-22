@@ -1489,7 +1489,7 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature in percent (0-100)
         """
         # Brightness
-        if not (0 <= brightness <= 100):
+        if not 0 <= brightness <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_white_percentage: Brightness percentage needs to be between 0 and 100.",
@@ -1501,7 +1501,7 @@ class BulbDevice(Device):
             b = int(10 + (1000 - 10) * brightness / 100)
 
         # Colourtemp
-        if not (0 <= colourtemp <= 100):
+        if not 0 <= colourtemp <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_white_percentage: Colourtemp percentage needs to be between 0 and 100.",
@@ -1530,11 +1530,11 @@ class BulbDevice(Device):
             brightness = 255
             if self.bulb_type == "B":
                 brightness = 1000
-        if self.bulb_type == "A" and not (25 <= brightness <= 255):
+        if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
                 ERR_RANGE, "set_white: The brightness needs to be between 25 and 255."
             )
-        if self.bulb_type == "B" and not (10 <= brightness <= 1000):
+        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
             return error_json(
                 ERR_RANGE, "set_white: The brightness needs to be between 10 and 1000."
             )
@@ -1542,12 +1542,12 @@ class BulbDevice(Device):
         # Colourtemp (default Min)
         if colourtemp < 0:
             colourtemp = 0
-        if self.bulb_type == "A" and not (0 <= colourtemp <= 255):
+        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_white: The colour temperature needs to be between 0 and 255.",
             )
-        if self.bulb_type == "B" and not (0 <= colourtemp <= 1000):
+        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_white: The colour temperature needs to be between 0 and 1000.",
@@ -1572,7 +1572,7 @@ class BulbDevice(Device):
         Args:
             brightness(int): Value for the brightness in percent (0-100)
         """
-        if not (0 <= brightness <= 100):
+        if not 0 <= brightness <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_brightness_percentage: Brightness percentage needs to be between 0 and 100.",
@@ -1591,12 +1591,12 @@ class BulbDevice(Device):
         Args:
             brightness(int): Value for the brightness (25-255).
         """
-        if self.bulb_type == "A" and not (25 <= brightness <= 255):
+        if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_brightness: The brightness needs to be between 25 and 255.",
             )
-        if self.bulb_type == "B" and not (10 <= brightness <= 1000):
+        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_brightness: The brightness needs to be between 10 and 1000.",
@@ -1639,7 +1639,7 @@ class BulbDevice(Device):
         Args:
             colourtemp(int): Value for the colour temperature in percentage (0-100).
         """
-        if not (0 <= colourtemp <= 100):
+        if not 0 <= colourtemp <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.",
@@ -1662,12 +1662,12 @@ class BulbDevice(Device):
             return error_json(
                 ERR_FUNCTION, "set_colourtemp: Device does not support colortemp."
             )
-        if self.bulb_type == "A" and not (0 <= colourtemp <= 255):
+        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp: The colour temperature needs to be between 0 and 255.",
             )
-        if self.bulb_type == "B" and not (0 <= colourtemp <= 1000):
+        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp: The colour temperature needs to be between 0 and 1000.",
@@ -1778,7 +1778,7 @@ def termcolor(color=True):
         cyan = "\033[0m\033[36m"
         red = "\033[0m\033[31m"
         yellow = "\033[0m\033[33m"
-    return(bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow)
+    return bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow
 
 
 # Scan function shortcut
@@ -1890,15 +1890,15 @@ class Cloud(object):
             apiRegion = self.apiRegion
         self.apiRegion = apiRegion.lower()
         self.urlhost = "openapi.tuyacn.com"          # China Data Center
-        if(self.apiRegion == "us"):
+        if self.apiRegion == "us":
             self.urlhost = "openapi.tuyaus.com"      # Western America Data Center
-        if(self.apiRegion == "us-e"):
+        if self.apiRegion == "us-e":
             self.urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-        if(self.apiRegion == "eu"):
+        if self.apiRegion == "eu":
             self.urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-        if(self.apiRegion == "eu-w"):
+        if self.apiRegion == "eu-w":
             self.urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-        if(self.apiRegion == "in"):
+        if self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False):
@@ -1916,7 +1916,7 @@ class Cloud(object):
             action = 'GET'
         now = int(time.time()*1000)
         headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-        if(self.token==None):
+        if self.token==None:
             payload = self.apiKey + str(now)
             headers['secret'] = self.apiSecret
         else:
@@ -1943,7 +1943,7 @@ class Cloud(object):
         headers['t'] = str(now)
         headers['sign_method'] = 'HMAC-SHA256'
 
-        if(self.token != None):
+        if self.token != None:
             headers['access_token'] = self.token
 
         # Send Request to Cloud and Get Response
@@ -1982,7 +1982,7 @@ class Cloud(object):
                     "Cloud _tuyaplatform() invalid response: %r" % response.content,
                 )
         # Check to see if token is expired
-        return(response_dict)
+        return response_dict
 
     def _gettoken(self):
         # Get Oauth Token from tuyaPlatform
@@ -1996,7 +1996,7 @@ class Cloud(object):
                 )
 
         self.token = response_dict['result']['access_token']
-        return(self.token)
+        return self.token
 
     def _getuid(self, deviceid=None):
         # Get user ID (UID) for deviceid
@@ -2014,7 +2014,7 @@ class Cloud(object):
             )
             return None
         uid = response_dict['result']['uid']
-        return(uid)
+        return uid
 
     def getdevices(self, verbose=False):
         """
@@ -2033,7 +2033,7 @@ class Cloud(object):
         json_data = self._tuyaplatform(uri)
 
         if verbose:
-            return(json_data)
+            return json_data
         else:
             # Filter to only Name, ID and Key
             tuyadevices = []
@@ -2043,7 +2043,7 @@ class Cloud(object):
                 item['id'] = i['id']
                 item['key'] = i['local_key']
                 tuyadevices.append(item)
-            return(tuyadevices)
+            return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
         if deviceid is None:
@@ -2058,25 +2058,25 @@ class Cloud(object):
             log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
+        return response_dict
 
     def getstatus(self, deviceid=None):
         """
         Get the status of the device.
         """
-        return(self._getdevice('status', deviceid))
+        return self._getdevice('status', deviceid)
 
     def getfunctions(self, deviceid=None):
         """
         Get the functions of the device.
         """
-        return(self._getdevice('functions', deviceid))
+        return self._getdevice('functions', deviceid)
 
     def getproperties(self, deviceid=None):
         """
         Get the properties of the device.
         """
-        return(self._getdevice('specification', deviceid))
+        return self._getdevice('specification', deviceid)
 
     def getdps(self, deviceid=None):
         """
@@ -2094,7 +2094,7 @@ class Cloud(object):
             log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
+        return response_dict
 
     def sendcommand(self, deviceid=None, commands=None):
         """
@@ -2112,4 +2112,4 @@ class Cloud(object):
             log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
+        return response_dict
