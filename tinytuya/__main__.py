@@ -8,7 +8,7 @@
 
  Run TinyTuya Setup Wizard:
     python -m tinytuya wizard
- This network scan will run if calling this module via command line:  
+ This network scan will run if calling this module via command line:
     python -m tinytuya <max_retry>
 
 """

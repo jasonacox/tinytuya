@@ -64,7 +64,7 @@
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
-    
+
     Cloud
         setregion(apiRegion)
         getdevices(verbose=False)
@@ -121,7 +121,7 @@ __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
 # Uncomment the following to set debug mode or call set_debug()
-# logging.basicConfig(level=logging.DEBUG)  
+# logging.basicConfig(level=logging.DEBUG)
 
 log.debug("%s version %s", __name__, __version__)
 log.debug("Python %s on %s", sys.version, sys.platform)
@@ -1854,7 +1854,7 @@ class Cloud(object):
             * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
             * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
 
-        REFERENCE: 
+        REFERENCE:
             * https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
             * https://iot.tuya.com/cloud/products/detail
         """
@@ -1876,8 +1876,8 @@ class Cloud(object):
                 with open(self.CONFIGFILE) as f:
                     config = json.load(f)
                     self.apiRegion = config['apiRegion']
-                    self.apiKey = config['apiKey'] 
-                    self.apiSecret = config['apiSecret'] 
+                    self.apiKey = config['apiKey']
+                    self.apiSecret = config['apiSecret']
                     self.apiDeviceID = config['apiDeviceID']
             except:
                 return error_json(
@@ -1888,7 +1888,7 @@ class Cloud(object):
         self.setregion(apiRegion)
         # Attempt to connect to cloud and get token
         self.token = self._gettoken()
-    
+
     def setregion(self, apiRegion=None):
         # Set hostname based on apiRegion
         if apiRegion is None:
@@ -1908,7 +1908,7 @@ class Cloud(object):
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False):
         """
-        Handle GET and POST requests to Tuya Cloud 
+        Handle GET and POST requests to Tuya Cloud
         """
         # Build URL and Header
         url = "https://%s/%s/%s" % (self.urlhost, ver, uri)
@@ -1926,15 +1926,15 @@ class Cloud(object):
             headers['secret'] = self.apiSecret
         else:
             payload = self.apiKey + self.token + str(now)
-        
+
         # If running the post 6-30-2021 signing algorithm update the payload to include it's data
-        if self.new_sign_algorithm: 
+        if self.new_sign_algorithm:
             payload += ('%s\n' % action +                                                # HTTPMethod
                 hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
                 ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
                             for key in headers.get("Signature-Headers", "").split(":")
                             if key in headers]) + '\n' +
-                '/' + url.split('//', 1)[-1].split('/', 1)[-1])  
+                '/' + url.split('//', 1)[-1].split('/', 1)[-1])
         # Sign Payload
         signature = hmac.new(
             self.apiSecret.encode('utf-8'),
@@ -1947,7 +1947,7 @@ class Cloud(object):
         headers['sign'] = signature
         headers['t'] = str(now)
         headers['sign_method'] = 'HMAC-SHA256'
-        
+
         if(self.token != None):
             headers['access_token'] = self.token
 
@@ -1962,7 +1962,7 @@ class Cloud(object):
                 "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
             )
             response = requests.post(url, headers=headers, data=body)
-        
+
         # Check to see if token is expired
         if "token invalid" in response.text:
             if recursive is True:
@@ -2020,11 +2020,11 @@ class Cloud(object):
             return None
         uid = response_dict['result']['uid']
         return(uid)
-        
+
     def getdevices(self, verbose=False):
         """
-        Return dictionary of all devices. 
-        If verbose is true, return full Tuya device 
+        Return dictionary of all devices.
+        If verbose is true, return full Tuya device
         details.
         """
         uid = self._getuid(self.apiDeviceID)
@@ -2064,28 +2064,28 @@ class Cloud(object):
                     "Error from Tuya Cloud: %r" % response_dict['msg'],
             )
         return(response_dict)
-    
+
     def getstatus(self, deviceid=None):
         """
-        Get the status of the device. 
+        Get the status of the device.
         """
         return(self._getdevice('status', deviceid))
 
     def getfunctions(self, deviceid=None):
         """
-        Get the functions of the device. 
+        Get the functions of the device.
         """
         return(self._getdevice('functions', deviceid))
 
     def getproperties(self, deviceid=None):
         """
-        Get the properties of the device. 
+        Get the properties of the device.
         """
         return(self._getdevice('specification', deviceid))
 
     def getdps(self, deviceid=None):
         """
-        Get the specifications including DPS IDs of the device. 
+        Get the specifications including DPS IDs of the device.
         """
         if deviceid is None:
             return error_json(

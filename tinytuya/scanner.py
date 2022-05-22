@@ -8,7 +8,7 @@ For more information see https://github.com/jasonacox/tinytuya
 
 Description
     Scan will scan the local network for Tuya devices and if a local devices.json is
-    present in the local directory, will use the Local KEYs to poll the devices for 
+    present in the local directory, will use the Local KEYs to poll the devices for
     status.
 
 """
@@ -21,7 +21,7 @@ import json
 import tinytuya
 from hashlib import md5
 import socket
-import ipaddress  
+import ipaddress
 import sys
 
 try:
@@ -57,7 +57,7 @@ TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
 UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
-TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout 
+TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 
 # Logging
 log = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def getmyIP():
     r = s.getsockname()[0]
     s.close()
     return r
-    
+
 
 # Scan function shortcut
 def scan(maxretry=None, color=True, forcescan=False):
@@ -165,8 +165,8 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     if forcescan:
         if not SCANLIBS:
             if verbose:
-                print(alert + 
-                    '    ERROR: force network scanning requested but not available - disabled.\n' 
+                print(alert +
+                    '    ERROR: force network scanning requested but not available - disabled.\n'
                     '           (Requires: pip install getmac)\n' + dim)
             forcescan = False
         else:
@@ -182,7 +182,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
 
     if forcescan:
         # Force Scan - Get list of all local ip addresses
-        try: 
+        try:
             # Fetch my IP address and assume /24 network
             ip = getmyIP()
             network = ipaddress.IPv4Interface(u''+ip+'/24').network
@@ -192,10 +192,10 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             ip = None
             log.debug("Unable to get local network, using default %r", network)
             if verbose:
-                print(alert + 
-                    'ERROR: Unable to get your IP address and network automatically.' 
+                print(alert +
+                    'ERROR: Unable to get your IP address and network automatically.'
                     '       (using %s)' % network + normal)
-        
+
         try:
             # Warn user of scan duration
             if verbose:
@@ -219,9 +219,9 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                     if verbose:
                         print(" Found Device [%s]" % mac)
                 a_socket.close()
-            
+
             if verbose:
-                print(dim + '\r      Done                           ' +normal + 
+                print(dim + '\r      Done                           ' +normal +
                             '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
 
         except:
@@ -424,7 +424,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 tmp["ip"] = 0
                 devicesarray.append(tmp)
         current = {'timestamp' : time.time(), 'devices' : devicesarray}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE + "\n")
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
@@ -467,7 +467,7 @@ def snapshot(color=True):
     print("%s%-25s %-24s %-16s %-17s %-5s" % (normal, "Name","ID", "IP","Key","Version"))
     print(dim)
     for id in sorted(data["devices"], key=lambda x: x['name']):
-        device = id 
+        device = id
         ver = ip = ""
         if "ver"  in device:
             ver = device["ver"]
@@ -476,7 +476,7 @@ def snapshot(color=True):
         name = device["name"]
         gwId = device["id"]
         key = device["key"]
-        print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" % 
+        print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" %
             (dim, name, cyan, gwId, subbold, ip, red, key, yellow, ver))
 
     devices = sorted(data["devices"], key=lambda x: x['name'])
@@ -568,10 +568,10 @@ def alldevices(color=True, retries=None):
         return
 
     print("%sLoaded %s - %d devices:" % (dim, DEVICEFILE, len(tuyadevices)))
-    
+
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
-    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4) 
+    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4)
     print(output)
 
     # Find out if we should poll all devices
@@ -649,7 +649,7 @@ def alldevices(color=True, retries=None):
 
         # Save polling data snapsot
         current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
@@ -669,7 +669,7 @@ def snapshotjson():
             data = json.load(json_file)
     except:
         current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(output)
         return
 
@@ -707,7 +707,7 @@ def snapshotjson():
         polling.append(item)
     # for loop
     current = {'timestamp' : time.time(), 'devices' : polling}
-    output = json.dumps(current, indent=4) 
+    output = json.dumps(current, indent=4)
     print(output)
     return
 

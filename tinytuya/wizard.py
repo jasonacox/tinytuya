@@ -7,9 +7,9 @@ Author: Jason A. Cox
 For more information see https://github.com/jasonacox/tinytuya
 
 Description
-    Setup Wizard will prompt the user for Tuya IoT Developer credentials and will gather all 
+    Setup Wizard will prompt the user for Tuya IoT Developer credentials and will gather all
     registered Device IDs and their Local KEYs.  It will save the credentials and the device
-    data in the tinytuya.json and devices.json configuration files respectively. The Wizard 
+    data in the tinytuya.json and devices.json configuration files respectively. The Wizard
     will then optionally scan the local devices for status.
 
     HOW to set up your Tuya IoT Developer account: iot.tuya.com:
@@ -69,7 +69,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     Parameters:
         * region     Tuya API Server Region: us, eu, cn, in, us-e, eu-w
         * apiKey     Tuya Platform Developer ID
-        * apiSecret  Tuya Platform Developer secret 
+        * apiSecret  Tuya Platform Developer secret
         * uri        Tuya Platform URI for this call
         * token      Tuya OAuth Token
 
@@ -120,14 +120,14 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
         headers['secret'] = apiSecret
     else:
         payload = apiKey + token + str(now)
-    
+
     # If running the post 6-30-2021 signing algorithm update the payload to include it's data
     if new_sign_algorithm: payload += ('GET\n' +                                                                # HTTPMethod
                                        hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
                                        ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
                                                 for key in headers.get("Signature-Headers", "").split(":")
                                                 if key in headers]) + '\n' +
-                                       '/' + url.split('//', 1)[-1].split('/', 1)[-1])  
+                                       '/' + url.split('//', 1)[-1].split('/', 1)[-1])
     # Sign Payload
     signature = hmac.new(
         apiSecret.encode('utf-8'),
@@ -140,7 +140,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     headers['sign'] = signature
     headers['t'] = str(now)
     headers['sign_method'] = 'HMAC-SHA256'
-    
+
     if(token != None):
         headers['access_token'] = token
 
@@ -194,7 +194,7 @@ def wizard(color=True, retries=None, forcescan=False):
     except:
         # First Time Setup
         pass
-    
+
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
@@ -202,8 +202,8 @@ def wizard(color=True, retries=None, forcescan=False):
 
     if forcescan:
         if not SCANLIBS:
-            print(alert + 
-                '    ERROR: force network scanning requested but not available - disabled.\n' 
+            print(alert +
+                '    ERROR: force network scanning requested but not available - disabled.\n'
                 '           (Requires: pip install getmac)\n' + dim)
             forcescan = False
         else:
@@ -264,7 +264,7 @@ def wizard(color=True, retries=None, forcescan=False):
 
     token = response_dict['result']['access_token']
 
-    # Get UID from sample Device ID 
+    # Get UID from sample Device ID
     uri = 'devices/%s' % DEVICEID
     response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
 
@@ -284,17 +284,17 @@ def wizard(color=True, retries=None, forcescan=False):
 
     if forcescan:
         # Force Scan - Get list of all local ip addresses
-        try: 
+        try:
             # Fetch my IP address and assume /24 network
             ip = getmyIP()
             network = ipaddress.IPv4Interface(u''+ip+'/24').network
         except:
             network = DEFAULT_NETWORK
             ip = None
-            print(alert + 
-                'ERROR: Unable to get your IP address and network automatically.\n' 
+            print(alert +
+                'ERROR: Unable to get your IP address and network automatically.\n'
                 '       (using %s)' % network + normal)
-        
+
         try:
             # Warn user of scan duration
             print("\n" + bold + "Scanning local network.  This may take a while..." + dim)
@@ -314,8 +314,8 @@ def wizard(color=True, retries=None, forcescan=False):
                     ip_list[ip] = mac
                     print(" Found Device [%s]" % mac)
                 a_socket.close()
-            
-            print(dim + '\r      Done                           ' +normal + 
+
+            print(dim + '\r      Done                           ' +normal +
                         '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
         except:
             print('\n' + alert + '    Error scanning network - Ignoring' + dim)
@@ -353,7 +353,7 @@ def wizard(color=True, retries=None, forcescan=False):
         with open(RAWFILE, "w") as outfile:
             outfile.write(json.dumps(json_data, indent=4))
     except:
-        print('\n\n' + bold + 'Unable to save raw file' + dim )  
+        print('\n\n' + bold + 'Unable to save raw file' + dim )
 
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
@@ -427,7 +427,7 @@ def wizard(color=True, retries=None, forcescan=False):
 
         # Save polling data snapsot
         current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
