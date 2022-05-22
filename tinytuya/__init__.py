@@ -1990,10 +1990,10 @@ class Cloud(object):
         response_dict = self._tuyaplatform('token?grant_type=1')
 
         if not response_dict['success']:
-                return error_json(
-                    ERR_CLOUDTOKEN,
-                    "Cloud _gettoken() failed: %r" % response_dict['msg'],
-                )
+            return error_json(
+                ERR_CLOUDTOKEN,
+                "Cloud _gettoken() failed: %r" % response_dict['msg'],
+            )
 
         self.token = response_dict['result']['access_token']
         return self.token

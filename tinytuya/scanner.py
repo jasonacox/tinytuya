@@ -514,11 +514,11 @@ def snapshot(color=True):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                        if data['dps']['1'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['1'] == True:
+                                        state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                        if data['dps']['20'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['20'] == True:
+                                        state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
                             else:
@@ -624,11 +624,11 @@ def alldevices(color=True, retries=None):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                        if data['dps']['1'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['1'] == True:
+                                        state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                        if data['dps']['20'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['20'] == True:
+                                        state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
                             else:
