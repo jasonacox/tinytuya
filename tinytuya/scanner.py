@@ -14,15 +14,14 @@ Description
 """
 # Modules
 from __future__ import print_function
-from audioop import add  # python 2.7 support
-import logging
-import time
-import json
-import tinytuya
-from hashlib import md5
-import socket
 import ipaddress
+import json
+import logging
+import socket
 import sys
+import time
+
+import tinytuya
 
 try:
     # Optional libraries required for forced scanning

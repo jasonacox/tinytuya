@@ -14,8 +14,8 @@
 """
 
 # Modules
-import tinytuya
 import sys
+import tinytuya
 from . import wizard
 from . import scanner
 

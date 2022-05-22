@@ -86,20 +86,21 @@
 
 # Modules
 from __future__ import print_function  # python 2.7 support
+import binascii
+from collections import namedtuple
+import colorsys
 import base64
+import hashlib
 from hashlib import md5
+import hmac
 import json
 import logging
 import socket
+import struct
 import sys
 import time
-import colorsys
-import binascii
-import struct
+
 import requests
-import hmac
-import hashlib
-from collections import namedtuple
 
 # Backward compatability for python2
 try:

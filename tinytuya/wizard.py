@@ -23,14 +23,15 @@ Credits
 """
 # Modules
 from __future__ import print_function
-import requests
-import time
 import hmac
 import hashlib
-import json
-import tinytuya
-import socket
 import ipaddress
+import json
+import socket
+import time
+
+import tinytuya
+
 try:
     from getmac import get_mac_address
     SCANLIBS = True
