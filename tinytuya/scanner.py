@@ -126,7 +126,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
             havekeys = True
-            log.debug("loaded=%s [%d devices]" % (DEVICEFILE, len(tuyadevices)))
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
             # If no maxretry value set, base it on number of devices
             if maxretry is None:
                 maxretry = len(tuyadevices) + tinytuya.MAXCOUNT
@@ -214,7 +214,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                     ip = "%s" % addr
                     mac = get_mac_address(ip=ip)
                     ip_list[ip] = mac
-                    log.debug("Found Device [%s]" % mac)
+                    log.debug("Found Device [%s]", mac)
                     if verbose:
                         print(" Found Device [%s]" % mac)
                 a_socket.close()
@@ -273,7 +273,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 result = result.decode()
 
             result = json.loads(result)
-            log.debug("Received valid UDP packet: %r" % result)
+            log.debug("Received valid UDP packet: %r", result)
 
             note = "Valid"
             ip = result["ip"]
@@ -285,7 +285,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
             result = {"ip": ip}
             note = "Unknown"
-            log.debug("Invalid UDP Packet: %r" % result)
+            log.debug("Invalid UDP Packet: %r", result)
 
         # check to see if we have seen this device before and add to devices array
         if tinytuya.appenddevice(result, devices) is False:
@@ -428,7 +428,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
 
-    log.debug("Scan complete with %s devices found" % len(devices))
+    log.debug("Scan complete with %s devices found", len(devices))
     clients.close()
     client.close()
     if byID:
@@ -558,7 +558,7 @@ def alldevices(color=True, retries=None):
         # Load defaults
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
-            log.debug("loaded=%s [%d devices]" % (DEVICEFILE, len(tuyadevices)))
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
             # If no maxretry value set, base it on number of devices
             if retries is None:
                 retries = len(tuyadevices) + tinytuya.MAXCOUNT

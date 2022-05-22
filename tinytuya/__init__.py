@@ -324,7 +324,7 @@ def set_debug(toggle=True, color=True):
         else:
             logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
         log.setLevel(logging.DEBUG)
-        log.debug("TinyTuya [%s]\n" % __version__)
+        log.debug("TinyTuya [%s]\n", __version__)
     else:
         log.setLevel(logging.NOTSET)
 
@@ -375,7 +375,7 @@ def error_json(number=None, payload=None):
         spayload = '""'
 
     vals = (error_codes[number], str(number), spayload)
-    log.debug("ERROR %s - %s - payload: %s" % vals)
+    log.debug("ERROR %s - %s - payload: %s", *vals)
 
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
@@ -518,16 +518,16 @@ class XenonDevice(object):
                 except socket.timeout as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d"
-                        % (retries, self.socketRetryLimit)
+                        "socket unable to connect - retry %d/%d",
+                        retries, self.socketRetryLimit
                     )
                     self.socket.close()
                     time.sleep(0.1)
                 except Exception as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d"
-                        % (retries, self.socketRetryLimit)
+                        "socket unable to connect - retry %d/%d",
+                        retries, self.socketRetryLimit
                     )
                     self.socket.close()
                     time.sleep(5)
@@ -586,10 +586,8 @@ class XenonDevice(object):
                     return None
                 retries = retries + 1
                 log.debug(
-                    "Timeout or exception in _send_receive() - retry "
-                    + str(retries)
-                    + "/"
-                    + str(self.socketRetryLimit)
+                    "Timeout or exception in _send_receive() - retry %s / %s",
+                    retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -597,9 +595,8 @@ class XenonDevice(object):
                         self.socket.close()
                         self.socket = None
                     log.debug(
-                        "Exceeded tinytuya retry limit ("
-                        + str(self.socketRetryLimit)
-                        + ")"
+                        "Exceeded tinytuya retry limit (%s)",
+                        self.socketRetryLimit
                     )
                     # timeout reached - return error
                     json_payload = error_json(
@@ -613,10 +610,8 @@ class XenonDevice(object):
                 # likely network or connection error
                 retries = retries + 1
                 log.debug(
-                    "Network connection error - retry "
-                    + str(retries)
-                    + "/"
-                    + str(self.socketRetryLimit)
+                    "Network connection error - retry %s/%s",
+                    retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -624,9 +619,8 @@ class XenonDevice(object):
                         self.socket.close()
                         self.socket = None
                     log.debug(
-                        "Exceeded tinytuya retry limit ("
-                        + str(self.socketRetryLimit)
-                        + ")"
+                        "Exceeded tinytuya retry limit (%s)",
+                        self.socketRetryLimit
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
@@ -690,7 +684,7 @@ class XenonDevice(object):
 
             log.debug("decrypted 3.3 payload=%r", payload)
             # Try to detect if device22 found
-            log.debug("payload type = %s" % type(payload))
+            log.debug("payload type = %s", type(payload))
             if not isinstance(payload, str):
                 try:
                     payload = payload.decode()
@@ -809,7 +803,7 @@ class XenonDevice(object):
         """
         if did is None:
             return (None, None)
-        log.debug("Listening for device %s on the network" % did)
+        log.debug("Listening for device %s on the network", did)
         # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -1347,7 +1341,7 @@ class BulbDevice(Device):
         else:
             # response has no dps
             self.bulb_type = "B"
-        log.debug("bulb type set to %s" % self.bulb_type)
+        log.debug("bulb type set to %s", self.bulb_type)
 
     def turn_on(self, switch=0):
         """Turn the device on"""
@@ -1956,11 +1950,11 @@ class Cloud(object):
         if action == 'GET':
             response = requests.get(url, headers=headers)
             log.debug(
-                "GET: response code=%d text=%s token=%s" % (response.status_code, response.text, self.token)
+                "GET: response code=%d text=%s token=%s", response.status_code, response.text, self.token
             )
         else:
             log.debug(
-                "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
+                "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
             )
             response = requests.post(url, headers=headers, data=body)
 
@@ -2016,7 +2010,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
             return None
         uid = response_dict['result']['uid']
@@ -2062,7 +2056,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return(response_dict)
 
@@ -2098,7 +2092,7 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return(response_dict)
 
@@ -2116,6 +2110,6 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return(response_dict)
