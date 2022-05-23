@@ -1013,13 +1013,16 @@ class Device(XenonDevice):
         log.debug("heartbeat received data=%r", data)
         return data
 
-    def updatedps(self, index=[1]):
+    def updatedps(self, index=None):
         """
         Request device to update index.
 
         Args:
             index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
         """
+        if index is None:
+            index = [1]
+
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
