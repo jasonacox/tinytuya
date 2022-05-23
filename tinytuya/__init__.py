@@ -64,7 +64,7 @@
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
-    
+
     Cloud
         setregion(apiRegion)
         getdevices(verbose=False)
@@ -86,20 +86,21 @@
 
 # Modules
 from __future__ import print_function  # python 2.7 support
+import binascii
+from collections import namedtuple
+import colorsys
 import base64
+import hashlib
 from hashlib import md5
+import hmac
 import json
 import logging
 import socket
+import struct
 import sys
 import time
-import colorsys
-import binascii
-import struct
+
 import requests
-import hmac
-import hashlib
-from collections import namedtuple
 
 # Backward compatability for python2
 try:
@@ -121,7 +122,7 @@ __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
 # Uncomment the following to set debug mode or call set_debug()
-# logging.basicConfig(level=logging.DEBUG)  
+# logging.basicConfig(level=logging.DEBUG)
 
 log.debug("%s version %s", __name__, __version__)
 log.debug("Python %s on %s", sys.version, sys.platform)
@@ -323,7 +324,7 @@ def set_debug(toggle=True, color=True):
         else:
             logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.DEBUG)
         log.setLevel(logging.DEBUG)
-        log.debug("TinyTuya [%s]\n" % __version__)
+        log.debug("TinyTuya [%s]\n", __version__)
     else:
         log.setLevel(logging.NOTSET)
 
@@ -374,7 +375,7 @@ def error_json(number=None, payload=None):
         spayload = '""'
 
     vals = (error_codes[number], str(number), spayload)
-    log.debug("ERROR %s - %s - payload: %s" % vals)
+    log.debug("ERROR %s - %s - payload: %s", *vals)
 
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
@@ -517,16 +518,16 @@ class XenonDevice(object):
                 except socket.timeout as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d"
-                        % (retries, self.socketRetryLimit)
+                        "socket unable to connect - retry %d/%d",
+                        retries, self.socketRetryLimit
                     )
                     self.socket.close()
                     time.sleep(0.1)
                 except Exception as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d"
-                        % (retries, self.socketRetryLimit)
+                        "socket unable to connect - retry %d/%d",
+                        retries, self.socketRetryLimit
                     )
                     self.socket.close()
                     time.sleep(5)
@@ -585,10 +586,8 @@ class XenonDevice(object):
                     return None
                 retries = retries + 1
                 log.debug(
-                    "Timeout or exception in _send_receive() - retry "
-                    + str(retries)
-                    + "/"
-                    + str(self.socketRetryLimit)
+                    "Timeout or exception in _send_receive() - retry %s / %s",
+                    retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -596,9 +595,8 @@ class XenonDevice(object):
                         self.socket.close()
                         self.socket = None
                     log.debug(
-                        "Exceeded tinytuya retry limit ("
-                        + str(self.socketRetryLimit)
-                        + ")"
+                        "Exceeded tinytuya retry limit (%s)",
+                        self.socketRetryLimit
                     )
                     # timeout reached - return error
                     json_payload = error_json(
@@ -612,10 +610,8 @@ class XenonDevice(object):
                 # likely network or connection error
                 retries = retries + 1
                 log.debug(
-                    "Network connection error - retry "
-                    + str(retries)
-                    + "/"
-                    + str(self.socketRetryLimit)
+                    "Network connection error - retry %s/%s",
+                    retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -623,9 +619,8 @@ class XenonDevice(object):
                         self.socket.close()
                         self.socket = None
                     log.debug(
-                        "Exceeded tinytuya retry limit ("
-                        + str(self.socketRetryLimit)
-                        + ")"
+                        "Exceeded tinytuya retry limit (%s)",
+                        self.socketRetryLimit
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
@@ -689,7 +684,7 @@ class XenonDevice(object):
 
             log.debug("decrypted 3.3 payload=%r", payload)
             # Try to detect if device22 found
-            log.debug("payload type = %s" % type(payload))
+            log.debug("payload type = %s", type(payload))
             if not isinstance(payload, str):
                 try:
                     payload = payload.decode()
@@ -808,7 +803,7 @@ class XenonDevice(object):
         """
         if did is None:
             return (None, None)
-        log.debug("Listening for device %s on the network" % did)
+        log.debug("Listening for device %s on the network", did)
         # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -1018,13 +1013,16 @@ class Device(XenonDevice):
         log.debug("heartbeat received data=%r", data)
         return data
 
-    def updatedps(self, index=[1]):
+    def updatedps(self, index=None):
         """
         Request device to update index.
 
         Args:
             index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
         """
+        if index is None:
+            index = [1]
+
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
@@ -1346,7 +1344,7 @@ class BulbDevice(Device):
         else:
             # response has no dps
             self.bulb_type = "B"
-        log.debug("bulb type set to %s" % self.bulb_type)
+        log.debug("bulb type set to %s", self.bulb_type)
 
     def turn_on(self, switch=0):
         """Turn the device on"""
@@ -1494,7 +1492,7 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature in percent (0-100)
         """
         # Brightness
-        if not (0 <= brightness <= 100):
+        if not 0 <= brightness <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_white_percentage: Brightness percentage needs to be between 0 and 100.",
@@ -1506,7 +1504,7 @@ class BulbDevice(Device):
             b = int(10 + (1000 - 10) * brightness / 100)
 
         # Colourtemp
-        if not (0 <= colourtemp <= 100):
+        if not 0 <= colourtemp <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_white_percentage: Colourtemp percentage needs to be between 0 and 100.",
@@ -1535,11 +1533,11 @@ class BulbDevice(Device):
             brightness = 255
             if self.bulb_type == "B":
                 brightness = 1000
-        if self.bulb_type == "A" and not (25 <= brightness <= 255):
+        if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
                 ERR_RANGE, "set_white: The brightness needs to be between 25 and 255."
             )
-        if self.bulb_type == "B" and not (10 <= brightness <= 1000):
+        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
             return error_json(
                 ERR_RANGE, "set_white: The brightness needs to be between 10 and 1000."
             )
@@ -1547,12 +1545,12 @@ class BulbDevice(Device):
         # Colourtemp (default Min)
         if colourtemp < 0:
             colourtemp = 0
-        if self.bulb_type == "A" and not (0 <= colourtemp <= 255):
+        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_white: The colour temperature needs to be between 0 and 255.",
             )
-        if self.bulb_type == "B" and not (0 <= colourtemp <= 1000):
+        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_white: The colour temperature needs to be between 0 and 1000.",
@@ -1577,7 +1575,7 @@ class BulbDevice(Device):
         Args:
             brightness(int): Value for the brightness in percent (0-100)
         """
-        if not (0 <= brightness <= 100):
+        if not 0 <= brightness <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_brightness_percentage: Brightness percentage needs to be between 0 and 100.",
@@ -1596,12 +1594,12 @@ class BulbDevice(Device):
         Args:
             brightness(int): Value for the brightness (25-255).
         """
-        if self.bulb_type == "A" and not (25 <= brightness <= 255):
+        if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_brightness: The brightness needs to be between 25 and 255.",
             )
-        if self.bulb_type == "B" and not (10 <= brightness <= 1000):
+        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_brightness: The brightness needs to be between 10 and 1000.",
@@ -1644,7 +1642,7 @@ class BulbDevice(Device):
         Args:
             colourtemp(int): Value for the colour temperature in percentage (0-100).
         """
-        if not (0 <= colourtemp <= 100):
+        if not 0 <= colourtemp <= 100:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.",
@@ -1667,12 +1665,12 @@ class BulbDevice(Device):
             return error_json(
                 ERR_FUNCTION, "set_colourtemp: Device does not support colortemp."
             )
-        if self.bulb_type == "A" and not (0 <= colourtemp <= 255):
+        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp: The colour temperature needs to be between 0 and 255.",
             )
-        if self.bulb_type == "B" and not (0 <= colourtemp <= 1000):
+        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
             return error_json(
                 ERR_RANGE,
                 "set_colourtemp: The colour temperature needs to be between 0 and 1000.",
@@ -1783,7 +1781,7 @@ def termcolor(color=True):
         cyan = "\033[0m\033[36m"
         red = "\033[0m\033[31m"
         yellow = "\033[0m\033[33m"
-    return(bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow)
+    return bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow
 
 
 # Scan function shortcut
@@ -1854,7 +1852,7 @@ class Cloud(object):
             * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
             * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
 
-        REFERENCE: 
+        REFERENCE:
             * https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
             * https://iot.tuya.com/cloud/products/detail
         """
@@ -1876,8 +1874,8 @@ class Cloud(object):
                 with open(self.CONFIGFILE) as f:
                     config = json.load(f)
                     self.apiRegion = config['apiRegion']
-                    self.apiKey = config['apiKey'] 
-                    self.apiSecret = config['apiSecret'] 
+                    self.apiKey = config['apiKey']
+                    self.apiSecret = config['apiSecret']
                     self.apiDeviceID = config['apiDeviceID']
             except:
                 return error_json(
@@ -1888,27 +1886,27 @@ class Cloud(object):
         self.setregion(apiRegion)
         # Attempt to connect to cloud and get token
         self.token = self._gettoken()
-    
+
     def setregion(self, apiRegion=None):
         # Set hostname based on apiRegion
         if apiRegion is None:
             apiRegion = self.apiRegion
         self.apiRegion = apiRegion.lower()
         self.urlhost = "openapi.tuyacn.com"          # China Data Center
-        if(self.apiRegion == "us"):
+        if self.apiRegion == "us":
             self.urlhost = "openapi.tuyaus.com"      # Western America Data Center
-        if(self.apiRegion == "us-e"):
+        if self.apiRegion == "us-e":
             self.urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-        if(self.apiRegion == "eu"):
+        if self.apiRegion == "eu":
             self.urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-        if(self.apiRegion == "eu-w"):
+        if self.apiRegion == "eu-w":
             self.urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-        if(self.apiRegion == "in"):
+        if self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False):
         """
-        Handle GET and POST requests to Tuya Cloud 
+        Handle GET and POST requests to Tuya Cloud
         """
         # Build URL and Header
         url = "https://%s/%s/%s" % (self.urlhost, ver, uri)
@@ -1921,20 +1919,20 @@ class Cloud(object):
             action = 'GET'
         now = int(time.time()*1000)
         headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-        if(self.token==None):
+        if self.token is None:
             payload = self.apiKey + str(now)
             headers['secret'] = self.apiSecret
         else:
             payload = self.apiKey + self.token + str(now)
-        
+
         # If running the post 6-30-2021 signing algorithm update the payload to include it's data
-        if self.new_sign_algorithm: 
+        if self.new_sign_algorithm:
             payload += ('%s\n' % action +                                                # HTTPMethod
                 hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
                 ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
                             for key in headers.get("Signature-Headers", "").split(":")
                             if key in headers]) + '\n' +
-                '/' + url.split('//', 1)[-1].split('/', 1)[-1])  
+                '/' + url.split('//', 1)[-1].split('/', 1)[-1])
         # Sign Payload
         signature = hmac.new(
             self.apiSecret.encode('utf-8'),
@@ -1947,22 +1945,22 @@ class Cloud(object):
         headers['sign'] = signature
         headers['t'] = str(now)
         headers['sign_method'] = 'HMAC-SHA256'
-        
-        if(self.token != None):
+
+        if self.token is not None:
             headers['access_token'] = self.token
 
         # Send Request to Cloud and Get Response
         if action == 'GET':
             response = requests.get(url, headers=headers)
             log.debug(
-                "GET: response code=%d text=%s token=%s" % (response.status_code, response.text, self.token)
+                "GET: response code=%d text=%s token=%s", response.status_code, response.text, self.token
             )
         else:
             log.debug(
-                "POST: URL=%s HEADERS=%s DATA=%s" % (url, headers, body),
+                "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
             )
             response = requests.post(url, headers=headers, data=body)
-        
+
         # Check to see if token is expired
         if "token invalid" in response.text:
             if recursive is True:
@@ -1987,7 +1985,7 @@ class Cloud(object):
                     "Cloud _tuyaplatform() invalid response: %r" % response.content,
                 )
         # Check to see if token is expired
-        return(response_dict)
+        return response_dict
 
     def _gettoken(self):
         # Get Oauth Token from tuyaPlatform
@@ -1995,13 +1993,13 @@ class Cloud(object):
         response_dict = self._tuyaplatform('token?grant_type=1')
 
         if not response_dict['success']:
-                return error_json(
-                    ERR_CLOUDTOKEN,
-                    "Cloud _gettoken() failed: %r" % response_dict['msg'],
-                )
+            return error_json(
+                ERR_CLOUDTOKEN,
+                "Cloud _gettoken() failed: %r" % response_dict['msg'],
+            )
 
         self.token = response_dict['result']['access_token']
-        return(self.token)
+        return self.token
 
     def _getuid(self, deviceid=None):
         # Get user ID (UID) for deviceid
@@ -2015,16 +2013,16 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
             return None
         uid = response_dict['result']['uid']
-        return(uid)
-        
+        return uid
+
     def getdevices(self, verbose=False):
         """
-        Return dictionary of all devices. 
-        If verbose is true, return full Tuya device 
+        Return dictionary of all devices.
+        If verbose is true, return full Tuya device
         details.
         """
         uid = self._getuid(self.apiDeviceID)
@@ -2038,7 +2036,7 @@ class Cloud(object):
         json_data = self._tuyaplatform(uri)
 
         if verbose:
-            return(json_data)
+            return json_data
         else:
             # Filter to only Name, ID and Key
             tuyadevices = []
@@ -2048,7 +2046,7 @@ class Cloud(object):
                 item['id'] = i['id']
                 item['key'] = i['local_key']
                 tuyadevices.append(item)
-            return(tuyadevices)
+            return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
         if deviceid is None:
@@ -2061,31 +2059,31 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
-    
+        return response_dict
+
     def getstatus(self, deviceid=None):
         """
-        Get the status of the device. 
+        Get the status of the device.
         """
-        return(self._getdevice('status', deviceid))
+        return self._getdevice('status', deviceid)
 
     def getfunctions(self, deviceid=None):
         """
-        Get the functions of the device. 
+        Get the functions of the device.
         """
-        return(self._getdevice('functions', deviceid))
+        return self._getdevice('functions', deviceid)
 
     def getproperties(self, deviceid=None):
         """
-        Get the properties of the device. 
+        Get the properties of the device.
         """
-        return(self._getdevice('specification', deviceid))
+        return self._getdevice('specification', deviceid)
 
     def getdps(self, deviceid=None):
         """
-        Get the specifications including DPS IDs of the device. 
+        Get the specifications including DPS IDs of the device.
         """
         if deviceid is None:
             return error_json(
@@ -2097,9 +2095,9 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
+        return response_dict
 
     def sendcommand(self, deviceid=None, commands=None):
         """
@@ -2115,6 +2113,6 @@ class Cloud(object):
 
         if not response_dict['success']:
             log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+                "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-        return(response_dict)
+        return response_dict

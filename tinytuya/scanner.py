@@ -8,21 +8,20 @@ For more information see https://github.com/jasonacox/tinytuya
 
 Description
     Scan will scan the local network for Tuya devices and if a local devices.json is
-    present in the local directory, will use the Local KEYs to poll the devices for 
+    present in the local directory, will use the Local KEYs to poll the devices for
     status.
 
 """
 # Modules
 from __future__ import print_function
-from audioop import add  # python 2.7 support
-import logging
-import time
+import ipaddress
 import json
-import tinytuya
-from hashlib import md5
+import logging
 import socket
-import ipaddress  
 import sys
+import time
+
+import tinytuya
 
 try:
     # Optional libraries required for forced scanning
@@ -57,7 +56,7 @@ TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
 UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
-TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout 
+TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 
 # Logging
 log = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ def getmyIP():
     r = s.getsockname()[0]
     s.close()
     return r
-    
+
 
 # Scan function shortcut
 def scan(maxretry=None, color=True, forcescan=False):
@@ -127,7 +126,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
             havekeys = True
-            log.debug("loaded=%s [%d devices]" % (DEVICEFILE, len(tuyadevices)))
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
             # If no maxretry value set, base it on number of devices
             if maxretry is None:
                 maxretry = len(tuyadevices) + tinytuya.MAXCOUNT
@@ -165,8 +164,8 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     if forcescan:
         if not SCANLIBS:
             if verbose:
-                print(alert + 
-                    '    ERROR: force network scanning requested but not available - disabled.\n' 
+                print(alert +
+                    '    ERROR: force network scanning requested but not available - disabled.\n'
                     '           (Requires: pip install getmac)\n' + dim)
             forcescan = False
         else:
@@ -182,7 +181,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
 
     if forcescan:
         # Force Scan - Get list of all local ip addresses
-        try: 
+        try:
             # Fetch my IP address and assume /24 network
             ip = getmyIP()
             network = ipaddress.IPv4Interface(u''+ip+'/24').network
@@ -192,10 +191,10 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             ip = None
             log.debug("Unable to get local network, using default %r", network)
             if verbose:
-                print(alert + 
-                    'ERROR: Unable to get your IP address and network automatically.' 
+                print(alert +
+                    'ERROR: Unable to get your IP address and network automatically.'
                     '       (using %s)' % network + normal)
-        
+
         try:
             # Warn user of scan duration
             if verbose:
@@ -215,13 +214,13 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                     ip = "%s" % addr
                     mac = get_mac_address(ip=ip)
                     ip_list[ip] = mac
-                    log.debug("Found Device [%s]" % mac)
+                    log.debug("Found Device [%s]", mac)
                     if verbose:
                         print(" Found Device [%s]" % mac)
                 a_socket.close()
-            
+
             if verbose:
-                print(dim + '\r      Done                           ' +normal + 
+                print(dim + '\r      Done                           ' +normal +
                             '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
 
         except:
@@ -274,7 +273,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 result = result.decode()
 
             result = json.loads(result)
-            log.debug("Received valid UDP packet: %r" % result)
+            log.debug("Received valid UDP packet: %r", result)
 
             note = "Valid"
             ip = result["ip"]
@@ -286,7 +285,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
             result = {"ip": ip}
             note = "Unknown"
-            log.debug("Invalid UDP Packet: %r" % result)
+            log.debug("Invalid UDP Packet: %r", result)
 
         # check to see if we have seen this device before and add to devices array
         if tinytuya.appenddevice(result, devices) is False:
@@ -418,18 +417,18 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         for item in devices:
             devicesarray.append(devices[item])
         for item in tuyadevices:
-            if next((x for x in devicesarray if x["id"] == item["id"]), False) == False:
+            if next((x for x in devicesarray if x["id"] == item["id"]), False) is False:
                 tmp = item
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = 0
                 devicesarray.append(tmp)
         current = {'timestamp' : time.time(), 'devices' : devicesarray}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE + "\n")
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
 
-    log.debug("Scan complete with %s devices found" % len(devices))
+    log.debug("Scan complete with %s devices found", len(devices))
     clients.close()
     client.close()
     if byID:
@@ -467,7 +466,7 @@ def snapshot(color=True):
     print("%s%-25s %-24s %-16s %-17s %-5s" % (normal, "Name","ID", "IP","Key","Version"))
     print(dim)
     for id in sorted(data["devices"], key=lambda x: x['name']):
-        device = id 
+        device = id
         ver = ip = ""
         if "ver"  in device:
             ver = device["ver"]
@@ -476,7 +475,7 @@ def snapshot(color=True):
         name = device["name"]
         gwId = device["id"]
         key = device["key"]
-        print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" % 
+        print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" %
             (dim, name, cyan, gwId, subbold, ip, red, key, yellow, ver))
 
     devices = sorted(data["devices"], key=lambda x: x['name'])
@@ -484,7 +483,7 @@ def snapshot(color=True):
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
+    if answer[0:1].lower() != 'n':
         print("")
         print("%sPolling %s local devices from last snapshot..." % (normal, len(devices)))
         for i in devices:
@@ -500,7 +499,7 @@ def snapshot(color=True):
             item['ver'] = ver
             item['id'] = i['id']
             item['key'] = i['key']
-            if (ip == 0):
+            if ip == 0:
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
             else:
@@ -515,11 +514,11 @@ def snapshot(color=True):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                        if data['dps']['1'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['1'] is True:
+                                        state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                        if data['dps']['20'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['20'] is True:
+                                        state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
                             else:
@@ -559,7 +558,7 @@ def alldevices(color=True, retries=None):
         # Load defaults
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
-            log.debug("loaded=%s [%d devices]" % (DEVICEFILE, len(tuyadevices)))
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
             # If no maxretry value set, base it on number of devices
             if retries is None:
                 retries = len(tuyadevices) + tinytuya.MAXCOUNT
@@ -568,18 +567,18 @@ def alldevices(color=True, retries=None):
         return
 
     print("%sLoaded %s - %d devices:" % (dim, DEVICEFILE, len(tuyadevices)))
-    
+
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
-    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4) 
+    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4)
     print(output)
 
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
-    if(answer[0:1].lower() != 'n'):
+    if answer[0:1].lower() != 'n':
         # Set retries based on number of devices if undefined
-        if(retries == None):
+        if retries is None:
             retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
 
         # Scan network for devices and provide polling data
@@ -592,7 +591,7 @@ def alldevices(color=True, retries=None):
         def getIP(d, gwid):
             for ip in d:
                 if 'gwId' in d[ip]:
-                    if (gwid == d[ip]['gwId']):
+                    if gwid == d[ip]['gwId']:
                         return (ip, d[ip]['version'])
             return (0, 0)
 
@@ -610,7 +609,7 @@ def alldevices(color=True, retries=None):
             item['key'] = i['key']
             if "mac" in i:
                 item['mac'] = i['mac']
-            if (ip == 0):
+            if ip == 0:
                 print("    %s[%s] - %s%s - %sError: No IP found%s" %
                       (subbold, name, dim, ip, alert, normal))
             else:
@@ -625,11 +624,11 @@ def alldevices(color=True, retries=None):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                        if data['dps']['1'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['1'] is True:
+                                        state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                        if data['dps']['20'] == True:
-                                            state = bold + "On" + dim
+                                    if data['dps']['20'] is True:
+                                        state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
                             else:
@@ -649,7 +648,7 @@ def alldevices(color=True, retries=None):
 
         # Save polling data snapsot
         current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
@@ -669,7 +668,7 @@ def snapshotjson():
             data = json.load(json_file)
     except:
         current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
-        output = json.dumps(current, indent=4) 
+        output = json.dumps(current, indent=4)
         print(output)
         return
 
@@ -690,7 +689,7 @@ def snapshotjson():
         item['key'] = i['key']
         if "mac" in i:
             item['mac'] = i['mac']
-        if (ip == 0):
+        if ip == 0:
             item['error'] = "No IP"
         else:
             try:
@@ -707,7 +706,7 @@ def snapshotjson():
         polling.append(item)
     # for loop
     current = {'timestamp' : time.time(), 'devices' : polling}
-    output = json.dumps(current, indent=4) 
+    output = json.dumps(current, indent=4)
     print(output)
     return
 
