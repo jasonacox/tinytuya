@@ -116,7 +116,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     # Build Header
     now = int(time.time()*1000)
     headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-    if token==None:
+    if token is None:
         payload = apiKey + str(now)
         headers['secret'] = apiSecret
     else:
@@ -142,7 +142,7 @@ def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorit
     headers['t'] = str(now)
     headers['sign_method'] = 'HMAC-SHA256'
 
-    if token != None:
+    if token is not None:
         headers['access_token'] = token
 
     # Get Token
@@ -361,7 +361,7 @@ def wizard(color=True, retries=None, forcescan=False):
                    normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
         # Set retries based on number of devices if undefined
-        if retries == None:
+        if retries is None:
             retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
 
         # Scan network for devices and provide polling data
@@ -404,10 +404,10 @@ def wizard(color=True, retries=None, forcescan=False):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                    if data['dps']['1'] == True:
+                                    if data['dps']['1'] is True:
                                         state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                    if data['dps']['20'] == True:
+                                    if data['dps']['20'] is True:
                                         state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))

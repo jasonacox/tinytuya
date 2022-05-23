@@ -1916,7 +1916,7 @@ class Cloud(object):
             action = 'GET'
         now = int(time.time()*1000)
         headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-        if self.token==None:
+        if self.token is None:
             payload = self.apiKey + str(now)
             headers['secret'] = self.apiSecret
         else:
@@ -1943,7 +1943,7 @@ class Cloud(object):
         headers['t'] = str(now)
         headers['sign_method'] = 'HMAC-SHA256'
 
-        if self.token != None:
+        if self.token is not None:
             headers['access_token'] = self.token
 
         # Send Request to Cloud and Get Response

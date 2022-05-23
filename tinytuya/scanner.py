@@ -417,7 +417,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         for item in devices:
             devicesarray.append(devices[item])
         for item in tuyadevices:
-            if next((x for x in devicesarray if x["id"] == item["id"]), False) == False:
+            if next((x for x in devicesarray if x["id"] == item["id"]), False) is False:
                 tmp = item
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = 0
@@ -514,10 +514,10 @@ def snapshot(color=True):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                    if data['dps']['1'] == True:
+                                    if data['dps']['1'] is True:
                                         state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                    if data['dps']['20'] == True:
+                                    if data['dps']['20'] is True:
                                         state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
@@ -578,7 +578,7 @@ def alldevices(color=True, retries=None):
                    normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
         # Set retries based on number of devices if undefined
-        if retries == None:
+        if retries is None:
             retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
 
         # Scan network for devices and provide polling data
@@ -624,10 +624,10 @@ def alldevices(color=True, retries=None):
                         try:
                             if '1' in data['dps'] or '20' in data['dps']:
                                 if '1' in data['dps']:
-                                    if data['dps']['1'] == True:
+                                    if data['dps']['1'] is True:
                                         state = bold + "On" + dim
                                 if '20' in data['dps']:
-                                    if data['dps']['20'] == True:
+                                    if data['dps']['20'] is True:
                                         state = bold + "On" + dim
                                 print("    %s[%s] - %s%s - %s - DPS: %r" %
                                     (subbold, name, dim, ip, state, data['dps']))
