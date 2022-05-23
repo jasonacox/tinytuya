@@ -172,7 +172,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             if verbose:
                 print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
-    devices = {}
+    deviceslist = {}
     count = 0
     counts = 0
     spinnerx = 0
@@ -245,7 +245,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 log.debug("Keyboard Interrupt - Exiting")
                 if verbose:
                     print("\n**User Break**")
-                exit()
+                sys.exit()
             except Exception as err:
                 # Timeout
                 count = count + 1
@@ -257,7 +257,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 log.debug("Keyboard Interrupt - Exiting")
                 if verbose:
                     print("\n**User Break**")
-                exit()
+                sys.exit()
             except Exception as err:
                 # Timeout
                 counts = counts + 1
@@ -288,7 +288,7 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             log.debug("Invalid UDP Packet: %r", result)
 
         # check to see if we have seen this device before and add to devices array
-        if tinytuya.appenddevice(result, devices) is False:
+        if tinytuya.appenddevice(result, deviceslist) is False:
 
             # new device found - back off count if we keep getting new devices
             if version == "3.1":
@@ -351,9 +351,9 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                                         "%s    Invalid response from %s: %r"
                                         % (alertdim, ip, dpsdata)
                                     )
-                            devices[ip]["err"] = "Unable to poll"
+                            deviceslist[ip]["err"] = "Unable to poll"
                         else:
-                            devices[ip]["dps"] = dpsdata
+                            deviceslist[ip]["dps"] = dpsdata
                             if verbose:
                                 print(dim + "    Status: %s" % dpsdata["dps"])
                     else:
@@ -374,9 +374,9 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                                             "%s    Check DEVICE KEY - Invalid response from %s: %r"
                                             % (alertdim, ip, dpsdata)
                                         )
-                                devices[ip]["err"] = "Unable to poll"
+                                deviceslist[ip]["err"] = "Unable to poll"
                             else:
-                                devices[ip]["dps"] = dpsdata
+                                deviceslist[ip]["dps"] = dpsdata
                                 if verbose:
                                     print(dim + "    Status: %s" % dpsdata["dps"])
                         else:
@@ -390,14 +390,14 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             except:
                 if verbose:
                     print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
-                devices[ip]["err"] = "Unable to poll"
+                deviceslist[ip]["err"] = "Unable to poll"
             if dname != "":
-                devices[ip]["name"] = dname
-                devices[ip]["key"] = dkey
+                deviceslist[ip]["name"] = dname
+                deviceslist[ip]["key"] = dkey
             if mac != "":
-                devices[ip]["mac"] = mac
-            devices[ip]["id"] = gwId
-            devices[ip]["ver"] = version
+                deviceslist[ip]["mac"] = mac
+            deviceslist[ip]["id"] = gwId
+            deviceslist[ip]["ver"] = version
         else:
             if version == "3.1":
                 count = count + 1
@@ -406,16 +406,16 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
 
     # Add Force Scan Devices
     for ip in ip_list:
-        devices[ip]["mac"] = ip_list[ip]
+        deviceslist[ip]["mac"] = ip_list[ip]
     if verbose:
         print(
             "                    \n%sScan Complete!  Found %s devices."
-            % (normal, len(devices))
+            % (normal, len(deviceslist))
         )
         # Save polling data into snapshot format
         devicesarray = []
-        for item in devices:
-            devicesarray.append(devices[item])
+        for item in deviceslist:
+            devicesarray.append(deviceslist[item])
         for item in tuyadevices:
             if next((x for x in devicesarray if x["id"] == item["id"]), False) is False:
                 tmp = item
@@ -428,13 +428,18 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
 
-    log.debug("Scan complete with %s devices found", len(devices))
+    log.debug("Scan complete with %s devices found", len(deviceslist))
     clients.close()
     client.close()
     if byID:
+        # Create dictionary by id
+        ids = {}
+        for device in deviceslist:
+            idx=deviceslist[device]['gwId']
+            ids[idx] = deviceslist[device]
         return ids
     else:
-        return devices
+        return deviceslist
 
 
 # Scan Devices in tuyascan.json
@@ -465,8 +470,8 @@ def snapshot(color=True):
     table = []
     print("%s%-25s %-24s %-16s %-17s %-5s" % (normal, "Name","ID", "IP","Key","Version"))
     print(dim)
-    for id in sorted(data["devices"], key=lambda x: x['name']):
-        device = id
+    for idx in sorted(data["devices"], key=lambda x: x['name']):
+        device = idx
         ver = ip = ""
         if "ver"  in device:
             ver = device["ver"]
@@ -478,15 +483,15 @@ def snapshot(color=True):
         print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" %
             (dim, name, cyan, gwId, subbold, ip, red, key, yellow, ver))
 
-    devices = sorted(data["devices"], key=lambda x: x['name'])
+    devicesx = sorted(data["devices"], key=lambda x: x['name'])
 
     # Find out if we should poll all devices
     answer = input(subbold + '\nPoll local devices? ' +
                    normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
         print("")
-        print("%sPolling %s local devices from last snapshot..." % (normal, len(devices)))
-        for i in devices:
+        print("%sPolling %s local devices from last snapshot..." % (normal, len(devicesx)))
+        for i in devicesx:
             item = {}
             name = i['name']
             ip = ver = 0
@@ -583,9 +588,9 @@ def alldevices(color=True, retries=None):
 
         # Scan network for devices and provide polling data
         print(normal + "\nScanning local network for Tuya devices (retry %d times)..." % retries)
-        all = devices(False, retries)
+        allx = devices(False, retries)
         print("    %s%s local devices discovered%s" %
-              (dim, len(all), normal))
+              (dim, len(allx), normal))
         print("")
 
         def getIP(d, gwid):
@@ -601,7 +606,7 @@ def alldevices(color=True, retries=None):
         for i in sorted(tuyadevices, key=lambda x: x['name']):
             item = {}
             name = i['name']
-            (ip, ver) = getIP(all, i['id'])
+            (ip, ver) = getIP(allx, i['id'])
             item['name'] = name
             item['ip'] = ip
             item['ver'] = ver
@@ -672,9 +677,9 @@ def snapshotjson():
         print(output)
         return
 
-    devices = sorted(data["devices"], key=lambda x: x['name'])
+    devicesx = sorted(data["devices"], key=lambda x: x['name'])
 
-    for i in devices:
+    for i in devicesx:
         item = {}
         name = i['name']
         ip = ver = 0

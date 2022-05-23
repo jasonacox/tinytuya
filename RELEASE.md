@@ -6,6 +6,10 @@
 * Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
+## v1.4.1 - Cleanup and Bug Fixes (unreleased)
+
+* Clean up code to address pylint warnings.
+
 ## v1.4.0 - Updated Scanner Functions
 
 * PyPI 1.4.0 - Minor Update to APIs (additional arguments and elements)
