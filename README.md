@@ -441,9 +441,11 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 
 ## Tuya Data Points - DPS Table
 
-The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products. 
+The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products.
 
 The following table represents several of the standard Tuya DPS values and their properties. It represents data compiled from Tuya documentation and self-discovery. Devices may vary. Feedback or additional data would would be appreciated.  Please submit a Issue or Pull Request if you have additional data that would be helpful for others.
+
+To find Tuya DPS for devices not listed below, you can discover the DPS values using the Tuya IoT platform. See this help here: [Find your Data Point](https://www.zigbee2mqtt.io/advanced/support-new-devices/03_find_tuya_data_points.html#_8-display-device-logs).
 
 DPS Read and Set Example:
 ```python
@@ -647,3 +649,10 @@ NOTE (*) - The range can vary depending on the device. As an example, for dimmer
   * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
   * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
   * https://github.com/TradeFace/tuyaface - Python Async Tuya API
+
+## TinyTuya Powered Projects
+
+Please feel free to submit a PR or open an issue to add your project.
+
+* https://github.com/mafrosis/tinytuya2mqtt - A bridge between TinyTuya and Home Assistant via MQTT
+* https://github.com/Whytey/pymoebot - A Python library intended to monitor and control the MoeBot robotic lawn mowers.
