@@ -577,6 +577,32 @@ d.set_value(25, '010e0d0000000000000003e803e8')
 |101|Current Temperature|integer|0-600|10x Celsius|
 |102|Current Humidity|integer|0-100|%|
 
+#### Version 3.3 - Universal IR Controller with or without Temp/Humidity
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+|201|IR Commands (set only)|JSON*|n/a|n/a|
+
+The IR Commands JSON has the following format: 
+
+```
+{
+    "control": "send_ir",
+    "head": "",
+    "key1": "[[TO_BE_REPLACED]]",
+    "type": 0,
+    "delay": 300
+}
+```
+
+The key1 attribute is a base64 string that contains the IR signal. You can extract it using this procedure:
+
+1. Register a new IR device on Tuya Smart / Smart Life app (if you don't have it registred already) and map or import your buttons
+2. Tap multiple times on a button of your choice
+3. Go to Tuya IoT Platform and select your app under Cloud > Development section
+4. Go to to the Device tab and select "Debug Device" on the parent device. Browse Device Logs section and retreive the key1 attribute that matches your tapping timestamp. 
+
+You need to repeat these steps for each button (cloud logging is not always sequential).
+
 #### Version 3.3 - Sensor Type
 
 _Important Note:_
