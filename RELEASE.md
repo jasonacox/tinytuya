@@ -3,12 +3,22 @@
 ## Potential Future Release Features
 
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
-* Add socket.shutdown(socket.SHUT_RDWR)
 * Add function to send multiple DPS index updates with one call
 
-## v1.4.1 - Cleanup and Bug Fixes (unreleased)
 
-* Clean up code to address pylint warnings.
+## v1.5.0 - Add 'nowait' Option to Commands
+
+* PyPI 1.5.0
+* Added an optional 'nowait' boolean setting (True/False) to functions to allow sending commands without waiting for a device response. (Issue #74)
+* Clean up code to address pylint warnings. (PR #135)
+
+```python
+# Example use of nowait option
+d.turn_on(nowait=True)
+d.set_colour(r, g, b, nowait=True)
+d.set_value(201, '9AEmAvQBJgL0ASYCQAYmAkAGJgJABiY', nowait=True)  # send IR command
+d.set_value(25, '010e0d0000000000000003e803e8', nowait=True)      # set scene
+```
 
 ## v1.4.0 - Updated Scanner Functions
 

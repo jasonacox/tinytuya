@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Bug fixes and patches will be applied to the latest 1.2.x version.
+Bug fixes and patches will be applied to versions 1.2.x and above.
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -12,4 +12,4 @@ Bug fixes and patches will be applied to the latest 1.2.x version.
 
 ## Reporting a Vulnerability
 
-Please open an [issue](https://github.com/jasonacox/tinytuya/issues) or a [pull request](https://github.com/jasonacox/tinytuya/pulls) for any vulnerability discovered. 
+Please open an [issue](https://github.com/jasonacox/tinytuya/issues) or a [pull request](https://github.com/jasonacox/tinytuya/pulls) for any vulnerability discovered.

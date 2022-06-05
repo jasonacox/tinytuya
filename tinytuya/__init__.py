@@ -22,17 +22,17 @@
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
-    set_socketTimeout(self, s)         # set connection timeout in seconds [default 5]
+    set_socketTimeout(timeout)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)        # add data points (DPS) to request
     add_dps_to_request(index)          # add data point (DPS) index set to None
     set_retry(retry=True)              # retry if response payload is truncated
-    set_status(on, switch=1)           # Set status of the device to 'on' or 'off' (bool)
-    set_value(index, value)            # Set int value of any index.
-    heartbeat()                        # Send heartbeat to device
-    updatedps(index=[1])               # Send updatedps command to device
-    turn_on(switch=1)                  # Turn on device / switch #
-    turn_off(switch=1)                 # Turn off
-    set_timer(num_secs)                # Set timer for num_secs
+    set_status(on, switch=1, nowait)   # Set status of switch to 'on' or 'off' (bool)
+    set_value(index, value, nowait)    # Set int value of any index.
+    heartbeat(nowait)                  # Send heartbeat to device
+    updatedps(index=[1], nowait)       # Send updatedps command to device
+    turn_on(switch=1, nowait)          # Turn on device / switch #
+    turn_off(switch=1, nowait)         # Turn off
+    set_timer(num_secs, nowait)        # Set timer for num_secs
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
     detect_available_dps()             # Return list of DPS available from device
@@ -49,16 +49,16 @@
         stop_cover(switch=1):
 
     BulbDevice
-        set_colour(r, g, b):
-        set_hsv(h, s, v):
-        set_white(brightness, colourtemp):
-        set_white_percentage(brightness=100, colourtemp=0):
-        set_brightness(brightness):
-        set_brightness_percentage(brightness=100):
-        set_colourtemp(colourtemp):
-        set_colourtemp_percentage(colourtemp=100):
-        set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white'):       # white, colour, scene, music
+        set_colour(r, g, b, nowait):
+        set_hsv(h, s, v, nowait):
+        set_white(brightness, colourtemp, nowait):
+        set_white_percentage(brightness=100, colourtemp=0, nowait):
+        set_brightness(brightness, nowait):
+        set_brightness_percentage(brightness=100, nowait):
+        set_colourtemp(colourtemp, nowait):
+        set_colourtemp_percentage(colourtemp=100, nowait):
+        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
+        set_mode(mode='white', nowait):       # white, colour, scene, music
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -116,7 +116,7 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 4, 1)
+version_tuple = (1, 5, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -543,6 +543,7 @@ class XenonDevice(object):
         Args:
             payload(bytes): Data to send. Set to 'None' to receive only.
             minresponse(int): Minimum response size expected (default=28 bytes)
+            getresponse(bool): If True, wait for and return response.
         """
         success = False
         retries = 0
@@ -726,7 +727,7 @@ class XenonDevice(object):
         Args:
             payload(bytes): Data to send.
         """
-        return self._send_receive(payload, 0, False)
+        return self._send_receive(payload, 0, getresponse=False)
 
     def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
@@ -973,20 +974,21 @@ class Device(XenonDevice):
 
         return data
 
-    def set_status(self, on, switch=1):
+    def set_status(self, on, switch=1, nowait=False):
         """
         Set status of the device to 'on' or 'off'.
 
         Args:
             on(bool):  True for 'on', False for 'off'.
             switch(int): The switch to set
+            nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
         payload = self.generate_payload(CONTROL, {switch: on})
 
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_status received data=%r", data)
 
         return data
@@ -1002,23 +1004,26 @@ class Device(XenonDevice):
         log.debug("product received data=%r", data)
         return data
 
-    def heartbeat(self):
+    def heartbeat(self, nowait=False):
         """
         Send a simple HEART_BEAT command to device.
 
+        Args:
+            nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
         payload = self.generate_payload(HEART_BEAT)
-        data = self._send_receive(payload, 0)
+        data = self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("heartbeat received data=%r", data)
         return data
 
-    def updatedps(self, index=None):
+    def updatedps(self, index=None, nowait=False):
         """
         Request device to update index.
 
         Args:
             index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
+            nowait(bool): True to send without waiting for response.
         """
         if index is None:
             index = [1]
@@ -1026,17 +1031,18 @@ class Device(XenonDevice):
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(UPDATEDPS, index)
-        data = self._send_receive(payload, 0)
+        data = self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("updatedps received data=%r", data)
         return data
 
-    def set_value(self, index, value):
+    def set_value(self, index, value, nowait=False):
         """
         Set int value of any index.
 
         Args:
             index(int): index to set
             value(int): new value for the index
+            nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
         if isinstance(index, int):
@@ -1044,25 +1050,26 @@ class Device(XenonDevice):
 
         payload = self.generate_payload(CONTROL, {index: value})
 
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
 
         return data
 
-    def turn_on(self, switch=1):
+    def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""
-        self.set_status(True, switch)
+        self.set_status(True, switch, nowait)
 
-    def turn_off(self, switch=1):
+    def turn_off(self, switch=1, nowait=False):
         """Turn the device off"""
-        self.set_status(False, switch)
+        self.set_status(False, switch, nowait)
 
-    def set_timer(self, num_secs, dps_id=0):
+    def set_timer(self, num_secs, dps_id=0, nowait=False):
         """
         Set a timer.
 
         Args:
             num_secs(int): Number of seconds
             dps_id(int): DPS Index for Timer
+            nowait(bool): True to send without waiting for response.
         """
 
         # Query status, pick last device id as that is probably the timer
@@ -1079,7 +1086,7 @@ class Device(XenonDevice):
 
         payload = self.generate_payload(CONTROL, {dps_id: num_secs})
 
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_timer received data=%r", data)
         return data
 
@@ -1097,13 +1104,14 @@ class OutletDevice(Device):
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type)
 
-    def set_dimmer(self, percentage=None, value=None, dps_id=3):
+    def set_dimmer(self, percentage=None, value=None, dps_id=3, nowait=False):
         """Set dimmer value
 
         Args:
             percentage (int): percentage dim 0-100
             value (int): direct value for switch 0-255
             dps_id (int): DPS index for dimmer value
+            nowait (bool): True to send without waiting for response.
         """
 
         if percentage is not None:
@@ -1112,14 +1120,14 @@ class OutletDevice(Device):
             level = value
 
         if level == 0:
-            self.turn_off()
+            self.turn_off(nowait=nowait)
         elif level is not None:
             if level < 25:
                 level = 25
             if level > 255:
                 level = 255
-            self.turn_on()
-            self.set_value(dps_id, level)
+            self.turn_on(nowait=nowait)
+            self.set_value(dps_id, level, nowait=nowait)
 
 
 class CoverDevice(Device):
@@ -1143,17 +1151,17 @@ class CoverDevice(Device):
     def __init__(self, dev_id, address, local_key="", dev_type="default"):
         super(CoverDevice, self).__init__(dev_id, address, local_key, dev_type)
 
-    def open_cover(self, switch=1):
+    def open_cover(self, switch=1, nowait=False):
         """Open the cover"""
-        self.set_status("on", switch)
+        self.set_status("on", switch, nowait=nowait)
 
-    def close_cover(self, switch=1):
+    def close_cover(self, switch=1, nowait=False):
         """Close the cover"""
-        self.set_status("off", switch)
+        self.set_status("off", switch, nowait=nowait)
 
-    def stop_cover(self, switch=1):
+    def stop_cover(self, switch=1, nowait=False):
         """Stop the motion of the cover"""
-        self.set_status("stop", switch)
+        self.set_status("stop", switch, nowait=nowait)
 
 
 class BulbDevice(Device):
@@ -1346,38 +1354,39 @@ class BulbDevice(Device):
             self.bulb_type = "B"
         log.debug("bulb type set to %s", self.bulb_type)
 
-    def turn_on(self, switch=0):
+    def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
         if switch == 0:
             switch = self.DPS_INDEX_ON[self.bulb_type]
-        self.set_status(True, switch)
+        self.set_status(True, switch, nowait=nowait)
 
-    def turn_off(self, switch=0):
+    def turn_off(self, switch=0, nowait=False):
         """Turn the device on"""
         if switch == 0:
             switch = self.DPS_INDEX_ON[self.bulb_type]
-        self.set_status(False, switch)
+        self.set_status(False, switch, nowait=nowait)
 
-    def set_mode(self, mode="white"):
+    def set_mode(self, mode="white", nowait=False):
         """
         Set bulb mode
 
         Args:
             mode(string): white,colour,scene,music
-
+            nowait(bool): True to send without waiting for response.
         """
         payload = self.generate_payload(
             CONTROL, {self.DPS_INDEX_MODE[self.bulb_type]: mode}
         )
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
-    def set_scene(self, scene):
+    def set_scene(self, scene, nowait=False):
         """
         Set to scene mode
 
         Args:
             scene(int): Value for the scene as int from 1-4.
+            nowait(bool): True to send without waiting for response.
         """
         if not 1 <= scene <= 4:
             return error_json(
@@ -1396,10 +1405,10 @@ class BulbDevice(Device):
         payload = self.generate_payload(
             CONTROL, {self.DPS_INDEX_MODE[self.bulb_type]: s}
         )
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
-    def set_colour(self, r, g, b):
+    def set_colour(self, r, g, b, nowait=False):
         """
         Set colour of an rgb bulb.
 
@@ -1407,6 +1416,7 @@ class BulbDevice(Device):
             r(int): Value for the colour Red as int from 0-255.
             g(int): Value for the colour Green as int from 0-255.
             b(int): Value for the colour Blue as int from 0-255.
+            nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
             return error_json(
@@ -1437,10 +1447,10 @@ class BulbDevice(Device):
                 self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue,
             },
         )
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
-    def set_hsv(self, h, s, v):
+    def set_hsv(self, h, s, v, nowait=False):
         """
         Set colour of an rgb bulb using h, s, v.
 
@@ -1448,6 +1458,7 @@ class BulbDevice(Device):
             h(float): colour Hue as float from 0-1
             s(float): colour Saturation as float from 0-1
             v(float): colour Value as float from 0-1
+            nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
             return error_json(
@@ -1480,16 +1491,17 @@ class BulbDevice(Device):
                 self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue,
             },
         )
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
-    def set_white_percentage(self, brightness=100, colourtemp=0):
+    def set_white_percentage(self, brightness=100, colourtemp=0, nowait=False):
         """
         Set white coloured theme of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness in percent (0-100)
             colourtemp(int): Value for the colour temperature in percent (0-100)
+            nowait(bool): True to send without waiting for response.
         """
         # Brightness
         if not 0 <= brightness <= 100:
@@ -1515,16 +1527,17 @@ class BulbDevice(Device):
         if self.bulb_type == "B":
             c = int(1000 * colourtemp / 100)
 
-        data = self.set_white(b, c)
+        data = self.set_white(b, c, nowait=nowait)
         return data
 
-    def set_white(self, brightness=-1, colourtemp=-1):
+    def set_white(self, brightness=-1, colourtemp=-1, nowait=False):
         """
         Set white coloured theme of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness (A:25-255 or B:10-1000)
             colourtemp(int): Value for the colour temperature (A:0-255, B:0-1000).
+            nowait(bool): True to send without waiting for response.
 
             Default: Max Brightness and Min Colourtemp
         """
@@ -1565,15 +1578,16 @@ class BulbDevice(Device):
             },
         )
 
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
-    def set_brightness_percentage(self, brightness=100):
+    def set_brightness_percentage(self, brightness=100, nowait=False):
         """
         Set the brightness value of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness in percent (0-100)
+            nowait(bool): True to send without waiting for response.
         """
         if not 0 <= brightness <= 100:
             return error_json(
@@ -1584,15 +1598,16 @@ class BulbDevice(Device):
         if self.bulb_type == "B":
             b = int(10 + (1000 - 10) * brightness / 100)
 
-        data = self.set_brightness(b)
+        data = self.set_brightness(b, nowait=nowait)
         return data
 
-    def set_brightness(self, brightness):
+    def set_brightness(self, brightness, nowait=False):
         """
         Set the brightness value of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness (25-255).
+            nowait(bool): True to send without waiting for response.
         """
         if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
@@ -1619,7 +1634,7 @@ class BulbDevice(Device):
                 payload = self.generate_payload(
                     CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness}
                 )
-                data = self._send_receive(payload)
+                data = self._send_receive(payload, getresponse=(not nowait))
 
             if state["mode"] == "colour":
                 # for colour mode use hsv to increase brightness
@@ -1628,19 +1643,20 @@ class BulbDevice(Device):
                 else:
                     value = brightness / 1000.0
                 (h, s, v) = self.colour_hsv()
-                data = self.set_hsv(h, s, value)
+                data = self.set_hsv(h, s, value, nowait=nowait)
 
-        if data is not None:
+        if data is not None or nowait is True:
             return data
         else:
             return error_json(ERR_STATE, "set_brightness: Unknown bulb state.")
 
-    def set_colourtemp_percentage(self, colourtemp=100):
+    def set_colourtemp_percentage(self, colourtemp=100, nowait=False):
         """
         Set the colour temperature of an rgb bulb.
 
         Args:
             colourtemp(int): Value for the colour temperature in percentage (0-100).
+            nowait(bool): True to send without waiting for response.
         """
         if not 0 <= colourtemp <= 100:
             return error_json(
@@ -1651,15 +1667,16 @@ class BulbDevice(Device):
         if self.bulb_type == "B":
             c = int(1000 * colourtemp / 100)
 
-        data = self.set_colourtemp(c)
+        data = self.set_colourtemp(c, nowait=nowait)
         return data
 
-    def set_colourtemp(self, colourtemp):
+    def set_colourtemp(self, colourtemp, nowait=False):
         """
         Set the colour temperature of an rgb bulb.
 
         Args:
             colourtemp(int): Value for the colour temperature (0-255).
+            nowait(bool): True to send without waiting for response.
         """
         if not self.has_colourtemp:
             return error_json(
@@ -1679,7 +1696,7 @@ class BulbDevice(Device):
         payload = self.generate_payload(
             CONTROL, {self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp}
         )
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, getresponse=(not nowait))
         return data
 
     def brightness(self):

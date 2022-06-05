@@ -110,8 +110,13 @@ After importing tinytuya, you create a device handle for the device you want to 
 
     d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
     d.set_version(3.3)
+
+    # Get Status
     data = d.status() 
     print('set_status() result %r' % data)
+
+    # Turn On
+    d.turn_on()
 ```
 
 ### TinyTuya Module Classes and Functions 
@@ -151,13 +156,14 @@ Functions:
 
     status()                           # Fetch status of device (json payload)
     detect_available_dps()             # Return list of DPS available from device
-    set_status(on, switch=1)           # Control status of the device to 'on' or 'off' (bool)
-    set_value(index, value)            # Send and set value of any DPS/index on device.
-    heartbeat()                        # Send heartbeat to device
-    updatedps(index=[1])               # Send updatedps command to device to refresh DPS values
-    turn_on(switch=1)                  # Turn on device / switch #
-    turn_off(switch=1)                 # Turn off device
-    set_timer(num_secs)                # Set timer for num_secs on devices (if supported)
+    set_status(on, switch=1, nowait)   # Control status of the device to 'on' or 'off' (bool)
+                                       # nowait (default False) True to send without waiting for response
+    set_value(index, value, nowait)    # Send and set value of any DPS/index on device.
+    heartbeat(nowait)                  # Send heartbeat to device
+    updatedps(index=[1], nowait)       # Send updatedps command to device to refresh DPS values
+    turn_on(switch=1, nowait)          # Turn on device / switch #
+    turn_off(switch=1, nowait)         # Turn off device
+    set_timer(num_secs, nowait)        # Set timer for num_secs on devices (if supported)
     generate_payload(command, data)    # Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
     receive()                          # Receive payload from device
@@ -171,16 +177,16 @@ Functions:
         stop_cover(switch=1):
 
     BulbDevice
-        set_colour(r, g, b):
-        set_hsv(h, s, v):
-        set_white(brightness, colourtemp):
-        set_white_percentage(brightness=100, colourtemp=0):
-        set_brightness(brightness):
-        set_brightness_percentage(brightness=100):
-        set_colourtemp(colourtemp):
-        set_colourtemp_percentage(colourtemp=100):
-        set_scene(scene):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white'):       # white, colour, scene, music
+        set_colour(r, g, b, nowait):
+        set_hsv(h, s, v, nowait):
+        set_white(brightness, colourtemp, nowait):
+        set_white_percentage(brightness=100, colourtemp=0, nowait):
+        set_brightness(brightness, nowait):
+        set_brightness_percentage(brightness=100, nowait):
+        set_colourtemp(colourtemp, nowait):
+        set_colourtemp_percentage(colourtemp=100, nowait):
+        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
+        set_mode(mode='white', nowait):       # white, colour, scene, music
         result = brightness():
         result = colourtemp():
         (r, g, b) = colour_rgb():
@@ -255,8 +261,11 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
     """
     RGB Bulb Device
     """
+    import time
+
     d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
     d.set_version(3.3)  # IMPORTANT to set this regardless of version
+    d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
     data = d.status()
 
     # Show status of first controlled switch on device
@@ -264,6 +273,15 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
 
     # Set to RED Color - set_colour(r, g, b):
     d.set_colour(255,0,0)  
+
+    # Cycle through the Rainbow
+    rainbow = {"red": [255, 0, 0], "orange": [255, 127, 0], "yellow": [255, 200, 0],
+              "green": [0, 255, 0], "blue": [0, 0, 255], "indigo": [46, 43, 95],
+              "violet": [139, 0, 255]}
+    for color in rainbow:
+        [r, g, b] = rainbow[color]
+        d.set_colour(r, g, b, nowait=True)  # nowait = Go fast don't wait for response
+        time.sleep(0.25)
 
     # Brightness: Type A devices range = 25-255 and Type B = 10-1000
     d.set_brightness(1000)
