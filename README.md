@@ -670,6 +670,29 @@ Battery-powered Tuya sensors are usually designed to stay in sleep mode until a 
 
 NOTE (*) - The range can vary depending on the device. As an example, for dimmers, it may be 10-1000 or 25-255.
 
+#### Version 3.3 - Robot Mower Type
+
+
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+| 6    | Battery | integer |  0-100 | % |
+| 101  | Machine Status | enum | <ul><li>STANDBY MOWING</li><li>CHARGING</li><li>EMERGENCY</li><li>LOCKED</li><li>PAUSED</li><li>PARK</li><li>CHARGING_WITH_TASK_SUSPEND</li><li>FIXED_MOWING</li></ul> ||
+| 102  | Machine error | integer | 0, ? ||
+| 103  | Machine warning | enum | <ul><li>MOWER_LEAN</li><li>MOWER_EMERGENCY</li><li>MOWER_UI_LOCKED</li><ul> ||
+| 104  | Rain mode | boolean | True/False ||
+| 105  | Work time | interger | 1-99 | hours |
+| 106  | Machine password | byte str | ? ||
+| 107  | Clear machine appointment | boolean | True/False ||
+| 108  | Query machine reservation | boolean | True/False ||
+| 109  | Query partition parameters | boolean | True/False ||
+| 110  | Report machine reservation | byte str |||
+| 111  | Error log | byte str |||
+| 112  | Work log | byte str |||
+| 113  | Partition parameters | byte str |||
+| 114  | Work mode | enum | AutoMode/?? ||                                                                                                                           | 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li><ul> ||
+
+Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
+
 ### Tuya References
 
 * Tuya Hardware Development - Protocol: https://developer.tuya.com/en/docs/iot/device-development/embedded-software-development/mcu-development-access/wifi-mcu-sdk-solution/tuya-cloud-universal-serial-port-access-protocol?id=K9hhi0xxtn9cb
