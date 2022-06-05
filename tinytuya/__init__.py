@@ -763,9 +763,6 @@ class XenonDevice(object):
         else:
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
-    def set_bulb_type(self, type):
-        self.bulb_type = type
-
     def set_version(self, version):
         self.version = version
 
@@ -1366,6 +1363,9 @@ class BulbDevice(Device):
             switch = self.DPS_INDEX_ON[self.bulb_type]
         self.set_status(False, switch, nowait=nowait)
 
+    def set_bulb_type(self, type):
+        self.bulb_type = type
+        
     def set_mode(self, mode="white", nowait=False):
         """
         Set bulb mode
