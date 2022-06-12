@@ -22,7 +22,6 @@ Description
 
 # Modules
 from __future__ import print_function
-from distutils.debug import DEBUG
 import threading
 import time
 import logging
@@ -89,11 +88,11 @@ def appenddevice(newdevice, devices):
 
 def formatreturn(value):
     if value is None:
-        result = {"Status": "OK"}
+        result = {"status": "OK"}
     elif type(value) is dict:
         result = value
     else:
-        result = {"Status": value}
+        result = {"status": value}
     return(json.dumps(result))
 
 # Check to see if we have additional Device info
