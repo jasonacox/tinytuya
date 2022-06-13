@@ -309,7 +309,7 @@ class handler(BaseHTTPRequestHandler):
                 message = json.dumps({"Error": "Device ID not found.", "id": id})             
         elif self.path == '/numdevices':
             jout = {}
-            jout["numdevices"] = len(deviceslist)
+            jout["found"] = len(deviceslist)
             jout["registered"] = len(tuyadevices)
             message = json.dumps(jout)
         elif self.path.startswith('/status/'):
