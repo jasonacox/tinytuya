@@ -310,6 +310,7 @@ class handler(BaseHTTPRequestHandler):
         elif self.path == '/numdevices':
             jout = {}
             jout["numdevices"] = len(deviceslist)
+            jout["registered"] = len(tuyadevices)
             message = json.dumps(jout)
         elif self.path.startswith('/status/'):
             id = self.path.split('/status/')[1]
