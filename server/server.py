@@ -368,8 +368,8 @@ if __name__ == "__main__":
     apiServer = threading.Thread(target=api, args=(APIPORT,))
     
     print(
-        "\n%sTinyTuya %s(Server)%s [%s]\n"
-        % (bold, normal, dim, tinytuya.__version__)
+        "\n%sTinyTuya %s(Server)%s [%s%s]\n"
+        % (bold, normal, dim, tinytuya.__version__, BUILD)
     )
     if havekeys:
         print("%s[Loaded devices.json - %d devices]%s\n" % (dim, len(tuyadevices), normal))
