@@ -2,7 +2,7 @@
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/jasonacox/tinytuya)
 
-The TinyTuya API Server provides a central service to access all your Tuya devices on your network.  It continually listens for Tuya UDP discovery packets and updates the database of active devices and uses `devices.json` to poll the devices for state or change state.
+The TinyTuya API Server provides a central service to access all your Tuya devices on your network.  It continually listens for Tuya UDP discovery packets and updates the database of active devices and uses `devices.json` to poll the devices for status or change their state.
 
 API Functions - The server listens for GET requests on local port 8888:
 
@@ -20,7 +20,7 @@ Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tiny
 
 ## Quick Start
 
-1. Run the Docker Container to listen on port 8675. Update the `-e` values for your Powerwall. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
+1. Run the Server as a Docker Container and listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
 
     ```bash
     docker run \
