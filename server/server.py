@@ -28,7 +28,9 @@ import logging
 import json
 import socket
 import requests
+import resource
 import sys
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
 import tinytuya
@@ -40,6 +42,8 @@ try:
 except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
+
+BUILD = "t1"
 
 # Defaults
 APIPORT = 8888
@@ -53,8 +57,21 @@ UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 
+# Static Assets
+web_root = os.path.join(os.path.dirname(__file__), "web")
+
 # Logging
 log = logging.getLogger(__name__)
+
+# Global Stats
+serverstats = {}
+serverstats['tinytuya'] = "%s%s" % (tinytuya.version, BUILD)
+serverstats['gets'] = 0
+serverstats['errors'] = 0
+serverstats['timeout'] = 0
+serverstats['api'] = {}
+serverstats['ts'] = int(time.time())         # Timestamp for Now
+serverstats['start'] = int(time.time())      # Timestamp for Start 
 
 # Global Variables
 running = True
@@ -65,8 +82,10 @@ deviceslist = {}
 # Terminal formatting
 (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(True)
 
-# Function to Lookup Tuya device info by (id) returning (name, key)
+# Helpful Functions
+
 def tuyaLookup(deviceid):
+    #  Function to Lookup Tuya device info by (id) returning (name, key)
     for i in tuyadevices:
         if i["id"] == deviceid:
             if "mac" in i:
@@ -94,6 +113,30 @@ def formatreturn(value):
     else:
         result = {"status": value}
     return(json.dumps(result))
+
+def get_static(web_root, fpath):
+    if fpath.split('?')[0] == "/":
+        fpath = "index.html"
+    if fpath.startswith("/"):
+        fpath = fpath[1:]
+    fpath = fpath.split("?")[0]
+    freq = os.path.join(web_root, fpath)
+    if os.path.exists(freq):
+        if freq.lower().endswith(".js"):
+            ftype = "application/javascript"
+        elif freq.lower().endswith(".css"):
+            ftype = "text/css"
+        elif freq.lower().endswith(".png"):
+            ftype = "image/png"
+        elif freq.lower().endswith(".html"):
+            ftype = "text/html"
+        else:
+            ftype = "text/plain"
+
+        with open(freq, 'rb') as f:
+            return f.read(), ftype
+
+    return None, None
 
 # Check to see if we have additional Device info
 try:
@@ -181,7 +224,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.send_response(200)
-        message = "ERROR!"
+        message = "Error"
         contenttype = 'application/json'
         # Send headers and payload  
         self.send_header('Content-type',contenttype)
@@ -191,10 +234,15 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(200)
-        message = "ERROR!"
+        message = "Error"
         contenttype = 'application/json'
         if self.path == '/devices':
             message = json.dumps(deviceslist)
+        if self.path == '/stats':
+            # Give Internal Stats
+            serverstats['ts'] = int(time.time())
+            serverstats['mem'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            message = json.dumps(serverstats)
         elif self.path.startswith('/set/'):
             try:
                 # ['', 'set', 'deviceid', 'key', 'value']
@@ -275,6 +323,20 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error polling device.", "id": id})
             else:
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
+        else:
+            # Serve static assets from web root first, if found.
+            fcontent, ftype = get_static(web_root, self.path)
+            if fcontent:
+                self.send_header('Content-type','{}'.format(ftype))
+                self.send_header('Content-Length', str(len(fcontent)))
+                self.end_headers()
+                self.wfile.write(fcontent)
+                return
+
+        # Counts 
+        if "Error" in message:
+            serverstats['errors'] = serverstats['errors'] + 1
+        serverstats['gets'] = serverstats['gets'] + 1
 
         # Send headers and payload
         self.send_header('Content-type',contenttype)
@@ -310,14 +372,16 @@ if __name__ == "__main__":
     )
     if havekeys:
         print("%s[Loaded devices.json - %d devices]%s\n" % (dim, len(tuyadevices), normal))
-    
+    else:
+        print("%sWARNING: No devices.json found - limited functionality.%s\n" % (alertdim,normal))
+
     # start threads
     print("Starting threads...")
     tuyaUDP.start()
     tuyaUDPs.start()
     apiServer.start()
 
-    print(" - API Endpoint on http://localhost:%d" % APIPORT)
+    print(" - API and UI Endpoint on http://localhost:%d" % APIPORT)
     
     try:
         while(True):

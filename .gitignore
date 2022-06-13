@@ -114,3 +114,5 @@ devices.json
 tinytuya.json
 snapshot.json
 tuya-raw.json
+server/testproxy.sh
+server/uploadtest.sh

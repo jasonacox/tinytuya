@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>JavaScript - read JSON from URL</title>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+</head>
+
+<body>
+    <div class="title"></div>
+    <p>Device Details</p>
+    <div class="device"></div>
+    <div class="status"></div>
+
+    <script>
+
+    // Get Version
+    function showversion() {
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/stats";
+        $.getJSON(pwurl, function(data) {
+            var text = `TinyTuya API Server ${data.tinytuya}`
+            $(".title").html(text);
+        });
+        setTimeout(showversion, 10000);
+    }
+
+    // Device Details
+    function devicedetails() {
+        // Grab the GET variables
+        var $_GET = {};
+        if(document.location.toString().indexOf('?') !== -1) {
+            var query = document.location
+                        .toString()
+                        // get the query string
+                        .replace(/^.*?\?/, '')
+                        // and remove any existing hash string (thanks, @vrijdenker)
+                        .replace(/#.*$/, '')
+                        .split('&');
+
+            for(var i=0, l=query.length; i<l; i++) {
+            var aux = decodeURIComponent(query[i]).split('=');
+            $_GET[aux[0]] = aux[1];
+            }
+        }
+        id = $_GET['id'];
+
+        // Device Metadata
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/device/" + id;
+        $.getJSON(pwurl, function(data) {
+            var ip = data.ip;
+            var name = data.name;
+            var version = data.version;
+            var key = data.key;
+            var product = data.productKey;
+            var mac = data.mac;
+            var output = 
+                "Name: " + name + "<br>" +
+                "Device ID: " + id + "<br>" +
+                "IP: " + ip + "<br>" +
+                "MAC: " + mac + "<br>" +
+                "Version: " + version + "<br>" +
+                "Key: " + key + "<br>" +
+                "Product: " + product + "<br>";
+            $(".device").html(output);
+        });
+        //setTimeout(devicelist, 1000);
+    }
+
+    // Display
+    showversion();
+    devicedetails();
+    
+    </script>
+
+<div class="controls">
+    <p><a href="/">Back</a></p>
+</div>
+
+</body>
+</html>

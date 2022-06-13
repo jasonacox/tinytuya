@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>JavaScript - read JSON from URL</title>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+</head>
+
+<body>
+    <div class="title"></div>
+    <p>Stats</p>
+    <div class="number"></div>
+    <p>Devices</p>
+    <div class="devices"></div>
+
+    <script>
+
+    // Get Version
+    function showversion() {
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/stats";
+        $.getJSON(pwurl, function(data) {
+            var text = `TinyTuya API Server ${data.tinytuya}`
+            $(".title").html(text);
+        });
+        setTimeout(showversion, 10000);
+    }
+
+    // Number of Devices
+    function numdevices() {
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/numdevices";
+        $.getJSON(pwurl, function(data) {
+            var text = `Number of Devices Found: ${data.numdevices}`
+            $(".number").html(text);
+        });
+        setTimeout(numdevices, 1000);
+    }
+
+    // Device List
+    function devicelist() {
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/devices";
+        $.getJSON(pwurl, function(data) {
+            // store entire array in deviceDB
+            let deviceDB = [];
+            // 
+            var output = "";
+            var id = "";
+            var ip = "";
+            var name = "";
+            var ver = "";
+            for (let x in data) {
+                //console.log(x + ": "+ data[x])
+                let device = {
+                    "name": data[x].name,
+                    "id": x,
+                    "ip": data[x].ip,
+                    "version": data[x].version
+                }
+                deviceDB.push(device)
+            }
+            
+            // print sorted list
+            let sortedDevices = deviceDB.sort((c1, c2) => (c1.name > c2.name) ? 1 : (c1.name < c2.name) ? -1 : 0);
+            let rownum = 1;
+            for (let x in sortedDevices) {
+                output = output + rownum + 
+                    " - <a href='device.html?id=" + sortedDevices[x].id + "'>" +
+                    sortedDevices[x].name + "</a> - " + 
+                    sortedDevices[x].id + " - " + 
+                    sortedDevices[x].ip + "<br>\n";
+                rownum++;
+            }
+            
+            $(".devices").html(output);
+            
+            // TODO - convert to table
+            // var tbl = `Number of Devices Found: ${data.numdevices}`
+            // $("#devicetable").html("<tr><td>name</td></tr>");
+        });
+        setTimeout(devicelist, 1000);
+    }
+
+    // Display
+    showversion();
+    numdevices();
+    devicelist();
+    
+    </script>
+
+</body>
+</html>
