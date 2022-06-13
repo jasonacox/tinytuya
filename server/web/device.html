@@ -9,6 +9,7 @@
     <div class="title"></div>
     <p>Device Details</p>
     <div class="device"></div>
+    <p>Device Status</p>
     <div class="status"></div>
 
     <script>
@@ -62,6 +63,17 @@
                 "Product: " + product + "<br>";
             $(".device").html(output);
         });
+
+        // Device Status
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/status/" + id;
+        $.getJSON(pwurl, function(data,textStatus,jqXHR) {
+
+            var output = 
+                "Direct URL: " + pwurl + "<br>" +
+                "Device Response: " + jqXHR.responseText;
+            $(".status").html(output);
+        });
+
         //setTimeout(devicelist, 1000);
     }
 
