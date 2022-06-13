@@ -4,6 +4,8 @@
 
 The TinyTuya API Server provides a central service to access all your Tuya devices on your network.  It continually listens for Tuya UDP discovery packets and updates the database of active devices. It uses `devices.json` to poll the devices for status or change their state.
 
+**BETA**: This is under active development. Please reach out if you have suggestions or wish to contribute~
+
 API Functions - The server listens for GET requests on local port 8888:
 
 ```
