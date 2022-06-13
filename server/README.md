@@ -2,7 +2,7 @@
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/jasonacox/tinytuya)
 
-The TinyTuya API Server provides a central service to access all your Tuya devices on your network.  It continually listens for Tuya UDP discovery packets and updates the database of active devices and uses `devices.json` to poll the devices for status or change their state.
+The TinyTuya API Server provides a central service to access all your Tuya devices on your network.  It continually listens for Tuya UDP discovery packets and updates the database of active devices. It uses `devices.json` to poll the devices for status or change their state.
 
 API Functions - The server listens for GET requests on local port 8888:
 
@@ -20,7 +20,7 @@ Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tiny
 
 ## Quick Start
 
-1. Run the Server as a Docker Container and listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
+1. Run the Server as a Docker Container listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
 
     ```bash
     docker run \
@@ -40,18 +40,18 @@ You can load the Web Interface to view all your devices: http://localhost:8888/
 
 Additionally you can use the API server to poll or mange your Tuya devices with simple web service calls:
 
-    ```bash
-    # Get Tuya Device Information
-    curl -i http://localhost:8888/numdevices
-    curl -i http://localhost:8888/devices
-    curl -i http://localhost:8888/device/{deviceID}
-    curl -i http://localhost:8888/status/{deviceID}
+```bash
+# Get Tuya Device Information
+curl -i http://localhost:8888/numdevices
+curl -i http://localhost:8888/devices
+curl -i http://localhost:8888/device/{deviceID}
+curl -i http://localhost:8888/status/{deviceID}
 
-    # Command Tuya Devices
-    curl -i http://localhost:8888/turnon/{deviceID}
-    curl -i http://localhost:8888/turnoff/{deviceID}
-    curl -i http://localhost:8888/set/{deviceID}/{key}/{value}
-    ```
+# Command Tuya Devices
+curl -i http://localhost:8888/turnon/{deviceID}
+curl -i http://localhost:8888/turnoff/{deviceID}
+curl -i http://localhost:8888/set/{deviceID}/{key}/{value}
+```
 
 ### Troubleshooting Help
 
@@ -71,3 +71,16 @@ docker start tinytuya
 ## Run without Docker
 
 This folder contains the `server.py` script that runs a simple python based webserver that makes the TinyTuya API calls.  Make sure the `device.json` file is the same directory where you start the server.
+
+```bash
+python3 server.py
+```
+
+```
+TinyTuya (Server) [1.5.0]
+
+[Loaded devices.json - 34 devices]
+
+Starting threads...
+ - API and UI Endpoint on http://localhost:8888
+```
