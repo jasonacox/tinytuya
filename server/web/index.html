@@ -18,7 +18,7 @@
     function showversion() {
         var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/stats";
         $.getJSON(pwurl, function(data) {
-            var text = `TinyTuya API Server ${data.tinytuya}`
+            var text = `TinyTuya API Server ${data.tinytuya}`;
             $(".title").html(text);
         });
         setTimeout(showversion, 10000);
@@ -28,7 +28,8 @@
     function numdevices() {
         var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/numdevices";
         $.getJSON(pwurl, function(data) {
-            var text = `Number of Devices Found: ${data.numdevices}`
+            var text = `Number of Devices Found: ${data.found}` + "<br>" +
+            `Total Devices Registered: ${data.registered}`;
             $(".number").html(text);
         });
         setTimeout(numdevices, 1000);
