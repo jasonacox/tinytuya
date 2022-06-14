@@ -33,7 +33,6 @@ import sys
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
-import tinytuya
 
 # Required module: pycryptodome
 try:
@@ -42,6 +41,15 @@ try:
 except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
+
+# Terminal color capability for all platforms
+try:
+    from colorama import init
+    init()
+except:
+    pass
+
+import tinytuya
 
 BUILD = "t1"
 

@@ -18,6 +18,7 @@ setuptools.setup(
     install_requires=[
         'pycryptodome',  # Encryption - AES can also be provided via PyCrypto or pyaes
         'requests',      # Used for Setup Wizard - Tuya IoT Platform calls
+        'colorama',      # Makes ANSI escape character sequences work under MS Windows.
     ],
     classifiers=[
         "Programming Language :: Python :: 2",

@@ -30,9 +30,10 @@ import json
 import socket
 import time
 import requests
-
+from colorama import init
 import tinytuya
 
+# Optional libraries required for forced scanning
 try:
     from getmac import get_mac_address
     SCANLIBS = True
@@ -45,6 +46,9 @@ try:
     input = raw_input
 except NameError:
     pass
+
+# Colorama terminal color capability for all platforms
+init()
 
 # Configuration Files
 DEVICEFILE = tinytuya.DEVICEFILE

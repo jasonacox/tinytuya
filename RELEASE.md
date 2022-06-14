@@ -5,6 +5,10 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add function to send multiple DPS index updates with one call
 
+## v1.5.1 - Colorama for Terminal Color
+
+* PyPI 1.5.1
+* Added [colorama](https://github.com/tartley/colorama) terminal color capability for all platforms including Windows and stdout redirects
 
 ## v1.5.0 - Add 'nowait' Option to Commands
 

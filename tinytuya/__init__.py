@@ -99,10 +99,10 @@ import socket
 import struct
 import sys
 import time
-
 import requests
+from colorama import init
 
-# Backward compatability for python2
+# Backward compatibility for python2
 try:
     input = raw_input
 except NameError:
@@ -116,7 +116,10 @@ except ImportError:
     Crypto = AES = None
     import pyaes  # https://github.com/ricmoo/pyaes
 
-version_tuple = (1, 5, 0)
+# Colorama terminal color capability for all platforms
+init()
+
+version_tuple = (1, 5, 1)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -476,6 +479,7 @@ class XenonDevice(object):
         self.dps_to_request = {}
         self.seqno = 0
         self.sendWait = 0.01
+        self.dps_cache = {}
         if address is None or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
             (addr, ver) = self.find(dev_id)
@@ -1365,7 +1369,7 @@ class BulbDevice(Device):
 
     def set_bulb_type(self, type):
         self.bulb_type = type
-        
+
     def set_mode(self, mode="white", nowait=False):
         """
         Set bulb mode
