@@ -727,6 +727,7 @@ Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 |128|Sensor Data, list 5|base64|binary blob||
 |129|System State|enum|[ 'fanon' 'coolfanon' 'alloff' others? ]||
 |130|Weather Forcast|?|?|?|
+
 NOTE (*) - Depending on the firmware, either 18/19/20/26/27 or 108/109/110/111/x are used, not both
 For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/discussions/139
 
