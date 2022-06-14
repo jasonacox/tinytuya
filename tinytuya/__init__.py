@@ -772,15 +772,22 @@ class XenonDevice(object):
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
+        if self.socket and not persist:
+            self.socket.close()
+            self.socket = None
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
+        if self.socket:
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
 
     def set_socketTimeout(self, s):
         self.connection_timeout = s
+        if self.socket:
+            self.socket.settimeout(s)
 
     def set_dpsUsed(self, dps_to_request):
         self.dps_to_request = dps_to_request
