@@ -692,6 +692,44 @@ NOTE (*) - The range can vary depending on the device. As an example, for dimmer
 
 Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 
+#### Version 3.3 - 24v Thermostat (i.e. PCT513-TY)
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+|2|System Mode|enum|[ 'auto' 'cool' 'heat' 'off' others? ]||
+|16|Center of Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
+|17|Center of Setpoint, °F|integer|20-102|°F|
+|18*|Cooling Setpoint, Low-Resolution °F|integer|500-3200|°F|
+|19*|Cooling Setpoint, Low-Resolution °C|integer|500-3200|°C|
+|20*|Heating Setpoint, Low-Resolution °F|integer|500-3200|°F|
+|23|Display Units|enum|[ 'f' 'c' ]||
+|24|Current Temperature, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
+|26*|Heating Setpoint, Low-Resolution °C|integer|500-3200|°C|
+|27*|Temperature Correction|integer|-10 - +10||
+|29|Current Temperature, °F|integer|20-102|°F|
+|34|Current Humidity|integer|0-100|%|
+|45|Fault Flags|bitmask|[ 'e1' 'e2' 'e3' ]||
+|107|System Type|integer-as-string|?|?|
+|108*|Cooling Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
+|109*|Heating Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
+|110*|Cooling Setpoint, °F|integer|20-102|°F|
+|111*|Heating Setpoint, °F|integer|20-102|°F|
+|115|Fan Mode|enum|[ 'auto' 'cycle' 'on' ]||
+|116|"at home/away from home"|integer-as-string|?|?|
+|118|Schedule Data|base64|binary blob||
+|119|Schedule Enabled|bool|True/False||
+|120|Hold/Schedule|enum|[ 'permhold' 'temphold' 'followschedule' ]||
+|121|Vacation Data|base64|binary blob||
+|122|[Sensor Data, list 1](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
+|123|Minimum Fan Run Time (when 'circ')|integer|0-55|minutes per hour|
+|125|Sensor Data, list 2|base64|binary blob||
+|126|Sensor Data, list 3|base64|binary blob||
+|127|Sensor Data, list 4|base64|binary blob||
+|128|Sensor Data, list 5|base64|binary blob||
+|129|System State|enum|[ 'fanon' 'coolfanon' 'alloff' others? ]||
+|130|Weather Forcast|?|?|?|
+NOTE (*) - Depending on the firmware, either 18/19/20/26/27 or 108/109/110/111/x are used, not both
+For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/discussions/139
+
 ### Tuya References
 
 * Tuya Hardware Development - Protocol: https://developer.tuya.com/en/docs/iot/device-development/embedded-software-development/mcu-development-access/wifi-mcu-sdk-solution/tuya-cloud-universal-serial-port-access-protocol?id=K9hhi0xxtn9cb
