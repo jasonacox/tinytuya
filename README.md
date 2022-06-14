@@ -703,11 +703,11 @@ Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 |20*|Heating Setpoint, Low-Resolution °F|integer|20-102|°F|
 |23|Display Units|enum|[ 'f' 'c' ]||
 |24|Current Temperature, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
-|26*|Heating Setpoint, Low-Resolution °C|integer|500-3200|°C|
+|26*|Heating Setpoint, Low-Resolution °C|integer|5-32|°C|
 |27*|Temperature Correction|integer|-10 - +10||
 |29|Current Temperature, °F|integer|20-102|°F|
 |34|Current Humidity|integer|0-100|%|
-|45|Fault Flags|bitmask|[ 'e1' 'e2' 'e3' ]||
+|45|Fault Flags|bitmask|[ e1 e2 e3 ]||
 |107|System Type|integer-as-string|?|?|
 |108*|Cooling Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
 |109*|Heating Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
@@ -720,11 +720,11 @@ Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 |120|Hold/Schedule|enum|[ 'permhold' 'temphold' 'followschedule' ]||
 |121|Vacation Data|base64|binary blob||
 |122|[Sensor Data, list 1](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
-|123|Minimum Fan Run Time (when 'circ')|integer|0-55|minutes per hour|
-|125|Sensor Data, list 2|base64|binary blob||
-|126|Sensor Data, list 3|base64|binary blob||
-|127|Sensor Data, list 4|base64|binary blob||
-|128|Sensor Data, list 5|base64|binary blob||
+|123|Minimum Fan Run Time|integer|0-55|minutes per hour|
+|125|[Sensor Data, list 2](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
+|126|[Sensor Data, list 3](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
+|127|[Sensor Data, list 4](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
+|128|[Sensor Data, list 5](https://github.com/jasonacox/tinytuya/discussions/139)|base64|binary blob||
 |129|System State|enum|[ 'fanon' 'coolfanon' 'alloff' others? ]||
 |130|Weather Forcast|?|?|?|
 
