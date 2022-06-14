@@ -9,6 +9,7 @@
 
 * PyPI 1.5.1
 * Added [colorama](https://github.com/tartley/colorama) terminal color capability for all platforms including Windows and stdout redirects
+* BETA: Started standalone TinyTuya API Server ([see here](https://github.com/jasonacox/tinytuya/tree/master/server#tinytuya-api-server)). No change to core library.
 
 ## v1.5.0 - Add 'nowait' Option to Commands
 
