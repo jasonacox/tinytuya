@@ -779,7 +779,10 @@ class XenonDevice(object):
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
         if self.socket:
-            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if nodelay:
+                self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            else:
+                self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 0)
 
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
