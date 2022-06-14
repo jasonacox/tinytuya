@@ -698,9 +698,9 @@ Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 |2|System Mode|enum|[ 'auto' 'cool' 'heat' 'off' others? ]||
 |16|Center of Setpoint, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
 |17|Center of Setpoint, °F|integer|20-102|°F|
-|18*|Cooling Setpoint, Low-Resolution °F|integer|500-3200|°F|
+|18*|Cooling Setpoint, Low-Resolution °F|integer|20-102|°F|
 |19*|Cooling Setpoint, Low-Resolution °C|integer|500-3200|°C|
-|20*|Heating Setpoint, Low-Resolution °F|integer|500-3200|°F|
+|20*|Heating Setpoint, Low-Resolution °F|integer|20-102|°F|
 |23|Display Units|enum|[ 'f' 'c' ]||
 |24|Current Temperature, High-Resolution °C|integer|500-3200|°C x 100 in steps of 50|
 |26*|Heating Setpoint, Low-Resolution °C|integer|500-3200|°C|
