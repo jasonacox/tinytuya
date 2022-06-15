@@ -345,29 +345,30 @@ class ThermostatDevice(Device):
         for k in data['dps']:
             if k in self.dps_data:
                 name = checkname = self.dps_data[k]['name']
+                val = data['dps'][k]
                 if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
                     checkname = 'raw_' + name
 
-                if getattr(self, checkname) != data['dps'][k]:
+                if getattr(self, checkname) != val:
                     data['changed'].append( name )
-                    setattr(self, checkname, data['dps'][k])
+                    setattr(self, checkname, val)
 
                     if ('base64' in self.dps_data[k]) and self.dps_data[k]:
-                        data['dps'][k] = base64.b64decode( data['dps'][k] )
+                        val = base64.b64decode( val )
                         data['changed'].append( checkname )
-                        setattr(self, name, data['dps'][k])
+                        setattr(self, name, val)
 
                     if 'enum' in self.dps_data[k]:
-                        if data['dps'][k] not in self.dps_data[k]['enum']:
-                            log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (data['dps'][k], k, name, self.dps_data[k]['enum']) )
+                        if val not in self.dps_data[k]['enum']:
+                            log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
 
                     if 'scale' in self.dps_data[k]:
-                        data['dps'][k] /= self.dps_data[k]['scale']
+                        val /= self.dps_data[k]['scale']
                         data['changed'].append( checkname )
-                        setattr(self, name, data['dps'][k])
+                        setattr(self, name, val)
 
                     if 'alt' in self.dps_data[k]:
                         data['changed'].append( self.dps_data[k]['alt'] )
-                        setattr(self, self.dps_data[k]['alt'], data['dps'][k])
+                        setattr(self, self.dps_data[k]['alt'], val)
 
         return data
