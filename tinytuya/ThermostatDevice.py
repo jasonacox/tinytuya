@@ -3,7 +3,7 @@ import struct
 import base64
 
 from .core import Device
-#from .core import log
+from .core import log
 #from .core import *
 
 class ThermostatDevice(Device):
@@ -19,17 +19,58 @@ class ThermostatDevice(Device):
     high_resolution = None
     sensorlists = [ ]
     sensor_dps = ('122', '125', '126', '127', '128')
+    dps_data = {
+        '2' : { 'name': 'mode', 'enum': ['auto', 'cool', 'heat', 'off'] },
+        '16': { 'name': 'temp_set', 'alt': 'setpoint_c', 'scale': 100 },
+        '17': { 'name': 'temp_set_f', 'alt': 'setpoint_f' },
+        '18': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': False },
+        '19': { 'name': 'upper_temp', 'alt': 'cooling_setpoint_c', 'high_resolution': False },
+        '20': { 'name': 'lower_temp_f', 'alt': 'heating_setpoint_f', 'high_resolution': False },
+        '23': { 'name': 'temp_unit_convert', 'alt': 'units', 'enum': ['f','c'] },
+        '24': { 'name': 'temp_current', 'alt': 'temperature_c', 'scale': 100 },
+        '26': { 'name': 'lower_temp', 'alt': 'heating_setpoint_c', 'high_resolution': False },
+        '27': { 'name': 'temp_correction', 'high_resolution': False },
+        '29': { 'name': 'temp_current_f', 'alt': 'temperature_f' },
+        '34': { 'name': 'humidity' },
+        '45': { 'name': 'fault' },
+        '107': { 'name': 'system_type' },
+        '108': { 'name': 'upper_temp', 'alt': 'cooling_setpoint_c', 'scale': 100, 'high_resolution': True },
+        '109': { 'name': 'lower_temp', 'alt': 'heating_setpoint_c', 'scale': 100, 'high_resolution': True },
+        '110': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': True },
+        '111': { 'name': 'lower_temp_f', 'alt': 'heating_setpoint_f', 'high_resolution': True },
+        '115': { 'name': 'fan', 'enum': ['auto', 'cycle', 'on'] },
+        '116': { 'name': 'home' },
+        '118': { 'name': 'schedule', 'base64': True },
+        '119': { 'name': 'schedule_enabled' },
+        '120': { 'name': 'hold', 'enum': ['permhold', 'temphold', 'followschedule'] },
+        '121': { 'name': 'vacation', 'base64': True },
+        #'122': { 'name': 'sensor_list_1', 'base64': True },
+        '123': { 'name': 'fan_runtime' },
+        #'125': { 'name': 'sensor_list_2', 'base64': True },
+        #'126': { 'name': 'sensor_list_3', 'base64': True },
+        #'127': { 'name': 'sensor_list_4', 'base64': True },
+        #'128': { 'name': 'sensor_list_5', 'base64': True },
+        '129': { 'name': 'system', 'enum': ['fanon', 'coolfanon', 'alloff', 'heatfanon', 'heaton'] },
+        '130': { 'name': 'weather_forcast' }
+        }
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
+    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True):
         super(ThermostatDevice, self).__init__(dev_id, address, local_key, dev_type)
         self.set_version(3.3)
         # set persistant so we can receive sensor broadcasts
-        self.set_socketPersistent(True)
-        # load the initial data
-        #self.status()
+        if persist:
+            self.set_socketPersistent(True)
 
         for k in self.sensor_dps:
             self.sensorlists.append(self.ThermostatSensorList(k))
+
+        for k in self.dps_data:
+            setattr(self, self.dps_data[k]['name'], None)
+            if 'alt' in self.dps_data[k]:
+                setattr(self, self.dps_data[k]['alt'], None)
+
+            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
+                setattr(self, 'raw_' + self.dps_data[k]['name'], None)
 
     class ThermostatSensorList(object):
         """
@@ -84,8 +125,11 @@ class ThermostatDevice(Device):
                 else:
                     self.sensors.append( self.ThermostatSensorData( self.dps ) )
                     self.sensors[i].update(sensordata_list[(i*52)+1:((i+1)*52)+1])
+                    # instead of listing every field, just say it was added
                     self.sensors[i].changed = [ 'sensor_added' ]
                     changed.append(self.sensors[i])
+
+                # FIXME should we delete removed sensors?
 
             return changed
 
@@ -106,6 +150,7 @@ class ThermostatDevice(Device):
                 yield s
 
         class ThermostatSensorData(object):
+            # unpack the 52-byte long binary blob
             struct_format = '>I30sB?h?BBBB?8s'
             dps = None
             raw_id = 0
@@ -187,6 +232,86 @@ class ThermostatDevice(Device):
         # delete the old name so we'll get a name-updated message
         sen.raw_name = sen.name = None
 
+    def setSetpoint( self, setpoint, cf=None ):
+        if self.mode == 'cool':
+            return self.setCoolSetpoint( self, setpoint, cf )
+        elif self.mode == 'heat':
+            return self.setHeatSetpoint( self, setpoint, cf )
+        else:
+            # no idea, let the thermostat figure it out
+            return self.setMiddleSetpoint( self, setpoint, cf )
+
+    def setCoolSetpoint( self, setpoint, cf=None ):
+        k = 'cooling_setpoint_' + self.getCF( cf )
+        return self.setValue( k, setpoint )
+
+    def setHeatSetpoint( self, setpoint, cf=None ):
+        k = 'heating_setpoint_' + self.getCF( cf )
+        return self.setValue( k, setpoint )
+
+    def setMiddleSetpoint( self, setpoint, cf=None ):
+        k = 'setpoint_' + self.getCF( cf )
+        return self.setValue( k, setpoint )
+
+    def setMode( self, mode ):
+        return self.setValue( 'mode', mode )
+
+    def setFan( self, fan ):
+        if not fan:
+            fan = 'auto'
+        elif fan is True:
+            fan = 'on'
+        return self.setValue( 'fan', fan )
+
+    def setUnits( self, cf ):
+        cf = self.getCF( cf )
+        return self.setValue( 'temp_unit_convert', cf )
+
+    def setSchedule( self, sch ):
+        # FIXME set schedule data?
+        if sch:
+            return self.setValue( 'schedule_enabled', True )
+        return self.setValue( 'schedule_enabled', False )
+
+    def setHold( self, hold ):
+        return self.setValue( 'hold', hold )
+
+    def setFanRuntime( self, rt ):
+        return self.setValue( 'fan_runtime', int(rt) )
+
+    def setValue( self, key, val ):
+        dps = None
+        for k in self.dps_data:
+            if( (key == k['name']) or ('alt' in k and key == k['alt']) ):
+                if( ('high_resolution' not in k) or (k['high_resolution'] == self.high_resolution) ):
+                    dps = k
+                    break
+
+        if not dps:
+            log.warn( 'Requested key %r not found!' % key )
+            return False
+
+        ddata = self.dps_data[dps]
+
+        if 'scale' in ddata:
+            val = int( val * ddata['scale'] )
+
+        if 'enum' in ddata:
+            if val not in ddata['enum']:
+                log.warn( 'Requested value %r for key %r not in enum list %r !  Setting anyway...' % (val, key, ddata['enum']) )
+
+        if 'base64' in ddata:
+            val = base64.b64encode( val ).decode('ascii')
+
+        return self.set_value( dps, val, nowait=True )
+
+    def getCF( self, cf=None ):
+        if cf is None:
+            cf = getattr(self, 'temp_unit_convert', 'c')
+        if cf == 'f':
+            return 'f'
+        return 'c'
+
     def status(self):
         data = super(ThermostatDevice, self).status()
         return self._inspect_data( data )
@@ -202,26 +327,43 @@ class ThermostatDevice(Device):
         if 'dps' not in data:
             return data
 
-        data['changed'] = { }
+        data['changed'] = [ ]
+        data['changed_sensors'] = [ ]
 
-        data['changed']['sensors'] = [ ]
         for i in range( len(self.sensor_dps) ):
             k = self.sensor_dps[i]
             if k in data['dps']:
-                data['changed']['sensors'] += self.sensorlists[i].update( data['dps'][k] )
+                data['changed_sensors'] += self.sensorlists[i].update( data['dps'][k] )
 
-        if len(data['changed']['sensors']) < 1:
-            del data['changed']['sensors']
+        if self.high_resolution is None:
+            for k in self.dps_data:
+                if k in data['dps'] and 'high_resolution' in self.dps_data[k]:
+                    self.high_resolution = self.dps_data[k]['high_resolution']
+                    log.warn('ThermostatDevice: high-resolution is now %r' % self.high_resolution)
+                    break
 
+        for k in data['dps']:
+            if k in self.dps_data:
+                name = checkname = self.dps_data[k]['name']
+                if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
+                    checkname = 'raw_' + name
 
+                if getattr(self, checkname) != data['dps'][k]:
+                    data['changed'].append( name )
+                    setattr(self, checkname, data['dps'][k])
 
+                    if 'scale' in self.dps_data[k]:
+                        data['dps'][k] /= self.dps_data[k]['scale']
+                        data['changed'].append( checkname )
+                        setattr(self, name, data['dps'][k])
 
+                    if ('base64' in self.dps_data[k]) and self.dps_data[k]:
+                        data['dps'][k] = base64.b64decode( data['dps'][k] )
+                        data['changed'].append( checkname )
+                        setattr(self, name, data['dps'][k])
 
-
-
-
-
-        if len(data['changed']) < 1:
-            del data['changed']
+                    if 'alt' in self.dps_data[k]:
+                        data['changed'].append( self.dps_data[k]['alt'] )
+                        setattr(self, self.dps_data[k]['alt'], data['dps'][k])
 
         return data
