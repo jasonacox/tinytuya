@@ -5,10 +5,11 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add function to send multiple DPS index updates with one call
 
-## v1.5.1 - Colorama for Terminal Color
+## v1.6.0 - Colorama for Terminal Color
 
-* PyPI 1.5.1
-* Added [colorama](https://github.com/tartley/colorama) terminal color capability for all platforms including Windows and stdout redirects
+* PyPI 1.6.0
+* Add [colorama](https://github.com/tartley/colorama) terminal color capability for all platforms including MS Windows and stdout redirects
+* Fix to allow setting socket options to existing open sockets by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/140
 * BETA: Started standalone TinyTuya API Server ([see here](https://github.com/jasonacox/tinytuya/tree/master/server#tinytuya-api-server)). No change to core library.
 
 ## v1.5.0 - Add 'nowait' Option to Commands
