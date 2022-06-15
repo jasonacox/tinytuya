@@ -298,7 +298,7 @@ class ThermostatDevice(Device):
 
         if 'enum' in ddata:
             if val not in ddata['enum']:
-                log.warn( 'Requested value %r for key %r not in enum list %r !  Setting anyway...' % (val, key, ddata['enum']) )
+                log.warn( 'Requested value %r for key %r/%r not in enum list %r !  Setting anyway...' % (val, dps, key, ddata['enum']) )
 
         if 'base64' in ddata:
             val = base64.b64encode( val ).decode('ascii')
@@ -339,7 +339,7 @@ class ThermostatDevice(Device):
             for k in self.dps_data:
                 if k in data['dps'] and 'high_resolution' in self.dps_data[k]:
                     self.high_resolution = self.dps_data[k]['high_resolution']
-                    log.warn('ThermostatDevice: high-resolution is now %r' % self.high_resolution)
+                    log.info('ThermostatDevice: high-resolution is now %r' % self.high_resolution)
                     break
 
         for k in data['dps']:
@@ -352,13 +352,17 @@ class ThermostatDevice(Device):
                     data['changed'].append( name )
                     setattr(self, checkname, data['dps'][k])
 
-                    if 'scale' in self.dps_data[k]:
-                        data['dps'][k] /= self.dps_data[k]['scale']
+                    if ('base64' in self.dps_data[k]) and self.dps_data[k]:
+                        data['dps'][k] = base64.b64decode( data['dps'][k] )
                         data['changed'].append( checkname )
                         setattr(self, name, data['dps'][k])
 
-                    if ('base64' in self.dps_data[k]) and self.dps_data[k]:
-                        data['dps'][k] = base64.b64decode( data['dps'][k] )
+                    if 'enum' in self.dps_data[k]:
+                        if data['dps'][k] not in self.dps_data[k]['enum']:
+                            log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (data['dps'][k], k, name, self.dps_data[k]['enum']) )
+
+                    if 'scale' in self.dps_data[k]:
+                        data['dps'][k] /= self.dps_data[k]['scale']
                         data['changed'].append( checkname )
                         setattr(self, name, data['dps'][k])
 
