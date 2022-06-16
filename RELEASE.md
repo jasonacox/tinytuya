@@ -5,6 +5,13 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add function to send multiple DPS index updates with one call
 
+
+## v1.6.1 - TBD
+
+* PyPI 1.6.1
+* Break the Outlet/Cover/Bulb/Cloud modules out into separate files by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/142
+
+
 ## v1.6.0 - Colorama for Terminal Color
 
 * PyPI 1.6.0
