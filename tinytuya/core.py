@@ -6,14 +6,12 @@
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
 
- Local Control Classes
-    CoverDevice(dev_id, address, local_key=None, dev_type='default')
-    BulbDevice(dev_id, address, local_key=None, dev_type='default')
-        dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99
-        local_key (str, optional): The encryption key. Defaults to None.
-        dev_type (str): Device type for payload options (see below)
-    Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
+ Core Classes and Helper Functions
+
+ Classes
+  * AESCipher - Cryptography Helpers
+  * XenonDevice(object) - Base Tuya Objects and Functions
+  * Device(dev_id, address, local_key="", dev_type="default") - Tuya Class for Devices
 
  Functions
     json = status()                    # returns json payload
@@ -38,38 +36,7 @@
     generate_payload(command, data)    # Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
     receive()                          # Receive payload from device
-
-    CoverDevice:
-        open_cover(switch=1):
-        close_cover(switch=1):
-        stop_cover(switch=1):
-
-    BulbDevice
-        set_colour(r, g, b, nowait):
-        set_hsv(h, s, v, nowait):
-        set_white(brightness, colourtemp, nowait):
-        set_white_percentage(brightness=100, colourtemp=0, nowait):
-        set_brightness(brightness, nowait):
-        set_brightness_percentage(brightness=100, nowait):
-        set_colourtemp(colourtemp, nowait):
-        set_colourtemp_percentage(colourtemp=100, nowait):
-        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white', nowait):       # white, colour, scene, music
-        result = brightness():
-        result = colourtemp():
-        (r, g, b) = colour_rgb():
-        (h,s,v) = colour_hsv()
-        result = state():
-
-    Cloud
-        setregion(apiRegion)
-        getdevices(verbose=False)
-        getstatus(deviceid)
-        getfunctions(deviceid)
-        getproperties(deviceid)
-        getdps(deviceid)
-        sendcommand(deviceid, commands)
-
+    
  Credits
   * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
     For protocol reverse engineering
@@ -434,7 +401,7 @@ payload_dict = {
 
 
 ########################################################
-#             Local Classes and Functions
+#             Core Classes and Functions
 ########################################################
 
 class XenonDevice(object):
