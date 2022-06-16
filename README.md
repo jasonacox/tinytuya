@@ -12,7 +12,9 @@ Python module to interface with Tuya WiFi smart devices
 
 This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module.
 
-[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API, allowing us to directly control the devices without using the cloud. This python module provides a way to poll status and issue commands to these devices. Starting with v1.3.0, TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
+[Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API.  This allows us to directly control the devices without using the cloud. This python module provides a way to poll status and issue commands to these devices.
+
+Starting with v1.3.0, TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
@@ -26,18 +28,18 @@ This python module controls and reads state of [Tuya](https://en.tuya.com/) comp
     print('Device status: %r' % data)
 ```
 
-NOTE: This module requires the devices to have already been **activated** by Smart Life App.
+NOTE: Devices need to be **activated** by Smart Life App.
 
 ## TinyTuya Installation  
 
-TinyTuya supports python versions 2.7 and 3.x (recommended). You can install it using the python pip package manager ([see here](https://pip.pypa.io/en/stable/installation/)):
+TinyTuya supports python versions 2.7 and 3.x (recommended).
 
 ```bash
   # Install TinyTuya
   python -m pip install tinytuya
 ```
 
-Pip will attempt to install `pycryptodome` and `requests` if not already installed. The modules `pycrypto`, `Crypto` or `pyaes` could be used instead.
+Pip will attempt to install `pycryptodome`, `requests` and `colorama` if not already installed.
 
 ## Tuya Device Preparation
 
