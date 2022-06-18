@@ -709,14 +709,14 @@ class XenonDevice(object):
             try:
                 data = self.status()
             except Exception as ex:
-                self.exception("Failed to get status: %s", ex)
+                log.exception("Failed to get status: %s", ex)
                 raise
             if "dps" in data:
                 self.dps_cache.update(data["dps"])
 
             if self.dev_type == "default":
                 return self.dps_cache
-        self.debug("Detected dps: %s", self.dps_cache)
+        log.debug("Detected dps: %s", self.dps_cache)
         return self.dps_cache
 
     def add_dps_to_request(self, dp_indicies):
