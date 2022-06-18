@@ -2,9 +2,10 @@
 import struct
 import base64
 
-from .core import Device
-from .core import log
-#from .core import *
+from .core import Device, log, HEART_BEAT, DP_QUERY, CONTROL
+#from .core import log
+#from .core import HEART_BEAT
+#from .core import DP_QUERY
 
 class ThermostatDevice(Device):
     """
@@ -45,7 +46,7 @@ class ThermostatDevice(Device):
         '120': { 'name': 'hold', 'enum': ['permhold', 'temphold', 'followschedule'] },
         '121': { 'name': 'vacation', 'base64': True },
         #'122': { 'name': 'sensor_list_1', 'base64': True },
-        '123': { 'name': 'fan_runtime' },
+        '123': { 'name': 'fan_run_time' }, # presumably for when fan='circ'
         #'125': { 'name': 'sensor_list_2', 'base64': True },
         #'126': { 'name': 'sensor_list_3', 'base64': True },
         #'127': { 'name': 'sensor_list_4', 'base64': True },
@@ -80,14 +81,17 @@ class ThermostatDevice(Device):
             sensordata_list: either a base64-encoded string such as what DPS 122 contains, or an already-decoded byte string
             dps: the DPS of this sensor list
 
-        The str() method returns a base64-encoded string ready for sending
-        The repr() method returns a hexidecimal string to make it easier to see the data
+        The .b64() method returns a base64-encoded string ready for sending
+        The str() method returns a hexidecimal string to make it easier to see the data
 
         This class is iterable so you can easily loop through the individual sensors
 
         I.e.
+            # create a new list
             sensor_list_object = ThermostatSensorList( '122' ) # for DPS 122
+            # populate the sensor data
             sensor_list_object.update( 'base64 string here' )
+            # 
             send_dps = { '122': sensor_list_object.b64() }
             payload = d.generate_payload(tinytuya.CONTROL, data)
             d.send(payload)
@@ -133,7 +137,7 @@ class ThermostatDevice(Device):
 
             return changed
 
-        def __repr__( self ):
+        def __str__( self ):
             out = '%02X' % self.stated_count
             for s in self.sensors:
                 out += str(s)
@@ -151,11 +155,11 @@ class ThermostatDevice(Device):
 
         class ThermostatSensorData(object):
             # unpack the 52-byte long binary blob
-            struct_format = '>I30sB?h?BBBB?8s'
+            struct_format = '>I30s??h?BBBB?8s'
             dps = None
             raw_id = 0
             raw_name = b'\x00' * 30
-            unknown1 = 0
+            enabled = False
             occupied = False
             raw_temperature = 0
             temperature = 0
@@ -172,7 +176,7 @@ class ThermostatDevice(Device):
                 self.dps = dps
 
             def update( self, sensordata ):
-                keys = ('raw_id', 'raw_name', 'unknown1', 'occupied', 'raw_temperature', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'unknown3')
+                keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'unknown3')
                 new = struct.unpack( self.struct_format, sensordata )
                 self.changed = [ ]
 
@@ -209,28 +213,44 @@ class ThermostatDevice(Device):
                 return bytearray( bytes(self) ).hex().upper()
 
             def __bytes__( self ):
-                return struct.pack( self.struct_format, self.raw_id, self.raw_name, self.unknown1, self.occupied, int(self.temperature*100), self.online, self.participation, self.battery, self.firmware_version, self.unknown2, self.averaging, self.unknown3 )
+                log.warn( '%r %r %r %r %r %r %r %r %r %r %r %r %r' % (self.struct_format, self.raw_id, self.raw_name, self.enabled, self.occupied, self.raw_temperature, self.online, self.participation, self.battery, self.firmware_version, self.unknown2, self.averaging, self.unknown3) )
+                return struct.pack( self.struct_format, self.raw_id, self.raw_name, self.enabled, self.occupied, self.raw_temperature, self.online, self.participation, self.battery, self.firmware_version, self.unknown2, self.averaging, self.unknown3 )
 
     def sensors( self ):
         for l in self.sensorlists:
             for s in l:
                 yield s
 
-    def setSensorOccupied( self, sen, occ ):
+    def sensorSetOccupied( self, sen, occ ):
+        old = sen.occupied
         sen.occupied = occ
         idx = self.sensor_dps.index( sen.dps )
         self.set_value( sen.dps, self.sensorlists[idx].b64(), nowait=True )
-        # delete the old value so we'll get a occupancy-updated message
-        sen.occupied = None
+        sen.occupied = old
 
-    def setSensorName( self, sen, name ):
+    def sensorSetEnabled( self, sen, ena ):
+        old = sen.enable
+        sen.enable = ena
+        idx = self.sensor_dps.index( sen.dps )
+        self.set_value( sen.dps, self.sensorlists[idx].b64(), nowait=True )
+        sen.enable = old
+
+    def sensorSetName( self, sen, name ):
         oldname = sen.name
         oldraw = sen.raw_name
         sen.setName( name )
         idx = self.sensor_dps.index( sen.dps )
         self.set_value( sen.dps, self.sensorlists[idx].b64(), nowait=True )
-        # delete the old name so we'll get a name-updated message
-        sen.raw_name = sen.name = None
+        sen.raw_name = oldraw
+        sen.name = oldname
+
+    def sensorSetUnknown2( self, sen, occ ):
+        old = sen.unknown2
+        sen.unknown2 = occ
+        idx = self.sensor_dps.index( sen.dps )
+        self.set_value( sen.dps, self.sensorlists[idx].b64(), nowait=True )
+        sen.unknown2 = old
+
 
     def setSetpoint( self, setpoint, cf=None ):
         if self.mode == 'cool':
@@ -280,10 +300,23 @@ class ThermostatDevice(Device):
         return self.setValue( 'fan_runtime', int(rt) )
 
     def setValue( self, key, val ):
+        dps, val = self.parseValue( key, val )
+        return self.set_value( dps, val, nowait=True )
+
+    def setValues( self, val_dict ):
+        vals = { }
+        for key in val_dict:
+            dps, val = self.parseValue( key, val_dict[key] )
+            vals[dps] = val
+
+        payload = self.generate_payload(CONTROL, vals)
+        return self.send(payload)
+
+    def parseValue( self, key, val ):
         dps = None
         for k in self.dps_data:
-            if( (key == k['name']) or ('alt' in k and key == k['alt']) ):
-                if( ('high_resolution' not in k) or (k['high_resolution'] == self.high_resolution) ):
+            if( (key == self.dps_data[k]['name']) or (('alt' in self.dps_data[k]) and (key == self.dps_data[k]['alt'])) ):
+                if( ('high_resolution' not in self.dps_data[k]) or (self.dps_data[k]['high_resolution'] == self.high_resolution) ):
                     dps = k
                     break
 
@@ -303,7 +336,7 @@ class ThermostatDevice(Device):
         if 'base64' in ddata:
             val = base64.b64encode( val ).decode('ascii')
 
-        return self.set_value( dps, val, nowait=True )
+        return ( dps, val )
 
     def getCF( self, cf=None ):
         if cf is None:
@@ -311,6 +344,19 @@ class ThermostatDevice(Device):
         if cf == 'f':
             return 'f'
         return 'c'
+
+    def isSingleSetpoint( self ):
+        if self.mode == 'cool' or self.mode == 'heat':
+            return True
+        return False
+
+    def sendPing( self ):
+        payload = self.generate_payload( HEART_BEAT )
+        return self.send(payload)
+
+    def sendStatusRequest( self ):
+        payload = self.generate_payload( DP_QUERY )
+        return self.send(payload)
 
     def status(self):
         data = super(ThermostatDevice, self).status()
