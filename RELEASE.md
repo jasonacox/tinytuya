@@ -10,6 +10,7 @@
 
 * PyPI 1.6.1
 * Break the Outlet/Cover/Bulb/Cloud modules out into separate files by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/142
+* Fix logging calls in XenonDevice.detect_available_dps by @pkasprzyk in https://github.com/jasonacox/tinytuya/pull/144
 
 
 ## v1.6.0 - Colorama for Terminal Color
