@@ -13,13 +13,15 @@
     ThermostatSensorList(dps, parent_device)
         Mainly used internally, exposed in case it's useful elsewhere
         The 'dps' argument should be the DPS ID of the list so it knows what DPS to send when updating a sensor option
+        The 'parent_device' argument should be the ThermostatDevice() this sensor list belongs to
 
- ThermostatDevice:
-    sensor related functions:
-        sensors() 
+
+    Sensor related functions:
+        tstatdev = ThermostatDevice(...)
+        tstatdev.sensors() 
             -> returns an iterable list of all the sensors
               sensors have the following attributes:
-                  id -> ID # of the sensor as a string
+                  id -> ID # of the sensor as a hex string
                   raw_id -> ID # of the sensor as a integer
                   name -> decoded and trimmed name of the sensor
                   raw_name -> NUL-padded name of the sensor as a byte array
@@ -36,24 +38,43 @@
                   unknown3 -> value of unknown field, 8 byte long byte array
                   changed -> list of attributes which have changed since last update
 
-        sensorSetName( sensor, new_name )
-        sensorSetEnabled( sensor, enabled )
-        sensorSetOccupied( sensor, occupied )
+        When sensor values change, the sensor object is also available in data['changed_sensors'].  i.e.
+            data = tstatdev.receive()
+            if data and 'changed_sensors' in data:
+                for sensor in data['changed_sensors']:
+                    if 'temperature' in sensor['changed'] and sensor.online:
+                        ...do something with sensor.temperature or whatever...
+
+        sensor.setName( new_name )
+        sensor.setEnabled( enabled )
+        sensor.setOccupied( occupied )
             -> not really useful for remote sensors as they get overwritten on the next update
-        sensorSetParticipation( sensor, flag, val=True )
+        sensor.setParticipation( flag, val=True )
             -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
                when it's a string, val sets (True) or clears (False) that particular flag
                when it's a integer, the bitmask is set to val
-        sensorGetParticipation( sensor, flag )
+        sensor.getParticipation( flag )
             -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
                returns True if (string) flag is set or (integer) bitmask matches exactly, otherwise returns False
-               if the current value of all flags is wanted, the sensor.participation field can be read instead of using this function
-        sensorSetUnknown2( sensor, val )
+            -> if the current value of all flags is wanted, the sensor.participation field can be read directly instead of using this function
+        sensor.setUnknown2( val )
             -> sets the second unknown field to val.  'val' should be an integer in the range 0-255
-        sensorSetUnknown3( sensor, val )
+        sensor.setUnknown3( val )
             -> sets the third unknown field to val.  'val' should be a 8 byte long byte array
 
-    system related functions:
+    If multiple sensor options are going to be changed at the same time, it is much quicker to queue the updates and send them all at once:
+        sensor.delayUpdates()
+        ... call sensor.setName() or whatever here ...
+        sensor.sendUpdates()
+
+
+
+    Thermostat related functions:
+        delayUpdates()
+            -> when changing multiple settings, calling this first will cause them to be queued and sent all at once later
+        sendUpdates()
+            -> sends all queued updates at once and disables queueing (delayUpdates() will need to be called again if you want to queue things)
+
         setSetpoint( setpoint, cf=None )
             -> tried to auto-detect which setpoint you want to set (cooling or heating)) using the system mode and sets it
                if cf is None it assumes the given setpoint is the same temperature unit (degrees C or F) as the system temperature unit
@@ -61,6 +82,10 @@
             -> sets the cooling setpoint, for when the system mode is 'cool' or 'auto'
         setHeatSetpoint( setpoint, cf=None )
             -> sets the heating setpoint, for when the system mode is 'heat' or 'auto'
+        setMiddleSetpoint( setpoint, cf=None )
+            -> you should not need to call this, the thermostat handles it
+               matches the cool or heat setpoint if the system is in those modes, or the midpoint between them if the mode is 'auto'
+
         setMode( mode )
             -> sets the system mode.  mode should be a string in ['cool', 'heat', 'auto', 'off']
         setFan( fan )
@@ -159,6 +184,8 @@ class ThermostatDevice(Device):
     """
 
     high_resolution = None
+    delay_updates = False
+    delayed_updates = { }
     sensorlists = [ ]
     sensor_dps = ('122', '125', '126', '127', '128')
     dps_data = {
@@ -219,6 +246,9 @@ class ThermostatDevice(Device):
             for s in l:
                 yield s
 
+    def delayUpdates( self ):
+        self.delay_updates = True
+
     def setSetpoint( self, setpoint, cf=None ):
         if self.mode == 'cool':
             return self.setCoolSetpoint( self, setpoint, cf )
@@ -274,16 +304,24 @@ class ThermostatDevice(Device):
 
     def setValue( self, key, val ):
         dps, val = self.parseValue( key, val )
-        return self.set_value( dps, val, nowait=True )
+
+        if not self.delay_updates:
+            return self.set_value( dps, val, nowait=True )
+
+        self.delayed_updates[dps] = val
+        return True
 
     def setValues( self, val_dict ):
-        vals = { }
         for key in val_dict:
             dps, val = self.parseValue( key, val_dict[key] )
-            vals[dps] = val
+            self.delayed_updates[dps] = val
 
-        payload = self.generate_payload(CONTROL, vals)
-        return self.send(payload)
+        if not self.delay_updates:
+            payload = self.generate_payload(CONTROL, self.delayed_updates)
+            self.delayed_updates = { }
+            return self.send(payload)
+
+        return True
 
     def parseValue( self, key, val ):
         dps = None
@@ -310,6 +348,16 @@ class ThermostatDevice(Device):
             val = base64.b64encode( val ).decode('ascii')
 
         return ( dps, val )
+
+    def sendUpdates( self ):
+        self.delay_updates = False
+
+        if len(self.delayed_updates) > 0:
+            payload = self.generate_payload(CONTROL, self.delayed_updates)
+            self.delayed_updates = { }
+            return self.send(payload)
+
+        return False
 
     def getCF( self, cf=None ):
         if cf is None:
@@ -405,20 +453,27 @@ class ThermostatSensorList(object):
     Represents a list of sensors such as what gets returned in DPS 122
 
     Args:
-        sensordata_list: either a base64-encoded string such as what DPS 122 contains, or an already-decoded byte string
         dps: the DPS of this sensor list
+        parent_device: the ThermostatDevice which this sensor list is attached to
+
+
+    The .update(sensordata_list) method parses an update
+      Args:
+        sensordata_list: either a base64-encoded string such as what DPS 122 contains, or an already-decoded byte string
 
     The .b64() method returns a base64-encoded string ready for sending
-    The str() method returns a hexidecimal string to make it easier to see the data
+    The str() method returns a hexidecimal string to make it easier to visualize the data
 
     This class is iterable so you can easily loop through the individual sensors
 
     I.e.
-        # create a new list
-        sensor_list_object = ThermostatSensorList( '122' ) # for DPS 122
-        # populate the sensor data
+        ## create a new list
+        sensor_list_object = ThermostatSensorList( '122', self ) # for DPS 122
+
+        ## populate the sensor data
         sensor_list_object.update( 'base64 string here' )
-        # 
+
+        ## send an update after changing a sensor value
         send_dps = { '122': sensor_list_object.b64() }
         payload = d.generate_payload(tinytuya.CONTROL, data)
         d.send(payload)
@@ -595,6 +650,10 @@ class ThermostatSensorList(object):
 
             return False
 
+        ## technically the battery level and firmware version can also be changed, no idea why someone would want to do that though
+        #def setBattery( self, new_battery ):
+        #def setFirmware( self, new_firmware ):
+
         def setUnknown2( self, u2 ):
             self.unknown2 = u2
             self.want_update.append( 'unknown2' )
@@ -618,9 +677,6 @@ class ThermostatSensorList(object):
             self.delay_updates = False
             idx = self.parent_sensorlist.parent_device.sensor_dps.index( self.parent_sensorlist.dps )
             self.parent_sensorlist.parent_device.set_value( self.parent_sensorlist.dps, self.parent_sensorlist.b64(), nowait=True )
-
-        def __iter__(self):
-            yield 'sssssss'
 
         def __repr__( self ):
             return bytearray( bytes(self) ).hex().upper()
