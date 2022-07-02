@@ -192,10 +192,10 @@ def tuyaLoadConfig():
         # Load defaults
         with open(CONFIGFILE) as f:
             config = json.load(f)
-        log.debug("loaded config=%s", DEVICEFILE)
+        log.debug("loaded config=%s", CONFIGFILE)
     except:
         # No Device info
-        log.debug("No cloud config file found %s", DEVICEFILE)
+        log.debug("No cloud config file found %s", CONFIGFILE)
 
     return config
 
