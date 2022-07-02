@@ -5,6 +5,8 @@
 
  This module attempts to provide everything needed so there is no need to import the base tinytuya module
 
+ Module Author: uzlonewolf (https://github.com/uzlonewolf)
+
  Local Control Classes
     ThermostatDevice(dev_id, address, local_key=None, dev_type='default', persist=True)
         This class automatically sets the version to 3.3 and enables persistance so we can catch temperature updates
