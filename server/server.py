@@ -196,6 +196,9 @@ def tuyaCloudRefresh():
 
     global tuyadevices
     cloud = tinytuya.Cloud(apiRegion=cloudconfig['apiRegion'], apiKey=cloudconfig['apiKey'], apiSecret=cloudconfig['apiSecret'], apiDeviceID=cloudconfig['apiDeviceID'])
+    # on auth error, cloud.token is a dict and will cause getdevices() to implode
+    if isinstance( cloud.token, dict):
+        return cloud.token
     tuyadevices = cloud.getdevices(False)
     tuyaSaveJson()
     return {'devices': tuyadevices}
