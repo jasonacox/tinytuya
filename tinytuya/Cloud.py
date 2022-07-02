@@ -253,6 +253,8 @@ class Cloud(object):
                 item['name'] = i['name'].strip()
                 item['id'] = i['id']
                 item['key'] = i['local_key']
+                if 'mac' in i:
+                    item['mac'] = i['mac']
                 tuyadevices.append(item)
             return tuyadevices
 

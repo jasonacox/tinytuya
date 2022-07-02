@@ -18,6 +18,9 @@ Description
         /set/{DeviceID}/{Key}/{Value}           - Set DPS {Key} with {Value} 
         /turnon/{DeviceID}/{SwitchNo}           - Turn on device, optional {SwtichNo}
         /turnoff/{DeviceID}/{SwitchNo}          - Turn off device, optional {SwtichNo}
+        /sync                                   - Fetches the device list and local keys from the Tuya Cloud API
+        /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   - Sets the Tuya Cloud API login info
+
 """
 
 # Modules
@@ -64,6 +67,9 @@ MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
 UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
+RETRYTIME = 30
+RETRYCOUNT = 5
+SAVEDEVICEFILE = True
 
 # Static Assets
 web_root = os.path.join(os.path.dirname(__file__), "web")
@@ -83,9 +89,13 @@ serverstats['start'] = int(time.time())      # Timestamp for Start
 
 # Global Variables
 running = True
-havekeys = False
 tuyadevices = []
 deviceslist = {}
+newdevices = []
+retrydevices = {}
+retrytimer = 0
+cloudconfig = {'apiKey':'', 'apiSecret':'', 'apiRegion':'', 'apiDeviceID':''}
+
 
 # Terminal formatting
 (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(True)
@@ -146,19 +156,52 @@ def get_static(web_root, fpath):
 
     return None, None
 
-# Check to see if we have additional Device info
-try:
-    # Load defaults
-    with open(DEVICEFILE) as f:
-        tuyadevices = json.load(f)
-        havekeys = True
-        log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-except:
-    # No Device info
-    pass
+def tuyaLoadJson():
+    # Check to see if we have additional Device info
+    tdevices = []
+    try:
+        # Load defaults
+        with open(DEVICEFILE) as f:
+            tdevices = json.load(f)
+        log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tdevices))
+    except:
+        # No Device info
+        log.debug("Device file %s could not be loaded", DEVICEFILE)
+
+    return tdevices
+
+def tuyaSaveJson():
+    if not SAVEDEVICEFILE:
+        return False
+
+    try:
+        with open(DEVICEFILE, 'w') as f:
+            json.dump(tuyadevices, f, indent=4)
+        log.debug("saved=%s [%d devices]", DEVICEFILE, len(tuyadevices))
+    except:
+        return False
+
+    return True
+
+tuyadevices = tuyaLoadJson()
 
 # Debug Mode
 tinytuya.set_debug(DEBUGMODE)
+
+def tuyaCloudRefresh():
+    log.debug("Calling Cloud Refresh")
+    if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
+        log.debug("Cloud API config missing, not loading")
+        return {'Error': 'Cloud API config missing'}
+
+    global tuyadevices
+    cloud = tinytuya.Cloud( **cloudconfig )
+    # on auth error, cloud.token is a dict and will cause getdevices() to implode
+    if isinstance( cloud.token, dict):
+        return cloud.token
+    tuyadevices = cloud.getdevices(False)
+    tuyaSaveJson()
+    return {'devices': tuyadevices}
 
 # Threads
 def tuyalisten(port):
@@ -171,12 +214,12 @@ def tuyalisten(port):
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     client.bind(("", port))
-    client.settimeout(port)
+    client.settimeout(5)
 
     while(running):
         try:
             data, addr = client.recvfrom(4048)
-        except KeyboardInterrupt as err:
+        except (KeyboardInterrupt, SystemExit) as err:
             break
         except Exception as err:
             continue
@@ -196,12 +239,11 @@ def tuyalisten(port):
         except:
             result = {"ip": ip}
             #log.debug("Invalid UDP Packet: %r", result)
-        if havekeys:
-            try:
-                # Try to pull name and key data
-                (dname, dkey, mac) = tuyaLookup(gwId)
-            except:
-                pass
+        try:
+            # Try to pull name and key data
+            (dname, dkey, mac) = tuyaLookup(gwId)
+        except:
+            pass
         # set values
         result["name"] = dname
         result["mac"] = mac
@@ -209,7 +251,13 @@ def tuyalisten(port):
         result["id"] = gwId
 
         # add device if new
-        appenddevice(result, deviceslist)
+        if not appenddevice(result, deviceslist):
+            # Added device to list
+            if dname == "" and dkey == "" and result["id"] not in newdevices:
+                # If fetching the key failed, save it to retry later
+                retrydevices[result["id"]] = RETRYCOUNT
+                newdevices.append(result["id"])
+    print('tuyalisten', port, 'Exit')
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
@@ -241,12 +289,15 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(bytes(message, "utf8"))
 
     def do_GET(self):
+        global retrytimer, retrydevices
+        global cloudconfig, deviceslist
+
         self.send_response(200)
         message = "Error"
         contenttype = 'application/json'
         if self.path == '/devices':
             message = json.dumps(deviceslist)
-        if self.path == '/stats':
+        elif self.path == '/stats':
             # Give Internal Stats
             serverstats['ts'] = int(time.time())
             serverstats['mem'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -332,6 +383,23 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error polling device.", "id": id})
             else:
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
+        elif self.path == '/sync':
+            message = json.dumps(tuyaCloudRefresh())
+            retrytimer = time.time() + RETRYTIME
+            retrydevices['*'] = 1
+        elif self.path.startswith('/cloudconfig/'):
+            cfgstr = self.path.split('/cloudconfig/')[1]
+            cfg = cfgstr.split('/')
+            if len(cfg) != 4:
+                message = json.dumps({"Error": "Syntax error in cloud config command URL."})
+            else:
+                cloudconfig['apiKey'] = cfg[0]
+                cloudconfig['apiSecret'] = cfg[1]
+                cloudconfig['apiRegion'] = cfg[2]
+                cloudconfig['apiDeviceID'] = cfg[3]
+                message = json.dumps(tuyaCloudRefresh())
+                retrytimer = time.time() + RETRYTIME
+                retrydevices['*'] = 1
         else:
             # Serve static assets from web root first, if found.
             fcontent, ftype = get_static(web_root, self.path)
@@ -366,7 +434,7 @@ def api(port):
                 server.handle_request()
         except:
             print(' CANCEL \n')
-
+    print('api Exit')
 
 # MAIN Thread
 if __name__ == "__main__":
@@ -379,7 +447,7 @@ if __name__ == "__main__":
         "\n%sTinyTuya %s(Server)%s [%s%s]\n"
         % (bold, normal, dim, tinytuya.__version__, BUILD)
     )
-    if havekeys:
+    if len(tuyadevices) > 0:
         print("%s[Loaded devices.json - %d devices]%s\n" % (dim, len(tuyadevices), normal))
     else:
         print("%sWARNING: No devices.json found - limited functionality.%s\n" % (alertdim,normal))
@@ -395,8 +463,43 @@ if __name__ == "__main__":
     try:
         while(True):
             print("\r - Discovered Devices: %d   " % len(deviceslist), end='')
-            time.sleep(1)
-    except KeyboardInterrupt:
+
+            if retrytimer <= time.time() or '*' in retrydevices:
+                if len(retrydevices) > 0:
+                    # only refresh the cloud if we are not here because /sync was called
+                    if '*' not in retrydevices:
+                        tuyaCloudRefresh()
+                        retrytimer = time.time() + RETRYTIME
+                    found = []
+                    # Try all unknown devices, even if the retry count expired
+                    for devid in newdevices:
+                        dname = dkey = mac = ""
+                        try:
+                            (dname, dkey, mac) = tuyaLookup(devid)
+                        except:
+                            pass
+
+                        if dname != "" or dkey != "":
+                            #print('found!', devid, dname, dkey)
+                            deviceslist[devid]['name'] = dname
+                            deviceslist[devid]['key'] = dkey
+                            deviceslist[devid]['mac'] = mac
+                            found.append(devid)
+                            if devid in retrydevices:
+                                del retrydevices[devid]
+                    for devid in found:
+                        newdevices.remove(devid)
+
+                    # Decrement retry count
+                    expired = []
+                    for devid in retrydevices:
+                        retrydevices[devid] -= 1
+                        if retrydevices[devid] < 1:
+                            expired.append(devid)
+                    for devid in expired:
+                        del retrydevices[devid]
+            time.sleep(2)
+    except (KeyboardInterrupt, SystemExit):
         running = False
         # Close down API thread
         requests.get('http://localhost:%d/stop' % APIPORT)

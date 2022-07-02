@@ -64,7 +64,7 @@
             for (let x in sortedDevices) {
                 output = output + rownum + 
                     " - <a href='device.html?id=" + sortedDevices[x].id + "'>" +
-                    sortedDevices[x].name + "</a> - " + 
+                    (sortedDevices[x].name.length > 0 ? sortedDevices[x].name : '[' + sortedDevices[x].id + ']') + "</a> - " + 
                     sortedDevices[x].id + " - " + 
                     sortedDevices[x].ip + "<br>\n";
                 rownum++;

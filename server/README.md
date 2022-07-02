@@ -16,6 +16,8 @@ API Functions - The server listens for GET requests on local port 8888:
     /set/{DeviceID}/{Key}/{Value}           - Set DPS {Key} with {Value} 
     /turnon/{DeviceID}/{SwitchNo}           - Turn on device, optional {SwtichNo}
     /turnoff/{DeviceID}/{SwitchNo}          - Turn off device, optional {SwtichNo}
+    /sync                                   - Fetches the device list and local keys from the Tuya Cloud API
+    /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   - Sets the Tuya Cloud API login info
 ```
 
 Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tinytuya)
