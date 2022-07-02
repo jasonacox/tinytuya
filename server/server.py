@@ -11,15 +11,16 @@ Description
     Server continually listens for Tuya UDP discovery packets and updates the database of devices
     and uses devices.json to determine metadata about devices. 
     Server listens for GET requests on local port 8888:
-        /devices                                - List all devices discovered with metadata   
-        /device/{DeviceID}                      - List specific device metadata
-        /numdevices                             - List current number of devices discovered
-        /status/{DeviceID}                      - List current device status
-        /set/{DeviceID}/{Key}/{Value}           - Set DPS {Key} with {Value} 
-        /turnon/{DeviceID}/{SwitchNo}           - Turn on device, optional {SwtichNo}
-        /turnoff/{DeviceID}/{SwitchNo}          - Turn off device, optional {SwtichNo}
-        /sync                                   - Fetches the device list and local keys from the Tuya Cloud API
-        /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   - Sets the Tuya Cloud API login info
+        /devices                        - List all devices discovered with metadata   
+        /device/{DeviceID}              - List specific device metadata
+        /numdevices                     - List current number of devices discovered
+        /status/{DeviceID}              - List current device status
+        /set/{DeviceID}/{Key}/{Value}   - Set DPS {Key} with {Value} 
+        /turnon/{DeviceID}/{SwitchNo}   - Turn on device, optional {SwtichNo}
+        /turnoff/{DeviceID}/{SwitchNo}  - Turn off device, optional {SwtichNo}
+        /sync                           - Fetches the device list and local keys from the Tuya Cloud API
+        /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
+                                        - Sets the Tuya Cloud API login info
 
 """
 
@@ -54,13 +55,14 @@ except:
 
 import tinytuya
 
-BUILD = "t1"
+BUILD = "t2"
 
 # Defaults
 APIPORT = 8888
 DEBUGMODE = False
 DEVICEFILE = tinytuya.DEVICEFILE
 SNAPSHOTFILE = tinytuya.SNAPSHOTFILE
+CONFIGFILE = tinytuya.CONFIGFILE
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
@@ -183,7 +185,22 @@ def tuyaSaveJson():
 
     return True
 
+def tuyaLoadConfig():
+    # Check to see if we have Cloud account credentials from wizard
+    config = {'apiKey':'', 'apiSecret':'', 'apiRegion':'', 'apiDeviceID':''}
+    try:
+        # Load defaults
+        with open(CONFIGFILE) as f:
+            config = json.load(f)
+        log.debug("loaded config=%s", DEVICEFILE)
+    except:
+        # No Device info
+        log.debug("No cloud config file found %s", DEVICEFILE)
+
+    return config
+
 tuyadevices = tuyaLoadJson()
+cloudconfig = tuyaLoadConfig()
 
 # Debug Mode
 tinytuya.set_debug(DEBUGMODE)
