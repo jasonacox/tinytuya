@@ -8,6 +8,7 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 
 *  ThermostatDevice - A community-contributed Python module to add support for Tuya WiFi smart thermostats
 * Author: [uzlonewolf](https://github.com/uzlonewolf)
+* Example: [examples/ThermostatDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/tinytuya/Contrib/examples/ThermostatDevice-example.py)
 
     ```python
     # Example usage of community contributed device modules
@@ -16,7 +17,7 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
     thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
     ```
 
-### Submit Your Device
+## Submit Your Device
 
 * We welcome new device modules!
 * Follow the template example in [ThermostatDevice.py](ThermostatDevice.py) to add your device.
