@@ -732,6 +732,14 @@ Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 
 NOTE (*) - Depending on the firmware, either 18/19/20/26/27 or 108/109/110/111/x are used, not both
 
+A user contributed module is available for this device in the [Contrib library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
+
+```python
+from tinytuya import Contrib
+
+thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+```
+
 For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/discussions/139
 
 ### Tuya References
