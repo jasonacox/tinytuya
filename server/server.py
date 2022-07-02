@@ -195,7 +195,7 @@ def tuyaCloudRefresh():
         return {'Error': 'Cloud API config missing'}
 
     global tuyadevices
-    cloud = tinytuya.Cloud(apiRegion=cloudconfig['apiRegion'], apiKey=cloudconfig['apiKey'], apiSecret=cloudconfig['apiSecret'], apiDeviceID=cloudconfig['apiDeviceID'])
+    cloud = tinytuya.Cloud( **cloudconfig )
     # on auth error, cloud.token is a dict and will cause getdevices() to implode
     if isinstance( cloud.token, dict):
         return cloud.token
