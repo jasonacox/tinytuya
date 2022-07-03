@@ -243,6 +243,10 @@ class Cloud(object):
         uri = 'users/%s/devices' % uid
         json_data = self._tuyaplatform(uri)
 
+        # Use Device ID to get MAC addresses
+        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
+        json_mac_data = self._tuyaplatform(uri)
+
         if verbose:
             return json_data
         else:
@@ -255,7 +259,13 @@ class Cloud(object):
                 item['key'] = i['local_key']
                 if 'mac' in i:
                     item['mac'] = i['mac']
+                else:
+                    try:
+                        item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
+                    except:
+                        pass
                 tuyadevices.append(item)
+                
             return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
