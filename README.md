@@ -458,6 +458,17 @@ By default, the scan functions will retry 15 times to find new devices. If you a
   reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f
   ```
 
+## User Contributed Device Modules
+
+In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` device support, the community is encourage to submit additional device modules which are available here: [Contrib Library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
+
+```python
+# Example usage of community contributed device modules
+from tinytuya import Contrib
+
+thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+```
+
 ## Tuya Data Points - DPS Table
 
 The Tuya devices send back data points (DPS) also called device function points, in a json string.  The DPS attributes define the state of the device.  Each key in the DPS dictionary refers to key value pair, the key is the DP ID and its value is the dpValue. You can refer to the [Tuya developer platform](https://iot.tuya.com/index/) for definition of function points for the products.
@@ -474,17 +485,6 @@ print("Value of DPS 25 is ", data['dps']['25'])
 
 # Set Value of DPS 25
 d.set_value(25, '010e0d0000000000000003e803e8')
-```
-
-### User Contributed Device Modules
-
-In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` device support, the community is encourage to submit additional device modules which are available here: [Contrib Library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
-
-```python
-# Example usage of community contributed device modules
-from tinytuya import Contrib
-
-thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
 ```
 
 ### Version 3.1 Devices
