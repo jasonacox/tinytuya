@@ -1,4 +1,13 @@
 
+# TinyTuya ThermostatDevice Example
+# -*- coding: utf-8 -*-
+"""
+ Example script using the community-contributed Python module for Tuya WiFi smart thermostats
+
+ Author: uzlonewolf (https://github.com/uzlonewolf)
+ For more information see https://github.com/jasonacox/tinytuya
+
+"""
 from tinytuya import Contrib
 import time
 
