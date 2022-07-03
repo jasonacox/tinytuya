@@ -9,15 +9,17 @@ The TinyTuya API Server provides a central service to access all your Tuya devic
 API Functions - The server listens for GET requests on local port 8888:
 
 ```
-    /devices                                - List all devices discovered with metadata   
-    /device/{DeviceID}                      - List specific device metadata
-    /numdevices                             - List current number of devices discovered
-    /status/{DeviceID}                      - List current device status
-    /set/{DeviceID}/{Key}/{Value}           - Set DPS {Key} with {Value} 
-    /turnon/{DeviceID}/{SwitchNo}           - Turn on device, optional {SwtichNo}
-    /turnoff/{DeviceID}/{SwitchNo}          - Turn off device, optional {SwtichNo}
-    /sync                                   - Fetches the device list and local keys from the Tuya Cloud API
-    /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   - Sets the Tuya Cloud API login info
+    /devices                        - List all devices discovered with metadata   
+    /device/{DeviceID}              - List specific device metadata
+    /numdevices                     - List current number of devices discovered
+    /status/{DeviceID}              - List current device status
+    /set/{DeviceID}/{Key}/{Value}   - Set DPS {Key} with {Value} 
+    /turnon/{DeviceID}/{SwitchNo}   - Turn on device, optional {SwtichNo}
+    /turnoff/{DeviceID}/{SwitchNo}  - Turn off device, optional {SwtichNo}
+    /sync                           - Fetches the device list and local keys from the Tuya Cloud API
+    /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
+                                    - Sets the Tuya Cloud API login info
+    /offline                        - List of registered devices that are offline
 ```
 
 Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tinytuya)
@@ -33,6 +35,7 @@ Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tiny
     -p 6666:6666/udp \
     -p 6667:6667/udp \
     --mount type=bind,source="$(pwd)"/devices.json,target=/app/devices.json \
+    --mount type=bind,source="$(pwd)"/tinytuya.json,target=/app/tinytuya.json \
     --name tinytuya \
     --restart unless-stopped \
     jasonacox/tinytuya
