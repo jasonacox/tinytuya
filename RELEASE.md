@@ -6,11 +6,20 @@
 * Add function to send multiple DPS index updates with one call
 
 
-## v1.6.1 - TBD
+## v1.6.1 - ThermostatDevice - User Contributed Device Module
 
 * PyPI 1.6.1
 * Break the Outlet/Cover/Bulb/Cloud modules out into separate files by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/142
 * Fix logging calls in XenonDevice.detect_available_dps by @pkasprzyk in https://github.com/jasonacox/tinytuya/pull/144
+* [TinyTuya API Server](https://github.com/jasonacox/tinytuya/tree/master/server#tinytuya-api-server) - Add Cloud API syncing with auto-retry by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/147
+* ThermostatDevice - First community contributed device module ThermostatDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/146 - See example: [examples/ThermostatDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/ThermostatDevice-example.py)
+
+    ```python
+    # Example usage of community contributed device modules
+    from tinytuya import Contrib
+
+    thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    ```
 
 
 ## v1.6.0 - Colorama for Terminal Color
