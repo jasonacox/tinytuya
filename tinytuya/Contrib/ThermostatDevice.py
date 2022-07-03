@@ -54,7 +54,7 @@
         sensor.setParticipation( flag, val=True )
             -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
                when it's a string, val sets (True) or clears (False) that particular flag
-               when it's a integer, the bitmask is set to val
+               when it's a integer, the bitmask is set to flag and val is ignored
         sensor.getParticipation( flag )
             -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
                returns True if (string) flag is set or (integer) bitmask matches exactly, otherwise returns False
@@ -159,7 +159,7 @@
                     print( 'Changed:', changed, 'New Value:', getattr( tstatdev, changed ) )
             if data and 'changed_sensors' in data:
                 for sensor in data['changed_sensors']:
-                    print( 'Sensor Changed! Changed Attribs:%r DPS:%s ID:%s Name:"%s" Current Temperature: %r' % (sensor.changed, sensor.dps, sensor.id, sensor.name, sensor.temperature) )
+                    print( 'Sensor Changed! Changed Attribs:%r DPS:%s ID:%s Name:"%s" Current Temperature: %r' % (sensor.changed, sensor.parent_sensorlist.dps, sensor.id, sensor.name, sensor.temperature) )
                     if 'sensor_added' in sensor.changed:
                         print( 'New sensor was added!' )
                     if 'name' in sensor.changed:
