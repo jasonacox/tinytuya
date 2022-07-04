@@ -21,6 +21,7 @@ Description
         /sync                           - Fetches the device list and local keys from the Tuya Cloud API
         /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
                                         - Sets the Tuya Cloud API login info
+        /offline                        - List of registered devices that are offline
 
 """
 
@@ -124,6 +125,18 @@ def appenddevice(newdevice, devices):
     """
     devices[newdevice["id"]] = newdevice
     return False
+
+def offlineDevices():
+    # return undiscovered devices
+    offline={}
+    for d in tuyadevices:
+        id = d["id"]
+        if id not in deviceslist:
+            offline[id] = {}
+            offline[id]["name"] = d["name"] 
+            if "mac" in d:
+                offline[id]["mac"] = d["mac"]
+    return offline
 
 def formatreturn(value):
     if value is None:
@@ -344,7 +357,16 @@ class handler(BaseHTTPRequestHandler):
             if(id in deviceslist):
                 message = json.dumps(deviceslist[id])
             else:
-                message = json.dumps({"Error": "Device ID not found.", "id": id})
+                jout={}
+                [name, key, mac] = tuyaLookup(id) 
+                if name != "":
+                    jout["name"] = name
+                    jout["mac"] = mac
+                    jout["key"] = key
+                    jout["id"] = id
+                    message = json.dumps(jout)
+                else:
+                    message = json.dumps({"Error": "Device ID not found.", "id": id})
         elif self.path.startswith('/turnoff/'):
             id = self.path.split('/turnoff/')[1]
             sw = 1
@@ -417,6 +439,8 @@ class handler(BaseHTTPRequestHandler):
                 message = json.dumps(tuyaCloudRefresh())
                 retrytimer = time.time() + RETRYTIME
                 retrydevices['*'] = 1
+        elif self.path == '/offline':
+            message = json.dumps(offlineDevices())
         else:
             # Serve static assets from web root first, if found.
             fcontent, ftype = get_static(web_root, self.path)

@@ -9,9 +9,11 @@
 ## v1.6.1 - ThermostatDevice - User Contributed Device Module
 
 * PyPI 1.6.1
+* Cloud - Fix bug in `getdevices()` to import device mac addresses (same as wizard).
 * Break the Outlet/Cover/Bulb/Cloud modules out into separate files by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/142
 * Fix logging calls in XenonDevice.detect_available_dps by @pkasprzyk in https://github.com/jasonacox/tinytuya/pull/144
 * [TinyTuya API Server](https://github.com/jasonacox/tinytuya/tree/master/server#tinytuya-api-server) - Add Cloud API syncing with auto-retry by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/147
+* [TinyTuya API Server](https://github.com/jasonacox/tinytuya/tree/master/server#tinytuya-api-server) - List registered but offline devices via `/offline` and web UI.
 * ThermostatDevice - First community contributed device module ThermostatDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/146 - See example: [examples/ThermostatDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/ThermostatDevice-example.py)
 
     ```python

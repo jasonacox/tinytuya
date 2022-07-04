@@ -9,9 +9,10 @@
     <div class="title"></div>
     <p>Stats</p>
     <div class="number"></div>
-    <p>Devices</p>
+    <p class="onlinetext">Devices Online</p>
     <div class="devices"></div>
-
+    <p class="offlinetext">Registered Devices Offline</p>
+    <div class="offline"></div>
     <script>
 
     // Get Version
@@ -30,6 +31,10 @@
         $.getJSON(pwurl, function(data) {
             var text = `Number of Devices Found: ${data.found}` + "<br>" +
             `Total Devices Registered: ${data.registered}`;
+            var online = `Devices Online: ${data.found}`;
+            var offline = `Devices Offline: ${data.registered - data.found}`;
+            $(".onlinetext").html(online)
+            $(".offlinetext").html(offline)
             $(".number").html(text);
         });
         setTimeout(numdevices, 1000);
@@ -79,10 +84,45 @@
         setTimeout(devicelist, 1000);
     }
 
+    // Device Offline List
+    function offlinelist() {
+        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/offline";
+        $.getJSON(pwurl, function(data) {
+            // store entire array in deviceDB
+            let deviceDB = [];
+            // 
+            var output = "";
+            var id = "";
+            var name = "";
+            for (let x in data) {
+                let device = {
+                    "name": data[x].name,
+                    "id": x,
+                }
+                deviceDB.push(device)
+            }
+            
+            // print sorted list
+            let sortedDevices = deviceDB.sort((c1, c2) => (c1.name > c2.name) ? 1 : (c1.name < c2.name) ? -1 : 0);
+            let rownum = 1;
+            for (let x in sortedDevices) {
+                output = output + rownum + 
+                    " - <a href='device.html?id=" + sortedDevices[x].id + "'>" +
+                    (sortedDevices[x].name.length > 0 ? sortedDevices[x].name : '[' + sortedDevices[x].id + ']') + "</a> - " + 
+                    sortedDevices[x].id + "<br>\n";
+                rownum++;
+            }
+            
+            $(".offline").html(output);
+        });
+        setTimeout(offlinelist, 1000);
+    }
+
     // Display
     showversion();
     numdevices();
     devicelist();
+    offlinelist();
     
     </script>
 
