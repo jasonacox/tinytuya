@@ -505,19 +505,24 @@ class ThermostatSensorList(object):
             self.sensors = [ ]
             return
 
-        if ((len(sensordata_list) - 1) % 52) != 0:
+        lenmod = len(sensordata_list) % 52
+
+        if lenmod == 1:
+            self.stated_count = sensordata_list[0]
+        elif lenmod == 0:
+            self.stated_count = None
+        else:
             raise TypeError( 'Unhandled Thermostat Sensor List data length' )
 
-        self.stated_count = sensordata_list[0]
-        self.actual_count = int((len(sensordata_list) - 1) / 52)
+        self.actual_count = int((len(sensordata_list) - lenmod) / 52)
 
         for i in range( self.actual_count ):
             if i < len(self.sensors):
-                if self.sensors[i].parse(sensordata_list[(i*52)+1:((i+1)*52)+1]):
+                if self.sensors[i].parse(sensordata_list[(i*52)+lenmod:((i+1)*52)+lenmod]):
                     changed.append(self.sensors[i])
             else:
                 self.sensors.append( self.ThermostatSensorData( self ) )
-                self.sensors[i].parse(sensordata_list[(i*52)+1:((i+1)*52)+1])
+                self.sensors[i].parse(sensordata_list[(i*52)+lenmod:((i+1)*52)+lenmod])
                 # instead of listing every field, just say it was added
                 self.sensors[i].changed = [ 'sensor_added' ]
                 self.sensors[i].sensor_added = True
@@ -528,13 +533,22 @@ class ThermostatSensorList(object):
         return changed
 
     def __repr__( self ):
-        out = '%02X' % self.stated_count
+        if self.stated_count is not None:
+            out = '%02X' % self.stated_count
+        else:
+            out = ''
+
         for s in self.sensors:
             out += str(s)
+
         return out
 
     def b64(self):
-        b = bytearray( [self.stated_count] )
+        if self.stated_count is not None:
+            b = bytearray( [self.stated_count] )
+        else:
+            b = bytearray()
+
         for s in self.sensors:
             b += bytearray( bytes( s ) )
         return base64.b64encode( b ).decode('ascii')
@@ -681,7 +695,7 @@ class ThermostatSensorList(object):
             self.parent_sensorlist.parent_device.set_value( self.parent_sensorlist.dps, self.parent_sensorlist.b64(), nowait=True )
 
         def __repr__( self ):
-            return bytearray( bytes(self) ).hex().upper()
+            return bytes(self).hex().upper()
 
         def __bytes__( self ):
             try:
