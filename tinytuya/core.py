@@ -320,14 +320,14 @@ def unpack_message(data, header=None):
 
     if len(data) < headret_len+end_len:
         log.debug('unpack_message(): not enough data to unpack header! need %d but only have %d', headret_len+end_len, len(data))
-        return None
+        raise IndexError('Not enough data to unpack header')
 
     if header is None:
         header = parse_header(data)
 
     if len(data) < header_len+header.length:
         log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
-        return None
+        raise IndexError('Not enough data to unpack payload')
 
     retcode = struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
     payload = data[headret_len:headret_len+header.length]
@@ -349,7 +349,7 @@ def parse_header(data):
     header_len = struct.calcsize(MESSAGE_HEADER_FMT)
 
     if len(data) < header_len:
-        return None
+        raise IndexError('Not enough data to unpack header')
 
     prefix, seqno, cmd, payload_len = struct.unpack(
         MESSAGE_HEADER_FMT, data[:header_len]
@@ -543,8 +543,6 @@ class XenonDevice(object):
         retend_len = retcode_len + end_len
         data = self.socket.recv(header_len+retend_len)
         header = parse_header(data)
-        if not header:
-            return None
         if header.length > retend_len:
             data += self.socket.recv(header.length-retend_len)
         log.debug("received data=%r", binascii.hexlify(data))
