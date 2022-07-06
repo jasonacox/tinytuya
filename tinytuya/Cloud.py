@@ -336,3 +336,21 @@ class Cloud(object):
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return response_dict
+       
+    def getconnectstatus(self, deviceid=None):
+        """
+        Get the device Cloud connect status. 
+        """
+        if deviceid is None:
+            return error_json(
+                ERR_PARAMS,
+                "Missing DeviceID Parameter"
+            )
+        uri = 'devices/%s' % (deviceid)
+        response_dict = self._tuyaplatform(uri, ver='v1.0')
+
+        if not response_dict['success']:
+            log.debug(
+                    "Error from Tuya Cloud: %r" % response_dict['msg'],
+            )
+        return(response_dict["result"]["online"])
