@@ -766,6 +766,7 @@ For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/dis
     The origin of this python module (now abandoned). Thanks to nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
   * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio. 
     Updated pytuya to support devices with Device IDs of 22 characters
+  * Thanks to @uzlonewolf for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules and making enhancements to TuyaMessage logic for multi-payload messages.
 
 ## Related Projects
 
