@@ -161,14 +161,15 @@ LAN_SET_GW_CHANNEL = 252
 PROTOCOL_VERSION_BYTES_31 = b"3.1"
 PROTOCOL_VERSION_BYTES_33 = b"3.3"
 PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + 12 * b"\x00"
-MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length
-MESSAGE_RECV_HEADER_FMT = ">5I"  # 4*uint32: prefix, seqno, cmd, length, retcode
+MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
+MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
 MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
 PREFIX_VALUE = 0x000055AA
 SUFFIX_VALUE = 0x0000AA55
 SUFFIX_BIN = b"\x00\x00\xaaU"
 
 # Tuya Packet Format
+TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
 TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc")
 
 # Python 2 Support
@@ -309,17 +310,52 @@ def pack_message(msg):
     )
     return buffer
 
-def unpack_message(data):
+def unpack_message(data, header=None):
     """Unpack bytes into a TuyaMessage."""
-    header_len = struct.calcsize(MESSAGE_RECV_HEADER_FMT)
+    # 4-word header plus return code
+    header_len = struct.calcsize(MESSAGE_HEADER_FMT)
+    retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
     end_len = struct.calcsize(MESSAGE_END_FMT)
+    headret_len = header_len + retcode_len
 
-    _, seqno, cmd, _, retcode = struct.unpack(
-        MESSAGE_RECV_HEADER_FMT, data[:header_len]
+    if len(data) < headret_len+end_len:
+        log.debug('unpack_message(): not enough data to unpack header! need %d but only have %d', headret_len+end_len, len(data))
+        raise IndexError('Not enough data to unpack header')
+
+    if header is None:
+        header = parse_header(data)
+
+    if len(data) < header_len+header.length:
+        log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
+        raise IndexError('Not enough data to unpack payload')
+
+    retcode = struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
+    payload = data[headret_len:headret_len+header.length]
+    crc, suffix = struct.unpack(MESSAGE_END_FMT, payload[-end_len:])
+    have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
+
+    if header.prefix != PREFIX_VALUE:
+        log.debug('Header prefix wrong! %08X != %08X', header.prefix, PREFIX_VALUE)
+
+    if suffix != SUFFIX_VALUE:
+        log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
+
+    if crc != have_crc:
+        log.debug('CRC wrong! %08X != %08X', have_crc, crc)
+
+    return TuyaMessage(header.seqno, header.cmd, retcode, payload[:-end_len], crc)
+
+def parse_header(data):
+    header_len = struct.calcsize(MESSAGE_HEADER_FMT)
+
+    if len(data) < header_len:
+        raise IndexError('Not enough data to unpack header')
+
+    prefix, seqno, cmd, payload_len = struct.unpack(
+        MESSAGE_HEADER_FMT, data[:header_len]
     )
-    payload = data[header_len:-end_len]
-    crc, _ = struct.unpack(MESSAGE_END_FMT, data[-end_len:])
-    return TuyaMessage(seqno, cmd, retcode, payload, crc)
+
+    return TuyaHeader(prefix, seqno, cmd, payload_len)
 
 def has_suffix(payload):
     """Check to see if payload has valid Tuya suffix"""
@@ -499,6 +535,19 @@ class XenonDevice(object):
         # existing socket active
         return True
 
+    def _receive(self):
+        # message consists of header + retcode + data + footer
+        header_len = struct.calcsize(MESSAGE_HEADER_FMT)
+        retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
+        end_len = struct.calcsize(MESSAGE_END_FMT)
+        retend_len = retcode_len + end_len
+        data = self.socket.recv(header_len+retend_len)
+        header = parse_header(data)
+        if header.length > retend_len:
+            data += self.socket.recv(header.length-retend_len)
+        log.debug("received data=%r", binascii.hexlify(data))
+        return unpack_message(data, header=header)
+
     def _send_receive(self, payload, minresponse=28, getresponse=True):
         """
         Send single buffer `payload` and receive a single buffer.
@@ -526,21 +575,21 @@ class XenonDevice(object):
                     self.socket.send(payload)
                     time.sleep(self.sendWait)  # give device time to respond
                 if getresponse is True:
-                    data = self.socket.recv(1024)
+                    msg = self._receive()
                     # device may send null ack (28 byte) response before a full response
-                    if self.retry and len(data) <= minresponse:
+                    if self.retry and msg and len(msg.payload) == 0:
                         log.debug("received null payload (%r), fetch new one", data)
                         time.sleep(0.1)
-                        data = self.socket.recv(1024)  # try to fetch new payload
+                        msg = self._receive()
                     success = True
-                    log.debug("received data=%r", binascii.hexlify(data))
+                    log.debug("received message=%r", msg)
                 # legacy/default mode avoids persisting socket across commands
                 if not self.socketPersistent:
                     self.socket.close()
                     self.socket = None
                 if getresponse is False:
                     return None
-            except KeyboardInterrupt as err:
+            except (KeyboardInterrupt, SystemExit) as err:
                 log.debug("Keyboard Interrupt - Exiting")
                 raise
             except socket.timeout as err:
@@ -550,7 +599,7 @@ class XenonDevice(object):
                     return None
                 retries = retries + 1
                 log.debug(
-                    "Timeout or exception in _send_receive() - retry %s / %s",
+                    "Timeout in _send_receive() - retry %s / %s",
                     retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
@@ -574,8 +623,8 @@ class XenonDevice(object):
                 # likely network or connection error
                 retries = retries + 1
                 log.debug(
-                    "Network connection error - retry %s/%s",
-                    retries, self.socketRetryLimit
+                    "Network connection error in _send_receive() - retry %s/%s",
+                    retries, self.socketRetryLimit, exc_info=True
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -602,7 +651,6 @@ class XenonDevice(object):
         # Unpack Message into TuyaMessage format
         # and return payload decrypted
         try:
-            msg = unpack_message(data)
             # Data available: seqno cmd retcode payload crc
             log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
@@ -643,7 +691,7 @@ class XenonDevice(object):
                 log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
             except:
-                log.debug("incomplete payload=%r", payload)
+                log.debug("incomplete payload=%r (%d)", payload, len(payload))
                 return None
 
             log.debug("decrypted 3.3 payload=%r", payload)
