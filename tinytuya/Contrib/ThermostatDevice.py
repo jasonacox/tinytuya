@@ -123,7 +123,7 @@
             -> converts a value to the format the DPS is expecting for that particular key.  you probably do not need to call this directly
 
     attributes:
-        mode -> ['auto', 'cool', 'heat', 'off']
+        mode -> ['auto', 'cool', 'heat', 'emergencyheat', 'off']
         fan -> ['auto', 'cycle', 'on']
         system -> current system state, ['fanon', 'coolfanon', 'alloff', 'heatfanon', 'heaton']
         setpoint_c -> either the setpoint when system is not in 'auto' mode, or the midpoint between the heating and cooling setpoints
@@ -139,7 +139,7 @@
         temperature_f and temp_current_f -> current temperature in degrees F
         humidity -> RH%
         fault -> fault flags, [e1, e2, e3]
-        system_type -> '4'=heatpump
+        system_type -> '4'=heatpump, '5'=2-stage heatpump?
         home -> ??
         schedule -> binary blob
         schedule_enabled -> flag True/False
@@ -186,12 +186,13 @@ class ThermostatDevice(Device):
     """
 
     high_resolution = None
+    schedule = None
     delay_updates = False
     delayed_updates = { }
     sensorlists = [ ]
     sensor_dps = ('122', '125', '126', '127', '128')
     dps_data = {
-        '2' : { 'name': 'mode', 'enum': ['auto', 'cool', 'heat', 'off'] },
+        '2' : { 'name': 'mode', 'enum': ['auto', 'cool', 'heat', 'emergencyheat', 'off'] },
         '16': { 'name': 'temp_set', 'alt': 'setpoint_c', 'scale': 100 },
         '17': { 'name': 'temp_set_f', 'alt': 'setpoint_f' },
         '18': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': False },
@@ -254,7 +255,7 @@ class ThermostatDevice(Device):
     def setSetpoint( self, setpoint, cf=None ):
         if self.mode == 'cool':
             return self.setCoolSetpoint( self, setpoint, cf )
-        elif self.mode == 'heat':
+        elif self.mode == 'heat' or self.mode == 'emergencyheat':
             return self.setHeatSetpoint( self, setpoint, cf )
         else:
             # no idea, let the thermostat figure it out
