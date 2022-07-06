@@ -623,6 +623,7 @@ class XenonDevice(object):
                 time.sleep(0.1)
                 self._get_socket(True)
             except DecodeError as err:
+                log.debug("Error decoding received data", exc_info=True)
                 return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
