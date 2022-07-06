@@ -6,6 +6,12 @@
 * Add function to send multiple DPS index updates with one call
 
 
+## v1.6.2 - Unreleased
+
+* Update Cloud.py by @Paxy in https://github.com/jasonacox/tinytuya/pull/151
+* Break socket recv() out into its own function by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/153
+* More verbose debug logging on decode error by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/155
+
 ## v1.6.1 - ThermostatDevice - User Contributed Device Module
 
 * PyPI 1.6.1
