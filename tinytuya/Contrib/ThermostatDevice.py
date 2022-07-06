@@ -212,7 +212,7 @@ class ThermostatDevice(Device):
         '111': { 'name': 'lower_temp_f', 'alt': 'heating_setpoint_f', 'high_resolution': True },
         '115': { 'name': 'fan', 'enum': ['auto', 'cycle', 'on'] },
         '116': { 'name': 'home' },
-        '118': { 'name': 'schedule', 'base64': True, 'class': 'ThermostatSchedule' },
+        '118': { 'name': 'schedule', 'base64': True, 'selfclass': 'ThermostatSchedule' },
         '119': { 'name': 'schedule_enabled' },
         '120': { 'name': 'hold', 'enum': ['permhold', 'temphold', 'followschedule'] },
         '121': { 'name': 'vacation', 'base64': True },
@@ -239,14 +239,14 @@ class ThermostatDevice(Device):
         for k in self.dps_data:
             val = None
 
-            if 'class' in self.dps_data[k]:
-                val = getattr( self, self.dps_data[k]['class'] )()
+            if 'selfclass' in self.dps_data[k]:
+                val = getattr( self, self.dps_data[k]['selfclass'] )()
 
             setattr( self, self.dps_data[k]['name'], val )
             if 'alt' in self.dps_data[k]:
                 setattr( self, self.dps_data[k]['alt'], val )
 
-            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) or ('class' in self.dps_data[k]) or ('decode' in self.dps_data[k]) ):
+            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) or ('selfclass' in self.dps_data[k]) or ('decode' in self.dps_data[k]) ):
                 self.dps_data[k]['check_raw'] = True
 
             if 'check_raw' in self.dps_data[k] and self.dps_data[k]['check_raw']:
@@ -438,14 +438,14 @@ class ThermostatDevice(Device):
                         val = base64.b64decode( val )
                         data['changed'].append( checkname )
 
-                        if 'class' not in self.dps_data[k]:
+                        if 'selfclass' not in self.dps_data[k]:
                             setattr( self, name, val )
 
                     if 'enum' in self.dps_data[k]:
                         if val not in self.dps_data[k]['enum']:
                             log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
 
-                    if 'class' in self.dps_data[k]:
+                    if 'selfclass' in self.dps_data[k]:
                         getattr( self, name ).update( val )
                     else:
                         if 'decode' in self.dps_data[k]:
