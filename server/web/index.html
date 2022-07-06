@@ -32,7 +32,9 @@
             var text = `Number of Devices Found: ${data.found}` + "<br>" +
             `Total Devices Registered: ${data.registered}`;
             var online = `Devices Online: ${data.found}`;
-            var offline = `Devices Offline: ${data.registered - data.found}`;
+            var numoff = data.registered - data.found;
+            if(numoff<0) numoff = 0;
+            var offline = `Devices Offline: ${numoff}`;
             $(".onlinetext").html(online)
             $(".offlinetext").html(offline)
             $(".number").html(text);
