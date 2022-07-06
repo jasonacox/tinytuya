@@ -205,14 +205,14 @@ class ThermostatDevice(Device):
         '29': { 'name': 'temp_current_f', 'alt': 'temperature_f' },
         '34': { 'name': 'humidity' },
         '45': { 'name': 'fault' },
-        '107': { 'name': 'system_type' },
+        '107': { 'name': 'system_type', 'decode': int },
         '108': { 'name': 'upper_temp', 'alt': 'cooling_setpoint_c', 'scale': 100, 'high_resolution': True },
         '109': { 'name': 'lower_temp', 'alt': 'heating_setpoint_c', 'scale': 100, 'high_resolution': True },
         '110': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': True },
         '111': { 'name': 'lower_temp_f', 'alt': 'heating_setpoint_f', 'high_resolution': True },
         '115': { 'name': 'fan', 'enum': ['auto', 'cycle', 'on'] },
         '116': { 'name': 'home' },
-        '118': { 'name': 'schedule', 'base64': True },
+        '118': { 'name': 'schedule', 'base64': True, 'class': 'ThermostatSchedule' },
         '119': { 'name': 'schedule_enabled' },
         '120': { 'name': 'hold', 'enum': ['permhold', 'temphold', 'followschedule'] },
         '121': { 'name': 'vacation', 'base64': True },
@@ -237,12 +237,20 @@ class ThermostatDevice(Device):
             self.sensorlists.append(ThermostatSensorList(k, self))
 
         for k in self.dps_data:
-            setattr(self, self.dps_data[k]['name'], None)
-            if 'alt' in self.dps_data[k]:
-                setattr(self, self.dps_data[k]['alt'], None)
+            val = None
 
-            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
-                setattr(self, 'raw_' + self.dps_data[k]['name'], None)
+            if 'class' in self.dps_data[k]:
+                val = getattr( self, self.dps_data[k]['class'] )()
+
+            setattr( self, self.dps_data[k]['name'], val )
+            if 'alt' in self.dps_data[k]:
+                setattr( self, self.dps_data[k]['alt'], val )
+
+            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) or ('class' in self.dps_data[k]) or ('decode' in self.dps_data[k]) ):
+                self.dps_data[k]['check_raw'] = True
+
+            if 'check_raw' in self.dps_data[k] and self.dps_data[k]['check_raw']:
+                setattr( self, 'raw_' + self.dps_data[k]['name'], None )
 
     def sensors( self ):
         for l in self.sensorlists:
@@ -343,6 +351,9 @@ class ThermostatDevice(Device):
         if 'scale' in ddata:
             val = int( val * ddata['scale'] )
 
+        if 'encode' in ddata:
+            val = ddata['encode']( val )
+
         if 'enum' in ddata:
             if val not in ddata['enum']:
                 log.warn( 'Requested value %r for key %r/%r not in enum list %r !  Setting anyway...' % (val, dps, key, ddata['enum']) )
@@ -415,32 +426,40 @@ class ThermostatDevice(Device):
 
         for k in data['dps']:
             if k in self.dps_data:
-                name = checkname = self.dps_data[k]['name']
+                name = self.dps_data[k]['name']
+                checkname = ('raw_' + name) if 'check_raw' in self.dps_data[k] and self.dps_data[k]['check_raw'] else name
                 val = data['dps'][k]
-                if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
-                    checkname = 'raw_' + name
 
-                if getattr(self, checkname) != val:
+                if getattr( self, checkname ) != val:
                     data['changed'].append( name )
-                    setattr(self, checkname, val)
+                    setattr( self, checkname, val )
 
                     if ('base64' in self.dps_data[k]) and self.dps_data[k]:
                         val = base64.b64decode( val )
                         data['changed'].append( checkname )
-                        setattr(self, name, val)
+
+                        if 'class' not in self.dps_data[k]:
+                            setattr( self, name, val )
 
                     if 'enum' in self.dps_data[k]:
                         if val not in self.dps_data[k]['enum']:
                             log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
 
-                    if 'scale' in self.dps_data[k]:
-                        val /= self.dps_data[k]['scale']
-                        data['changed'].append( checkname )
+                    if 'class' in self.dps_data[k]:
+                        getattr( self, name ).update( val )
+                    else:
+                        if 'decode' in self.dps_data[k]:
+                            val = self.dps_data[k]['decode']( val )
+
+                        if 'scale' in self.dps_data[k]:
+                            val /= self.dps_data[k]['scale']
+                            data['changed'].append( checkname )
+
                         setattr(self, name, val)
 
                     if 'alt' in self.dps_data[k]:
                         data['changed'].append( self.dps_data[k]['alt'] )
-                        setattr(self, self.dps_data[k]['alt'], val)
+                        setattr( self, self.dps_data[k]['alt'], val )
 
         return data
 
@@ -449,6 +468,66 @@ class ThermostatDevice(Device):
             if 'alt' in self.dps_data[k]:
                 yield (self.dps_data[k]['alt'], getattr(self, self.dps_data[k]['alt']))
             yield (self.dps_data[k]['name'], getattr(self, self.dps_data[k]['name']))
+
+    class ThermostatSchedule(object):
+        have_data = False
+        day_data = [ ]
+
+        def __init__( self ):
+            self.day_data = [ [ [0xFF,0xFFFF,-32768,-32768] ] * 5 ] * 7
+
+        def update( self, data ):
+            self.day_data = [ ] * 7
+            have_data = False
+
+            if len(data) % 7 != 0:
+                log.warn( 'Schedule data is in an unknown format, ignoring schedule' )
+                return False
+
+            daylen = len(data) / 7
+            for dow in range( 7 ):
+                offset = dow * daylen
+                day = data[offset:offset+daylen]
+
+                if len(day) % 7 != 0:
+                    log.warn( 'Schedule day data for day %d is in an unknown format, ignoring schedule' % dow )
+                    return False
+
+                periods = len(day) / 7
+                period = 0
+
+                for dayoffset in range( 0, len(day), 7 ):
+                    perioddata = day[dayoffset:dayoffset+7]
+
+                    if len(perioddata) != 7:
+                        log.warn( 'Schedule period data for period %d on day %d is in an unknown format, ignoring schedule' % (period, dow) )
+                        return False
+
+                    while len(day_data[dow]) <= period:
+                        day_data[dow].append( [] )
+
+                    day_data[dow][period] = list( struct.unpack( '>BHhh', perioddata ) )
+
+            have_data = True
+
+        def __bytes__( self ):
+            ret = bytearray()
+            for daydata in self.day_data:
+                for period in daydata:
+                    ret += bytearray( struct.pack( '>BHhh', *period ) )
+
+            return bytes(ret)
+
+        def __repr__( self ):
+            return bytes(self).hex().upper()
+
+        def b64(self):
+            return base64.b64encode( bytes(self) ).decode('ascii')
+
+        #def __iter__(self):
+        #    for s in self.sensors:
+        #        yield s
+
 
 
 class ThermostatSensorList(object):
