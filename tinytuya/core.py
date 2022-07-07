@@ -566,7 +566,7 @@ class XenonDevice(object):
                 data = data[prefix_offset:]
 
             newdata = self.socket.recv(header_len+ret_end_len-len(data))
-            if len(newdata) == 0:
+            if not newdata or len(newdata) == 0:
                 # connection closed?
                 raise DecodeError('No data received - connection closed?')
             data += newdata
