@@ -6,8 +6,9 @@
 * Add function to send multiple DPS index updates with one call
 
 
-## v1.6.2 - TuyaMessage Header & ThermostatDevice Improvements
+## v1.6.2 - Cloud, TuyaMessage & ThermostatDevice Improvements
 
+* PyPI 1.6.2
 * Add getconnectstatus() function to Cloud class by @Paxy in https://github.com/jasonacox/tinytuya/pull/151
 * Improve TuyaMessage Header processing for mulit-payload messages by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/153
 * More verbose debug logging on decode error by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/155
