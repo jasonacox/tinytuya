@@ -6,11 +6,12 @@
 * Add function to send multiple DPS index updates with one call
 
 
-## v1.6.2 - Unreleased
+## v1.6.2 - TuyaMessage Header & ThermostatDevice Improvements
 
-* Update Cloud.py by @Paxy in https://github.com/jasonacox/tinytuya/pull/151
-* Break socket recv() out into its own function by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/153
+* Add getconnectstatus() function to Cloud class by @Paxy in https://github.com/jasonacox/tinytuya/pull/151
+* Improve TuyaMessage Header processing for mulit-payload messages by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/153
 * More verbose debug logging on decode error by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/155
+* Add schedule editing to [Contrib/ThermostatDevice](https://github.com/jasonacox/tinytuya/blob/master/tinytuya/Contrib/ThermostatDevice.py) and various fixes by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/157
 
 ## v1.6.1 - ThermostatDevice - User Contributed Device Module
 
