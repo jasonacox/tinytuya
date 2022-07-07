@@ -555,6 +555,7 @@ class XenonDevice(object):
                 tries -= 1
                 if tries == 0:
                     raise DecodeError('No data received - connection closed?')
+                continue
             data += newdata
             length -= len(newdata)
             tries = 2
