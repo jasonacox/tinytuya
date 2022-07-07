@@ -986,7 +986,7 @@ class XenonDevice(object):
         # if spaces are not removed device does not respond!
         payload = payload.replace(" ", "")
         payload = payload.encode("utf-8")
-        log.debug("building payload=%r", payload)
+        log.debug("building command %s payload=%r", command, payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
