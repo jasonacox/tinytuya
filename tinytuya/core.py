@@ -337,9 +337,6 @@ def unpack_message(data, header=None):
     crc, suffix = struct.unpack(MESSAGE_END_FMT, payload[-end_len:])
     have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
-    if header.prefix != PREFIX_VALUE:
-        log.debug('Header prefix wrong! %08X != %08X', header.prefix, PREFIX_VALUE)
-
     if suffix != SUFFIX_VALUE:
         log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
 
@@ -357,6 +354,14 @@ def parse_header(data):
     prefix, seqno, cmd, payload_len = struct.unpack(
         MESSAGE_HEADER_FMT, data[:header_len]
     )
+
+    if prefix != PREFIX_VALUE:
+        #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
+        raise DecodeError('Header prefix wrong! %08X != %08X' % (prefix, PREFIX_VALUE))
+
+    # sanity check. currently the max packet length is somewhere around 250 bytes
+    if payload_len > 300:
+        raise DecodeError('Header claims the packet size is over 300 bytes!  It is most likely corrupt.  Claimed size: %d bytes' % payload_len)
 
     return TuyaHeader(prefix, seqno, cmd, payload_len)
 
