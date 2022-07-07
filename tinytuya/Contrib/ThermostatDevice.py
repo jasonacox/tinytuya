@@ -20,25 +20,20 @@
 
     Sensor related functions:
         tstatdev = ThermostatDevice(...)
-        tstatdev.sensors() 
-            -> returns an iterable list of all the sensors
-              sensors have the following attributes:
-                  id -> ID # of the sensor as a hex string
-                  raw_id -> ID # of the sensor as a integer
-                  name -> decoded and trimmed name of the sensor
-                  raw_name -> NUL-padded name of the sensor as a byte array
-                  enabled -> sensor enabled flag True/False
-                  occupied -> sensor detected occupancy flag True/False
-                  temperature -> temperature in degrees C as a float
-                  raw_temperature -> temperature as reported by the sensor (degrees C * 100)
-                  online -> sensor online flag True/False
-                  participation -> schedule participation bitmask ['wake', 'away', 'home', 'sleep']
-                  battery -> battery percentage remaining
-                  unknown2 -> value of unknown field, integer 0-255
-                  firmware_version -> firmware version * 10 (01 = v0.1)
-                  averaging -> sensor currently participation in the temperature averaging (occupied is True and participation flag for the current schedule mode is set)
-                  unknown3 -> value of unknown field, 8 byte long byte array
-                  changed -> list of attributes which have changed since last update
+        tstatdev.sensors
+            -> an iterable list of all the sensors that can also be acessed like a dict:
+
+              for sensor in tstatdev.sensors:
+                  if not sensor.online:
+                      print( 'Sensor %r offline!' % sensor.name )
+
+              if tstatdev.sensors['12345678'].battery < 10:
+                  print( 'Sensor %r low battery!' % tstatdev.sensors['12345678'].name )
+              else:
+                  print( 'Sensor %r battery %d%%' % (tstatdev.sensors['12345678'].name, tstatdev.sensors['12345678'].battery ) )
+
+            dict access matches against both name and id:
+              tstatdev.sensors['name'] and tstatdev.sensors['id'] both work
 
         When sensor values change, the sensor object is also available in data['changed_sensors'].  i.e.
             data = tstatdev.receive()
@@ -47,28 +42,46 @@
                     if 'temperature' in sensor['changed'] and sensor.online:
                         ...do something with sensor.temperature or whatever...
 
-        sensor.setName( new_name )
-        sensor.setEnabled( enabled )
-        sensor.setOccupied( occupied )
-            -> not really useful for remote sensors as they get overwritten on the next update
-        sensor.setParticipation( flag, val=True )
-            -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
-               when it's a string, val sets (True) or clears (False) that particular flag
-               when it's a integer, the bitmask is set to val
-        sensor.getParticipation( flag )
-            -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
-               returns True if (string) flag is set or (integer) bitmask matches exactly, otherwise returns False
-            -> if the current value of all flags is wanted, the sensor.participation field can be read directly instead of using this function
-        sensor.setUnknown2( val )
-            -> sets the second unknown field to val.  'val' should be an integer in the range 0-255
-        sensor.setUnknown3( val )
-            -> sets the third unknown field to val.  'val' should be a 8 byte long byte array
+        sensors have the following attributes:
+          id -> ID # of the sensor as a hex string
+          raw_id -> ID # of the sensor as a integer
+          name -> decoded and trimmed name of the sensor
+          raw_name -> NUL-padded name of the sensor as a byte array
+          enabled -> sensor enabled flag True/False
+          occupied -> sensor detected occupancy flag True/False
+          temperature -> temperature in degrees C as a float
+          raw_temperature -> temperature as reported by the sensor (degrees C * 100)
+          online -> sensor online flag True/False
+          participation -> schedule participation bitmask ['wake', 'away', 'home', 'sleep']
+          battery -> battery percentage remaining
+          unknown2 -> value of unknown field, integer 0-255
+          firmware_version -> firmware version * 10 (01 = v0.1)
+          averaging -> sensor currently participation in the temperature averaging (occupied is True and participation flag for the current schedule mode is set)
+          unknown3 -> value of unknown field, 8 byte long byte array
+          changed -> list of attributes which have changed since last update
 
-    If multiple sensor options are going to be changed at the same time, it is much quicker to queue the updates and send them all at once:
-        sensor.delayUpdates()
-        ... call sensor.setName() or whatever here ...
-        sensor.sendUpdates()
+        sensors also have the following methods:
+          sensor.setName( new_name )
+          sensor.setEnabled( enabled )
+          sensor.setOccupied( occupied )
+              -> not really useful for remote sensors as they get overwritten on the next update
+          sensor.setParticipation( flag, val=True )
+              -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
+                 when it's a string, val sets (True) or clears (False) that particular flag
+                 when it's a integer, the bitmask is set to flag and val is ignored
+          sensor.getParticipation( flag )
+              -> flag can be either a string in ['wake', 'away', 'home', 'sleep'] or an integer bitmask
+                 returns True if (string) flag is set or (integer) bitmask matches exactly, otherwise returns False
+              -> if the current value of all flags is wanted, the sensor.participation field can be read directly instead of using this function
+          sensor.setUnknown2( val )
+              -> sets the second unknown field to val.  'val' should be an integer in the range 0-255
+          sensor.setUnknown3( val )
+              -> sets the third unknown field to val.  'val' should be a 8 byte long byte array
 
+        If multiple sensor options are going to be changed at the same time, it is much quicker to queue the updates and send them all at once:
+            sensor.delayUpdates()
+            ... call sensor.setName() or whatever here ...
+            sensor.sendUpdates()
 
 
     Thermostat related functions:
@@ -123,7 +136,7 @@
             -> converts a value to the format the DPS is expecting for that particular key.  you probably do not need to call this directly
 
     attributes:
-        mode -> ['auto', 'cool', 'heat', 'off']
+        mode -> ['auto', 'cool', 'heat', 'emergencyheat', 'off']
         fan -> ['auto', 'cycle', 'on']
         system -> current system state, ['fanon', 'coolfanon', 'alloff', 'heatfanon', 'heaton']
         setpoint_c -> either the setpoint when system is not in 'auto' mode, or the midpoint between the heating and cooling setpoints
@@ -139,9 +152,9 @@
         temperature_f and temp_current_f -> current temperature in degrees F
         humidity -> RH%
         fault -> fault flags, [e1, e2, e3]
-        system_type -> '4'=heatpump
+        system_type -> '4'=heatpump, '5'=2-stage heatpump?
         home -> ??
-        schedule -> binary blob
+        schedule -> ThermostatSchedule() class
         schedule_enabled -> flag True/False
         hold -> ['permhold', 'temphold', 'followschedule']
         vacation -> binary blob
@@ -159,7 +172,7 @@
                     print( 'Changed:', changed, 'New Value:', getattr( tstatdev, changed ) )
             if data and 'changed_sensors' in data:
                 for sensor in data['changed_sensors']:
-                    print( 'Sensor Changed! Changed Attribs:%r DPS:%s ID:%s Name:"%s" Current Temperature: %r' % (sensor.changed, sensor.dps, sensor.id, sensor.name, sensor.temperature) )
+                    print( 'Sensor Changed! Changed Attribs:%r DPS:%s ID:%s Name:"%s" Current Temperature: %r' % (sensor.changed, sensor.parent_sensorlist.dps, sensor.id, sensor.name, sensor.temperature) )
                     if 'sensor_added' in sensor.changed:
                         print( 'New sensor was added!' )
                     if 'name' in sensor.changed:
@@ -167,13 +180,39 @@
                     for changed in sensor.changed:
                         print( 'Changed:', changed, 'New Value:', getattr( sensor, changed ) )
 
+    ThermostatSchedule class:
+
+        !! WARNING !! The thermostat does NOT send the current schedule when you request the status, it only sends it when it has changed.  So, you
+            must either a) set the entire schedule or b) change it in the app or on the thermostat itself while tinytuya is running.  Changes to a
+            single day/period/value can only be made once this has been done.
+
+        'day' is a case-insensitive string starting with su, m, tu, w, th, f, sa or an integer in the range 0-6
+        'period' is a case-insensitive string starting with w[ake], a[way], h[ome], s[leep], e[xtra] or an integer in the range 0-4
+            -> Only periods 0-3 (wake-sleep) show up in the app or on the thermostat! (4 (extra) is hidden)
+
+        Schedule parameters can be accessed directly by dict via name or index:
+            tstatdev.schedule[1][0].coolto = 25.0 or
+            tstatdev.schedule['monday']['wake'].coolto = 25.0 or
+            tstatdev.schedule['m']['w'].coolto = 25.0 or
+            tstatdev.schedule['MoNdAySsUcK']['WakeMeUp'].coolto = 25.0
+        all mean the same thing.  Parameters can also be set using the .setPeriod method:
+            tstatdev.schedule.setPeriod( day_of_week, period, coolto=25.0, heatto=10.0, time=0, participation=(period & 3) )
+        To disable a schedule period (set the time to 0xFFFF) you can:
+            tstatdev.schedule.setPeriod( day, 4, delete=True)
+
+        Once a day is set you can copy it to a different day with:
+            # copy sunday (0) to monday-saturday (1-6)
+            for i in range(6):
+                tstatdev.schedule.copyDay( 0, i+1 )
+
+        Individual periods can also be copied:
+            tstatdev.schedule.copyPeriod( src_day, src_period, dst_day, dst_period )
 """
 
 import struct
 import base64
 
 from ..core import Device, log, HEART_BEAT, DP_QUERY, CONTROL
-
 
 class ThermostatDevice(Device):
     """
@@ -185,13 +224,9 @@ class ThermostatDevice(Device):
         local_key (str, optional): The encryption key. Defaults to None.
     """
 
-    high_resolution = None
-    delay_updates = False
-    delayed_updates = { }
-    sensorlists = [ ]
     sensor_dps = ('122', '125', '126', '127', '128')
     dps_data = {
-        '2' : { 'name': 'mode', 'enum': ['auto', 'cool', 'heat', 'off'] },
+        '2' : { 'name': 'mode', 'enum': ['auto', 'cool', 'heat', 'emergencyheat', 'off'] },
         '16': { 'name': 'temp_set', 'alt': 'setpoint_c', 'scale': 100 },
         '17': { 'name': 'temp_set_f', 'alt': 'setpoint_f' },
         '18': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': False },
@@ -204,14 +239,14 @@ class ThermostatDevice(Device):
         '29': { 'name': 'temp_current_f', 'alt': 'temperature_f' },
         '34': { 'name': 'humidity' },
         '45': { 'name': 'fault' },
-        '107': { 'name': 'system_type' },
+        '107': { 'name': 'system_type', 'decode': int },
         '108': { 'name': 'upper_temp', 'alt': 'cooling_setpoint_c', 'scale': 100, 'high_resolution': True },
         '109': { 'name': 'lower_temp', 'alt': 'heating_setpoint_c', 'scale': 100, 'high_resolution': True },
         '110': { 'name': 'upper_temp_f', 'alt': 'cooling_setpoint_f', 'high_resolution': True },
         '111': { 'name': 'lower_temp_f', 'alt': 'heating_setpoint_f', 'high_resolution': True },
         '115': { 'name': 'fan', 'enum': ['auto', 'cycle', 'on'] },
         '116': { 'name': 'home' },
-        '118': { 'name': 'schedule', 'base64': True },
+        '118': { 'name': 'schedule', 'base64': True, 'selfclass': 'ThermostatSchedule' },
         '119': { 'name': 'schedule_enabled' },
         '120': { 'name': 'hold', 'enum': ['permhold', 'temphold', 'followschedule'] },
         '121': { 'name': 'vacation', 'base64': True },
@@ -232,21 +267,31 @@ class ThermostatDevice(Device):
         if persist:
             self.set_socketPersistent(True)
 
+        self.high_resolution = None
+        self.schedule = None
+        self.delay_updates = False
+        self.delayed_updates = { }
+        self.sensorlists = [ ]
+        self.sensors = self.SensorList( self )
+
         for k in self.sensor_dps:
             self.sensorlists.append(ThermostatSensorList(k, self))
 
         for k in self.dps_data:
-            setattr(self, self.dps_data[k]['name'], None)
+            val = None
+
+            if 'selfclass' in self.dps_data[k]:
+                val = getattr( self, self.dps_data[k]['selfclass'] )( self, k )
+
+            setattr( self, self.dps_data[k]['name'], val )
             if 'alt' in self.dps_data[k]:
-                setattr(self, self.dps_data[k]['alt'], None)
+                setattr( self, self.dps_data[k]['alt'], val )
 
-            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
-                setattr(self, 'raw_' + self.dps_data[k]['name'], None)
+            if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) or ('selfclass' in self.dps_data[k]) or ('decode' in self.dps_data[k]) ):
+                self.dps_data[k]['check_raw'] = True
 
-    def sensors( self ):
-        for l in self.sensorlists:
-            for s in l:
-                yield s
+            if 'check_raw' in self.dps_data[k] and self.dps_data[k]['check_raw']:
+                setattr( self, 'raw_' + self.dps_data[k]['name'], None )
 
     def delayUpdates( self ):
         self.delay_updates = True
@@ -254,7 +299,7 @@ class ThermostatDevice(Device):
     def setSetpoint( self, setpoint, cf=None ):
         if self.mode == 'cool':
             return self.setCoolSetpoint( self, setpoint, cf )
-        elif self.mode == 'heat':
+        elif self.mode == 'heat' or self.mode == 'emergencyheat':
             return self.setHeatSetpoint( self, setpoint, cf )
         else:
             # no idea, let the thermostat figure it out
@@ -342,6 +387,9 @@ class ThermostatDevice(Device):
         if 'scale' in ddata:
             val = int( val * ddata['scale'] )
 
+        if 'encode' in ddata:
+            val = ddata['encode']( val )
+
         if 'enum' in ddata:
             if val not in ddata['enum']:
                 log.warn( 'Requested value %r for key %r/%r not in enum list %r !  Setting anyway...' % (val, dps, key, ddata['enum']) )
@@ -414,32 +462,42 @@ class ThermostatDevice(Device):
 
         for k in data['dps']:
             if k in self.dps_data:
-                name = checkname = self.dps_data[k]['name']
+                name = self.dps_data[k]['name']
+                checkname = ('raw_' + name) if 'check_raw' in self.dps_data[k] and self.dps_data[k]['check_raw'] else name
                 val = data['dps'][k]
-                if( ('scale' in self.dps_data[k]) or (('base64' in self.dps_data[k]) and self.dps_data[k]['base64']) ):
-                    checkname = 'raw_' + name
 
-                if getattr(self, checkname) != val:
-                    data['changed'].append( name )
-                    setattr(self, checkname, val)
+                if getattr( self, checkname ) == val:
+                    continue
 
-                    if ('base64' in self.dps_data[k]) and self.dps_data[k]:
-                        val = base64.b64decode( val )
-                        data['changed'].append( checkname )
-                        setattr(self, name, val)
+                data['changed'].append( name )
+                if name != checkname: data['changed'].append( checkname )
+                setattr( self, checkname, val )
+
+                if ('base64' in self.dps_data[k]) and self.dps_data[k]:
+                    val = base64.b64decode( val )
+
+                if 'selfclass' in self.dps_data[k]:
+                    getattr( self, name ).update( val )
+
+                    if 'alt' in self.dps_data[k]:
+                        data['changed'].append( self.dps_data[k]['alt'] )
+                        setattr( self, self.dps_data[k]['alt'], getattr( self, name ) )
+                else:
+                    if 'decode' in self.dps_data[k]:
+                        val = self.dps_data[k]['decode']( val )
+
+                    if 'scale' in self.dps_data[k]:
+                        val /= self.dps_data[k]['scale']
+
+                    setattr(self, name, val)
 
                     if 'enum' in self.dps_data[k]:
                         if val not in self.dps_data[k]['enum']:
                             log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
 
-                    if 'scale' in self.dps_data[k]:
-                        val /= self.dps_data[k]['scale']
-                        data['changed'].append( checkname )
-                        setattr(self, name, val)
-
                     if 'alt' in self.dps_data[k]:
                         data['changed'].append( self.dps_data[k]['alt'] )
-                        setattr(self, self.dps_data[k]['alt'], val)
+                        setattr( self, self.dps_data[k]['alt'], val )
 
         return data
 
@@ -448,6 +506,331 @@ class ThermostatDevice(Device):
             if 'alt' in self.dps_data[k]:
                 yield (self.dps_data[k]['alt'], getattr(self, self.dps_data[k]['alt']))
             yield (self.dps_data[k]['name'], getattr(self, self.dps_data[k]['name']))
+
+    class SensorList:
+        def __init__( self, parent ):
+            self.parent = parent
+
+        def find_sensor( self, name ):
+            for l in self.parent.sensorlists:
+                for s in l:
+                    if s.id == name or s.name == name:
+                        return s
+
+            return None
+
+        def __getitem__( self, key ):
+            if isinstance( key, str ):
+                return self.find_sensor( key )
+            elif not isinstance( key, int ):
+                return getattr( self, key )
+
+            i = 0
+            for l in self.parent.sensorlists:
+                for s in l:
+                    if i == key:
+                        return s
+                    i += 1
+
+            return None
+
+        def __len__( self ):
+            i = 0
+            for l in self.parent.sensorlists:
+                for s in l:
+                    i += 1
+            return i
+
+        def __iter__( self ):
+            for l in self.parent.sensorlists:
+                for s in l:
+                    yield s
+
+        def __call__( self ):
+            for l in self.parent.sensorlists:
+                for s in l:
+                    yield s
+
+
+    class ThermostatSchedule(object):
+        class ScheduleDay:
+            class SchedulePeriod:
+                def __init__( self ):
+                    self.participation = 0xFF
+                    self.time = 0xFFFF
+                    self.heatto = -32768
+                    self.coolto = -32768
+
+                def __setitem__( self, key, data ):
+                    if not isinstance( key, int ):
+                        setattr( self, key, data )
+
+                    if key == 0: self.participation = data
+                    elif key == 1: self.time = data
+                    elif key == 2: self.heatto = data
+                    elif key == 3: self.coolto = data
+                    else: raise IndexError('Numeric index must be an integer 0-3')
+
+                def __getitem__( self, key ):
+                    if not isinstance( key, int ):
+                        return getattr(self, key)
+
+                    if key == 0: return self.participation
+                    elif key == 1: return self.time
+                    elif key == 2: return self.heatto
+                    elif key == 3: return self.coolto
+                    else: raise IndexError('Numeric index must be an integer 0-3')
+
+                def __len__( self ):
+                    return 4
+
+                def __iter__( self ):
+                    yield self.participation
+                    yield self.time
+                    yield self.heatto
+                    yield self.coolto
+
+                def __bytes__( self ):
+                    if self.heatto < -100 or self.heatto > 100:
+                        heatto = round(self.heatto)
+                    else:
+                        heatto = round(self.heatto * 100)
+                        heatmod = heatto % 50
+                        heatto -= heatmod
+                        if heatmod >= 25: heatto += 50
+
+                    if self.coolto < -100 or self.coolto > 100:
+                        coolto = round(self.coolto)
+                    else:
+                        coolto = round(self.coolto * 100)
+                        coolmod = coolto % 50
+                        coolto -= coolmod
+                        if coolmod >= 25: coolto += 50
+
+                    return struct.pack( '>BHhh', self.participation, self.time, heatto, coolto )
+
+                def __repr__( self ):
+                    return bytes(self).hex().upper()
+
+            def __init__( self ):
+                self.periods = [ ]
+                for i in range( 5 ):
+                    sp = self.SchedulePeriod()
+                    self.periods.append( sp )
+
+            def period_to_idx( self, period ):
+                if isinstance( period, int ):
+                    if period >= 0 and period < 5:
+                        return period
+                    raise ValueError('"period" must be an integer in the range 0-4 or a string containing the period name')
+
+                if not isinstance( period, str ):
+                    raise ValueError('"period" must be an integer in the range 0-4 or a string containing the period name')
+
+                period = period[0].lower()
+                if period == 'w': return 0 # wake
+                if period == 'a': return 1 # away
+                if period == 'h': return 2 # home
+                if period == 's': return 3 # sleep
+                if period == 'e': return 4 # extra
+
+                raise ValueError('"period" must be an integer in the range 0-4 or a string containing the period name')
+
+            def __setitem__( self, key, data ):
+                if isinstance( key, str ):
+                    key = self.period_to_idx( key )
+                elif not isinstance( key, int ):
+                    setattr( self, key, data )
+
+                if key < 0 or key > 4:
+                    raise IndexError('Numeric index must be an integer 0-4')
+
+                self.periods[key] = data
+
+            def __getitem__( self, key ):
+                if isinstance( key, str ):
+                    key = self.period_to_idx( key )
+                elif not isinstance( key, int ):
+                    return getattr( self, key )
+
+                if key < 0 or key > 4:
+                    raise IndexError('Numeric index must be an integer 0-4')
+
+                return self.periods[key]
+
+            def __len__( self ):
+                return 5
+
+            def __iter__( self ):
+                for p in self.periods:
+                    yield p
+
+            def __bytes__( self ):
+                ret = bytearray()
+                for period in self.periods:
+                    ret += bytearray( bytes( period ) )
+                return bytes(ret)
+
+            def __repr__( self ):
+                return bytes(self).hex().upper()
+
+
+        def __init__( self, parent, dps ):
+            self.parent = parent
+            self.dps = dps
+            self.have_data = False
+
+            self.day_data = [ ]
+
+            for i in range( 7 ):
+                sd = self.ScheduleDay()
+                self.day_data.append( sd )
+
+        def day_to_idx( self, day ):
+            if isinstance( day, int ):
+                if day >= 0 and day < 7:
+                    return day
+                raise ValueError('"day" must be an integer in the range 0-6 or a string containing the day name')
+
+            if not isinstance( day, str ):
+                raise ValueError('"day" must be an integer in the range 0-6 or a string containing the day name')
+
+            day = day[:2].lower()
+            if day == 'su':   return 0
+            if day[0] == 'm': return 1
+            if day == 'tu':   return 2
+            if day[0] == 'w': return 3
+            if day == 'th':   return 4
+            if day[0] == 'f': return 5
+            if day == 'sa':   return 6
+
+            raise ValueError('"day" must be an integer in the range 0-6 or a string containing the day name')
+
+        def copyDay( self, src, dst ):
+            src = self.day_to_idx( src )
+            dst = self.day_to_idx( dst )
+
+            for period in range( len(self.day_data[src]) ):
+                for itm in range( len(self.day_data[src][period]) ):
+                    self.day_data[dst][period][itm] = self.day_data[src][period][itm]
+
+            return self.have_data
+
+        def copyPeriod( self, src_day, src_period, dst_day, dst_period ):
+            src_day = self.day_to_idx( src_day )
+            #src_period = self.period_to_idx( src_period )
+            dst_day = self.day_to_idx( dst_day )
+            #dst_period = self.period_to_idx( dst_period )
+
+            for itm in range( len(self.day_data[src_day][src_period]) ):
+                self.day_data[dst_day][dst_period][itm] = self.day_data[src_day][src_period][itm]
+
+            return self.have_data
+
+        def setPeriod( self, day, period, **kwargs ):
+            day = self.day_to_idx( day )
+            #period = self.period_to_idx( period )
+
+            if 'delete' in kwargs:
+                self.day_data[day][period] = self.ScheduleDay.SchedulePeriod()
+
+            if 'participation' in kwargs:
+                self.day_data[day][period].participation = kwargs['participation']
+
+            if 'time' in kwargs:
+                self.day_data[day][period].time = kwargs['time']
+
+            if 'heatto'	in kwargs:
+                self.day_data[day][period].heatto = kwargs['heatto']
+
+            if 'coolto' in kwargs:
+                self.day_data[day][period].coolto = kwargs['coolto']
+
+            if self.day_data[day][period][0] > 3 and self.day_data[day][period][1] < 1440:
+                if self.day_data[day][period][0] != 0xFF:
+                    log.warn('Selected participation flag is out of range, setting to %d', period)
+                self.day_data[day][period][0] = period & 3
+
+        def update( self, data ):
+            self.have_data = False
+
+            if len(data) % 7 != 0:
+                log.warn( 'Schedule data is in an unknown format, ignoring schedule' )
+                return False
+
+            daylen = int(len(data) / 7)
+            for dow in range( 7 ):
+                offset = dow * daylen
+                day = data[offset:offset+daylen]
+
+                if len(day) % 7 != 0:
+                    log.warn( 'Schedule day data for day %d is in an unknown format, ignoring schedule' % dow )
+                    return False
+
+                periods = len(day) / 7
+                period = -1
+
+                for dayoffset in range( 0, len(day), 7 ):
+                    period += 1
+                    perioddata = day[dayoffset:dayoffset+7]
+
+                    if len(perioddata) != 7:
+                        log.warn( 'Schedule period data for period %d on day %d is in an unknown format, ignoring schedule' % (period, dow) )
+                        return False
+
+                    newdata = struct.unpack( '>BHhh', perioddata )
+
+                    for i in range( len(newdata) ):
+                        self.day_data[dow][period][i] = newdata[i]
+
+                    self.day_data[dow][period].heatto /= 100
+                    self.day_data[dow][period].coolto /= 100
+
+            self.have_data = True
+
+        def save( self ):
+            return self.parent.set_value( self.dps, self.b64(), nowait=True )
+
+        def __bytes__( self ):
+            ret = bytearray()
+            for daydata in self.day_data:
+                ret += bytearray( bytes( daydata ) )
+
+            return bytes(ret)
+
+        def __repr__( self ):
+            #if not self.have_data:
+            #    return ''
+            return bytes(self).hex().upper()
+
+        def b64(self):
+            return base64.b64encode( bytes(self) ).decode('ascii')
+
+        def __iter__(self):
+            for d in self.day_data:
+                yield d
+
+        def __setitem__( self, key, data ):
+            if isinstance( key, str ):
+                key = self.day_to_idx( key )
+            elif not isinstance( key, int ):
+                setattr( self, key, data )
+
+            if key < 0 or key > 6:
+                raise IndexError('Numeric index must be an integer 0-6')
+
+            self.day_data[key] = data
+
+        def __getitem__( self, key ):
+            if isinstance( key, str ):
+                key = self.day_to_idx( key )
+            elif not isinstance( key, int ):
+                return getattr( self, key )
+
+            if key < 0 or key > 6:
+                raise IndexError('Numeric index must be an integer 0-6')
+
+            return self.day_data[key]
 
 
 class ThermostatSensorList(object):
@@ -481,10 +864,9 @@ class ThermostatSensorList(object):
         d.send(payload)
     """
 
-    stated_count = 0
-    actual_count = 0
-
     def __init__( self, dps, parent_device ):
+        self.stated_count = 0
+        self.actual_count = 0
         self.sensors = [ ]
         self.parent_device = parent_device
 
@@ -505,19 +887,24 @@ class ThermostatSensorList(object):
             self.sensors = [ ]
             return
 
-        if ((len(sensordata_list) - 1) % 52) != 0:
+        lenmod = len(sensordata_list) % 52
+
+        if lenmod == 1:
+            self.stated_count = sensordata_list[0]
+        elif lenmod == 0:
+            self.stated_count = None
+        else:
             raise TypeError( 'Unhandled Thermostat Sensor List data length' )
 
-        self.stated_count = sensordata_list[0]
-        self.actual_count = int((len(sensordata_list) - 1) / 52)
+        self.actual_count = int((len(sensordata_list) - lenmod) / 52)
 
         for i in range( self.actual_count ):
             if i < len(self.sensors):
-                if self.sensors[i].parse(sensordata_list[(i*52)+1:((i+1)*52)+1]):
+                if self.sensors[i].parse(sensordata_list[(i*52)+lenmod:((i+1)*52)+lenmod]):
                     changed.append(self.sensors[i])
             else:
                 self.sensors.append( self.ThermostatSensorData( self ) )
-                self.sensors[i].parse(sensordata_list[(i*52)+1:((i+1)*52)+1])
+                self.sensors[i].parse(sensordata_list[(i*52)+lenmod:((i+1)*52)+lenmod])
                 # instead of listing every field, just say it was added
                 self.sensors[i].changed = [ 'sensor_added' ]
                 self.sensors[i].sensor_added = True
@@ -528,13 +915,22 @@ class ThermostatSensorList(object):
         return changed
 
     def __repr__( self ):
-        out = '%02X' % self.stated_count
+        if self.stated_count is not None:
+            out = '%02X' % self.stated_count
+        else:
+            out = ''
+
         for s in self.sensors:
             out += str(s)
+
         return out
 
     def b64(self):
-        b = bytearray( [self.stated_count] )
+        if self.stated_count is not None:
+            b = bytearray( [self.stated_count] )
+        else:
+            b = bytearray()
+
         for s in self.sensors:
             b += bytearray( bytes( s ) )
         return base64.b64encode( b ).decode('ascii')
@@ -547,28 +943,28 @@ class ThermostatSensorList(object):
         # unpack the 52-byte long binary blob
         struct_format = '>I30s??h?BBBB?8s'
         keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'unknown3')
-        parent_sensorlist = None
-        raw_id = 0
-        raw_name = b'\x00' * 30
-        name = ''
-        enabled = True
-        occupied = True
-        raw_temperature = 0
-        temperature = 0.0
-        online = True
-        participation = 0
-        battery = 0
-        unknown2 = 0
-        firmware_version = 0
-        averaging = True
-        unknown3 = b'\x00' * 8
-        changed = [ ]
-        want_update = [ ]
-        sensor_added = True
-        delay_updates = False
 
         def __init__( self, parent_sensorlist ):
             self.parent_sensorlist = parent_sensorlist
+            self.raw_id = 0
+            self.raw_name = b'\x00' * 30
+            self.name = ''
+            self.enabled = True
+            self.occupied = True
+            self.raw_temperature = 0
+            self.temperature = 0.0
+            self.online = True
+            self.participation = 0
+            self.battery = 0
+            self.unknown2 = 0
+            self.firmware_version = 0
+            self.averaging = True
+            self.unknown3 = b'\x00' * 8
+            self.changed = [ ]
+            self.want_update = [ ]
+            self.sensor_added = True
+            self.delay_updates = False
+
 
         def parse( self, sensordata ):
             new = struct.unpack( self.struct_format, sensordata )
@@ -681,7 +1077,7 @@ class ThermostatSensorList(object):
             self.parent_sensorlist.parent_device.set_value( self.parent_sensorlist.dps, self.parent_sensorlist.b64(), nowait=True )
 
         def __repr__( self ):
-            return bytearray( bytes(self) ).hex().upper()
+            return bytes(self).hex().upper()
 
         def __bytes__( self ):
             try:
