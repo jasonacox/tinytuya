@@ -360,9 +360,9 @@ def parse_header(data):
         #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
         raise DecodeError('Header prefix wrong! %08X != %08X' % (prefix, PREFIX_VALUE))
 
-    # sanity check. currently the max packet length is somewhere around 250 bytes
-    if payload_len > 300:
-        raise DecodeError('Header claims the packet size is over 300 bytes!  It is most likely corrupt.  Claimed size: %d bytes' % payload_len)
+    # sanity check. currently the max payload length is somewhere around 300 bytes
+    if payload_len > 1000:
+        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes' % payload_len)
 
     return TuyaHeader(prefix, seqno, cmd, payload_len)
 
@@ -569,7 +569,7 @@ class XenonDevice(object):
             prefix_offset = data.find(PREFIX_BIN)
 
         header = parse_header(data)
-        remaining = header_len + ret_end_len + header.length - len(data)
+        remaining = header_len + header.length - len(data)
         if remaining > 0:
             data += self.socket.recv(remaining)
 
@@ -660,7 +660,7 @@ class XenonDevice(object):
                 time.sleep(0.1)
                 self._get_socket(True)
             except DecodeError as err:
-                log.debug("Error decoding received data - read retry %s/%", recv_retries, self.socketRetryLimit, exc_info=True)
+                log.debug("Error decoding received data - read retry %s/%s", recv_retries, self.socketRetryLimit, exc_info=True)
                 recv_retries += 1
                 if recv_retries > self.socketRetryLimit:
                     if partial_success:
@@ -709,7 +709,7 @@ class XenonDevice(object):
             result = self._decode_payload(msg.payload)
 
             if result is None:
-                log.debug("decode failed!")
+                log.debug("_decode_payload() failed!")
         except:
             log.debug("error unpacking or decoding tuya JSON payload")
             result = error_json(ERR_PAYLOAD)
