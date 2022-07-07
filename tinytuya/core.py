@@ -618,10 +618,10 @@ class XenonDevice(object):
                     if msg:
                         payload = None
                         partial_success = True
-                    if (not msg or len(msg.payload) == 0) and recv_retries <= self.socketRetryLimit:
-                        log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, self.socketRetryLimit)
+                    if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
+                        log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
-                        if recv_retries > self.socketRetryLimit:
+                        if recv_retries > max_recv_retries:
                             success = True
                     else:
                         success = True
@@ -664,11 +664,13 @@ class XenonDevice(object):
                 time.sleep(0.1)
                 self._get_socket(True)
             except DecodeError as err:
-                log.debug("Error decoding received data - read retry %s/%s", recv_retries, self.socketRetryLimit, exc_info=True)
+                log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
-                if recv_retries > self.socketRetryLimit:
+                if recv_retries > max_recv_retries:
+                    # we recieved at least 1 valid message with a null payload, so the send was successful
                     if partial_success:
                         return None
+                    # no valid messages received
                     return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
