@@ -565,7 +565,11 @@ class XenonDevice(object):
             else:
                 data = data[prefix_offset:]
 
-            data += self.socket.recv(header_len+ret_end_len-len(data))
+            newdata = self.socket.recv(header_len+ret_end_len-len(data))
+            if len(newdata) == 0:
+                # connection closed?
+                raise DecodeError('No data received - connection closed?')
+            data += newdata
             prefix_offset = data.find(PREFIX_BIN)
 
         header = parse_header(data)
