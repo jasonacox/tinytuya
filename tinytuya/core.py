@@ -165,6 +165,7 @@ MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
 MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
 MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
 PREFIX_VALUE = 0x000055AA
+PREFIX_BIN = b"\x00\x00U\xaa"
 SUFFIX_VALUE = 0x0000AA55
 SUFFIX_BIN = b"\x00\x00\xaaU"
 
@@ -548,11 +549,30 @@ class XenonDevice(object):
         header_len = struct.calcsize(MESSAGE_HEADER_FMT)
         retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
         end_len = struct.calcsize(MESSAGE_END_FMT)
-        retend_len = retcode_len + end_len
-        data = self.socket.recv(header_len+retend_len)
+        ret_end_len = retcode_len + end_len
+        prefix_len = len(PREFIX_BIN)
+
+        data = self.socket.recv(header_len+ret_end_len)
+
+        # search for the prefix.  if not found, delete everything except
+        # the last (prefix_len - 1) bytes and recv more to replace it
+        prefix_offset = data.find(PREFIX_BIN)
+        while prefix_offset != 0:
+            log.debug('Message prefix not at the beginning of the received data!')
+            log.debug('Offset: %d, Received data: %r', prefix_offset, data)
+            if prefix_offset < 0:
+                data = data[1-prefix_len:]
+            else:
+                data = data[prefix_offset:]
+
+            data += self.socket.recv(header_len+ret_end_len-len(data))
+            prefix_offset = data.find(PREFIX_BIN)
+
         header = parse_header(data)
-        if header.length > retend_len:
-            data += self.socket.recv(header.length-retend_len)
+        remaining = header_len + ret_end_len + header.length - len(data)
+        if remaining > 0:
+            data += self.socket.recv(remaining)
+
         log.debug("received data=%r", binascii.hexlify(data))
         return unpack_message(data, header=header)
 
