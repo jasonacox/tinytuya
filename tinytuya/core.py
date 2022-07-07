@@ -544,6 +544,22 @@ class XenonDevice(object):
         # existing socket active
         return True
 
+    def _recv_all(self, length):
+        tries = 2
+        data = b''
+
+        while length > 0:
+            newdata = self.socket.recv(length)
+            if not newdata or len(newdata) == 0:
+                # connection closed?
+                tries -= 1
+                if tries == 0:
+                    raise DecodeError('No data received - connection closed?')
+            data += newdata
+            length -= len(newdata)
+            tries = 2
+        return data
+
     def _receive(self):
         # message consists of header + retcode + data + footer
         header_len = struct.calcsize(MESSAGE_HEADER_FMT)
@@ -552,7 +568,7 @@ class XenonDevice(object):
         ret_end_len = retcode_len + end_len
         prefix_len = len(PREFIX_BIN)
 
-        data = self.socket.recv(header_len+ret_end_len)
+        data = self._recv_all(header_len+ret_end_len)
 
         # search for the prefix.  if not found, delete everything except
         # the last (prefix_len - 1) bytes and recv more to replace it
@@ -565,17 +581,13 @@ class XenonDevice(object):
             else:
                 data = data[prefix_offset:]
 
-            newdata = self.socket.recv(header_len+ret_end_len-len(data))
-            if not newdata or len(newdata) == 0:
-                # connection closed?
-                raise DecodeError('No data received - connection closed?')
-            data += newdata
+            data += self._recv_all(header_len+ret_end_len-len(data))
             prefix_offset = data.find(PREFIX_BIN)
 
         header = parse_header(data)
         remaining = header_len + header.length - len(data)
         if remaining > 0:
-            data += self.socket.recv(remaining)
+            data += self._recv_all(remaining)
 
         log.debug("received data=%r", binascii.hexlify(data))
         return unpack_message(data, header=header)
