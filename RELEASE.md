@@ -5,6 +5,9 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add function to send multiple DPS index updates with one call
 
+## v1.6.3 - Unreleased
+
+* Separates read retries from send retries #158
 
 ## v1.6.2 - Cloud, TuyaMessage & ThermostatDevice Improvements
 
