@@ -165,6 +165,7 @@ MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
 MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
 MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
 PREFIX_VALUE = 0x000055AA
+PREFIX_BIN = b"\x00\x00U\xaa"
 SUFFIX_VALUE = 0x0000AA55
 SUFFIX_BIN = b"\x00\x00\xaaU"
 
@@ -337,9 +338,6 @@ def unpack_message(data, header=None):
     crc, suffix = struct.unpack(MESSAGE_END_FMT, payload[-end_len:])
     have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
-    if header.prefix != PREFIX_VALUE:
-        log.debug('Header prefix wrong! %08X != %08X', header.prefix, PREFIX_VALUE)
-
     if suffix != SUFFIX_VALUE:
         log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
 
@@ -357,6 +355,14 @@ def parse_header(data):
     prefix, seqno, cmd, payload_len = struct.unpack(
         MESSAGE_HEADER_FMT, data[:header_len]
     )
+
+    if prefix != PREFIX_VALUE:
+        #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
+        raise DecodeError('Header prefix wrong! %08X != %08X' % (prefix, PREFIX_VALUE))
+
+    # sanity check. currently the max payload length is somewhere around 300 bytes
+    if payload_len > 1000:
+        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes' % payload_len)
 
     return TuyaHeader(prefix, seqno, cmd, payload_len)
 
@@ -538,16 +544,52 @@ class XenonDevice(object):
         # existing socket active
         return True
 
+    def _recv_all(self, length):
+        tries = 2
+        data = b''
+
+        while length > 0:
+            newdata = self.socket.recv(length)
+            if not newdata or len(newdata) == 0:
+                # connection closed?
+                tries -= 1
+                if tries == 0:
+                    raise DecodeError('No data received - connection closed?')
+                continue
+            data += newdata
+            length -= len(newdata)
+            tries = 2
+        return data
+
     def _receive(self):
         # message consists of header + retcode + data + footer
         header_len = struct.calcsize(MESSAGE_HEADER_FMT)
         retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
         end_len = struct.calcsize(MESSAGE_END_FMT)
-        retend_len = retcode_len + end_len
-        data = self.socket.recv(header_len+retend_len)
+        ret_end_len = retcode_len + end_len
+        prefix_len = len(PREFIX_BIN)
+
+        data = self._recv_all(header_len+ret_end_len)
+
+        # search for the prefix.  if not found, delete everything except
+        # the last (prefix_len - 1) bytes and recv more to replace it
+        prefix_offset = data.find(PREFIX_BIN)
+        while prefix_offset != 0:
+            log.debug('Message prefix not at the beginning of the received data!')
+            log.debug('Offset: %d, Received data: %r', prefix_offset, data)
+            if prefix_offset < 0:
+                data = data[1-prefix_len:]
+            else:
+                data = data[prefix_offset:]
+
+            data += self._recv_all(header_len+ret_end_len-len(data))
+            prefix_offset = data.find(PREFIX_BIN)
+
         header = parse_header(data)
-        if header.length > retend_len:
-            data += self.socket.recv(header.length-retend_len)
+        remaining = header_len + header.length - len(data)
+        if remaining > 0:
+            data += self._recv_all(remaining)
+
         log.debug("received data=%r", binascii.hexlify(data))
         return unpack_message(data, header=header)
 
@@ -561,9 +603,13 @@ class XenonDevice(object):
             getresponse(bool): If True, wait for and return response.
         """
         success = False
+        partial_success = False
         retries = 0
+        recv_retries = 0
+        #max_recv_retries = 0 if not self.retry else 2 if self.socketRetryLimit > 2 else self.socketRetryLimit
+        max_recv_retries = 0 if not self.retry else self.socketRetryLimit
         dev_type = self.dev_type
-        data = None
+        do_send = True
         while not success:
             # open up socket if device is available
             if not self._get_socket(False):
@@ -574,18 +620,25 @@ class XenonDevice(object):
                 return error_json(ERR_OFFLINE)
             # send request to device
             try:
-                if payload is not None:
+                if payload is not None and do_send:
                     self.socket.send(payload)
                     time.sleep(self.sendWait)  # give device time to respond
                 if getresponse is True:
+                    do_send = False
                     msg = self._receive()
                     # device may send null ack (28 byte) response before a full response
-                    if self.retry and msg and len(msg.payload) == 0:
-                        log.debug("received null payload (%r), fetch new one", data)
-                        time.sleep(0.1)
-                        msg = self._receive()
-                    success = True
-                    log.debug("received message=%r", msg)
+                    # consider it an ACK and do not retry the send even if we do not get a full response
+                    if msg:
+                        payload = None
+                        partial_success = True
+                    if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
+                        log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
+                        recv_retries += 1
+                        if recv_retries > max_recv_retries:
+                            success = True
+                    else:
+                        success = True
+                        log.debug("received message=%r", msg)
                 # legacy/default mode avoids persisting socket across commands
                 if not self.socketPersistent:
                     self.socket.close()
@@ -600,7 +653,8 @@ class XenonDevice(object):
                 if payload is None:
                     # Receive only mode - return None
                     return None
-                retries = retries + 1
+                do_send = True
+                retries += 1
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
                     retries, self.socketRetryLimit
@@ -623,11 +677,18 @@ class XenonDevice(object):
                 time.sleep(0.1)
                 self._get_socket(True)
             except DecodeError as err:
-                log.debug("Error decoding received data", exc_info=True)
-                return error_json(ERR_PAYLOAD)
+                log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
+                recv_retries += 1
+                if recv_retries > max_recv_retries:
+                    # we recieved at least 1 valid message with a null payload, so the send was successful
+                    if partial_success:
+                        return None
+                    # no valid messages received
+                    return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
-                retries = retries + 1
+                do_send = True
+                retries += 1
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
                     retries, self.socketRetryLimit, exc_info=True
@@ -651,6 +712,11 @@ class XenonDevice(object):
             # except
         # while
 
+        # null packet, nothing to decode
+        if not msg or len(msg.payload) == 0:
+            log.debug("raw unpacked message = %r", msg)
+            return None
+
         # option - decode Message with hard coded offsets
         # result = self._decode_payload(data[20:-8])
 
@@ -660,6 +726,9 @@ class XenonDevice(object):
             # Data available: seqno cmd retcode payload crc
             log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
+
+            if result is None:
+                log.debug("_decode_payload() failed!")
         except:
             log.debug("error unpacking or decoding tuya JSON payload")
             result = error_json(ERR_PAYLOAD)
@@ -697,8 +766,8 @@ class XenonDevice(object):
                 log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
             except:
-                log.debug("incomplete payload=%r (%d)", payload, len(payload))
-                return None
+                log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                return error_json(ERR_PAYLOAD)
 
             log.debug("decrypted 3.3 payload=%r", payload)
             # Try to detect if device22 found
@@ -936,7 +1005,7 @@ class XenonDevice(object):
         # if spaces are not removed device does not respond!
         payload = payload.replace(" ", "")
         payload = payload.encode("utf-8")
-        log.debug("building payload=%r", payload)
+        log.debug("building command %s payload=%r", command, payload)
 
         if self.version == 3.3:
             # expect to connect and then disconnect to set new
