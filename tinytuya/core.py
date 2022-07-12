@@ -621,7 +621,7 @@ class XenonDevice(object):
             # send request to device
             try:
                 if payload is not None and do_send:
-                    self.socket.send(payload)
+                    self.socket.sendall(payload)
                     time.sleep(self.sendWait)  # give device time to respond
                 if getresponse is True:
                     do_send = False
