@@ -18,7 +18,7 @@ from time import sleep
 ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
 
 print("Press button on your remote control")
-button = ir.receive_button(15)
+button = ir.receive_button(timeout=15)
 if (button == None):
     print("Timeout, button code is not received")
     sys.exit(1)

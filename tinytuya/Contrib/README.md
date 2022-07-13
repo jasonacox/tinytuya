@@ -28,6 +28,8 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
     from tinytuya import Contrib
 
     ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    button = ir.receive_button(timeout=15)
+    ir.send_button(button)
     ```
 
 ## Submit Your Device
