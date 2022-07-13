@@ -1,13 +1,47 @@
-# TinyTuya Contrib IRRemoteControl Module
+# TinyTuya Contrib IRRemoteControlDevice Module
 # -*- coding: utf-8 -*-
+"""
+ A community-contributed Python module to add support for Tuya WiFi smart universal remote control simulators
 
-import struct
+ This module attempts to provide everything needed so there is no need to import the base tinytuya module
+
+ Module Author: Alexey 'Cluster' Avdyukhin (https://github.com/clusterm)
+
+ Local Control Classes
+    IRRemoteControlDevice(dev_id, address, local_key=None, dev_type='default', persist=True)
+        This class automatically sets the version to 3.3
+
+    Functions:
+        ir = IRRemoteControlDevice(...)
+
+        ir.receive_button( timeout )
+            -> call this method and press button on real remote control to read its code in Base64 format
+               timeout - maximum time to wait for button press
+
+        ir.send_button( base64_code )
+            -> simulate button press
+
+        IRRemoteControlDevice.base64_to_pulses ( code_base_64 )
+            -> convert Base64-encoded button code to sequence of pulses and gaps length
+
+        IRRemoteControlDevice.pulses_to_base64 ( pulses )
+            -> convert sequence of pulses and gaps length to Base64-encoded button code
+
+        IRRemoteControlDevice.hex_to_pulses ( code_hex )
+            -> convert HEX-encoded button code to sequence of pulses and gaps length
+               HEX-encoded codes are used in the Cloud API
+
+        IRRemoteControlDevice.pulses_to_hex ( pulses )
+            -> convert sequence of pulses and gaps length to HEX-encoded button code
+               HEX-encoded codes are used in the Cloud API
+
+"""
+
 import base64
 import json
 import logging
-from time import time
 
-from ..core import Device, log, HEART_BEAT, DP_QUERY, CONTROL
+from ..core import Device, log, CONTROL
 
 class IRRemoteControlDevice(Device):
     DP_SEND_IR = "201"             # ir_send, send and report (read-write)
@@ -33,7 +67,7 @@ class IRRemoteControlDevice(Device):
         super(IRRemoteControlDevice, self).__init__(dev_id, address, local_key, dev_type)
         self.set_version(3.3)
 
-    def receive_button(self, timeout):
+    def receive_button( self, timeout ):
         log.debug("Receiving button")
         # Exit study mode in case it's enabled
         command = {
@@ -62,7 +96,7 @@ class IRRemoteControlDevice(Device):
                 base64_code = None
             elif type(button) != dict or "dps" not in button or IRRemoteControlDevice.DP_LEARNED_ID not in button["dps"]:
                 # Some unexpected result
-                log.debug("Unexpected response: " + str(button))
+                log.debug(f"Unexpected response: {button}")
                 base64_code = button # Some error message? Pass it.
             else:
                 # Button code received, extracting it as Base64 string
@@ -71,7 +105,7 @@ class IRRemoteControlDevice(Device):
                 if log.getEffectiveLevel() <= logging.DEBUG:
                     pulses = self.base64_to_pulses(base64_code)
                     log.debug("Pulses and gaps (microseconds): " + 
-                        str(' '.join([f'{"p" if i % 2 == 0 else "g"}{pulses[i]}' for i in range(len(pulses))])))            
+                        ' '.join([f'{"p" if i % 2 == 0 else "g"}{pulses[i]}' for i in range(len(pulses))]))
         finally:
             # Revert timeout
             self.set_socketTimeout(old_timeout)
@@ -85,14 +119,14 @@ class IRRemoteControlDevice(Device):
 
         return base64_code
 
-    def send_button(self, base64_code):
+    def send_button( self, base64_code ):
         if len(base64_code) % 4 == 0: base64_code = '1' + base64_code; # code need to be padded with "1" (wtf?)
         log.debug("Sending IR Button: " + base64_code)
         # Some debug info
         if log.getEffectiveLevel() <= logging.DEBUG:
             pulses = self.base64_to_pulses(base64_code)
             log.debug("Pulses and gaps (microseconds): " + 
-                str(' '.join([f'{"p" if i % 2 == 0 else "g"}{pulses[i]}' for i in range(len(pulses))])))
+                ' '.join([f'{"p" if i % 2 == 0 else "g"}{pulses[i]}' for i in range(len(pulses))]))
         command = {
             IRRemoteControlDevice.NSDP_CONTROL: "send_ir",
             IRRemoteControlDevice.NSDP_KEY1: base64_code,
@@ -102,7 +136,7 @@ class IRRemoteControlDevice(Device):
         return self.send(payload)
 
     @staticmethod
-    def base64_to_pulses(code_base_64):
+    def base64_to_pulses( code_base_64 ):
         if len(code_base_64) % 4 == 1 and code_base_64.startswith("1"):
             # code can be padded with "1" (wtf?)
             code_base_64 = code_base_64[1:]
@@ -110,16 +144,16 @@ class IRRemoteControlDevice(Device):
         return [int.from_bytes(raw_bytes[i:i+2], byteorder="little") for i in range(0, len(raw_bytes), 2)]
 
     @staticmethod
-    def pulses_to_base64(pulses):
+    def pulses_to_base64( pulses ):
         raw_bytes = [x.to_bytes(2, byteorder="little") for x in pulses]
         raw_bytes = [x for xs in raw_bytes for x in xs] # flatten
         return base64.b64encode(bytes(raw_bytes)).decode("ascii")
 
     @staticmethod
-    def hex_to_pulses(code_hex):
+    def hex_to_pulses( code_hex ):
         raw_bytes = bytes.fromhex(code_hex)
         return [int.from_bytes(raw_bytes[x:x+2], byteorder="little") for x in range(0, len(raw_bytes), 2)]
 
     @staticmethod
-    def pulses_to_hex(pulses):
+    def pulses_to_hex( pulses ):
         return "".join([f"{((x >> 8) | (x << 8)) & 0xFFFF:04x}" for x in pulses])
