@@ -1,5 +1,7 @@
 # User Contributed Device Modules
 
+[![Contrib Test](https://github.com/jasonacox/tinytuya/actions/workflows/testcontrib.yml/badge.svg)](https://github.com/jasonacox/tinytuya/actions/workflows/testcontrib.yml)
+
 In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` device support, the community is encourage to submit additional device modules which are available here.
 
 ## Devices
