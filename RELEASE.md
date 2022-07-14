@@ -5,9 +5,9 @@
 * IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
 * Add function to send multiple DPS index updates with one call
 
-## v1.6.3 - IRRemoteControlDevice and Read Improvements
+## v1.6.4 - IRRemoteControlDevice and Read Improvements
 
-* PyPI 1.6.3
+* PyPI 1.6.4
 * Separates read retries from send retries by @uzlonewolf #158
 * IRRemoteControlDevice - New community contributed device module for IR Remote Control devices by @ClusterM in https://github.com/jasonacox/tinytuya/pull/160 - See example: [examples/IRRemoteControlDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/IRRemoteControlDevice-example.py)
 
