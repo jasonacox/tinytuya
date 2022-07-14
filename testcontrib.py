@@ -13,3 +13,5 @@ print("   Contrib Devices Loaded: ")
 
 for i in Contrib.DeviceTypes:
     print("      * %s" % i)
+
+exit()
