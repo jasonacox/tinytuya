@@ -96,7 +96,7 @@ class IRRemoteControlDevice(Device):
                 base64_code = None
             elif type(button) != dict or "dps" not in button or IRRemoteControlDevice.DP_LEARNED_ID not in button["dps"]:
                 # Some unexpected result
-                log.debug(f"Unexpected response: {button}")
+                log.debug(f"Unexpected response: %r" % button)
                 base64_code = button # Some error message? Pass it.
             else:
                 # Button code received, extracting it as Base64 string
