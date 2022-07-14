@@ -7,7 +7,15 @@
 
 ## v1.6.3 - Unreleased
 
-* Separates read retries from send retries #158
+* Separates read retries from send retries by @uzlonewolf #158
+* IRRemoteControlDevice - New community contributed device module for IR Remote Control devices by @ClusterM in https://github.com/jasonacox/tinytuya/pull/160 - See example: [examples/IRRemoteControlDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/IRRemoteControlDevice-example.py)
+
+    ```python
+    # Example usage of community contributed device modules
+    from tinytuya import Contrib
+
+    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    ```
 
 ## v1.6.2 - Cloud, TuyaMessage & ThermostatDevice Improvements
 
