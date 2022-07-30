@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 """
  Example script using the tinytuya Python module for Tuya Smart Plug 1-Pack
+ and stores data in mysql database.
+
  Author: fajarmnrozaki (https://github.com/fajarmnrozaki)
  For more information see https://github.com/jasonacox/tinytuya
 """
@@ -13,9 +15,9 @@ import time # RTC Real Time Clock
 import pymysql # library for sql
 
 # Specifications of Network scanner (the device Tuya must be turned "ON")
-Device_Id = 'ebe53c80cc719dfab98htc' # Device Id from Tuya device sensor
-Address_Id = '192.168.18.37' # IP Address connected to Tuya device sensor
-Local_Key = '8d6fc6b78ee57b57' # Local Key generated from  python -m tinytuya wizard
+Device_Id = 'xxxxxxxxxxxxxxxxxx' # Device Id from Tuya device sensor
+Address_Id = 'x.x.x.x' # IP Address connected to Tuya device sensor
+Local_Key = 'xxxxxxxxxxxxxxxx' # Local Key generated from  python -m tinytuya wizard
 Version = 3.3 #Version of Tuya protocol used
 
 # Checking the connection "Tuya device - sensor"
