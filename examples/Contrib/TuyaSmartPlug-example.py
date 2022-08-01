@@ -62,7 +62,7 @@ while True:
         cur = db.cursor()
 
         add_c0 = "INSERT INTO `tuya_smart_plug`(time, voltage, current, power) VALUES (%s,%s,%s,%s)"
-        cur.execute(add_c0,((timer.strftime("%Y-%m-%d %H:%M"),
+        cur.execute(add_c0,((timer.strftime("%Y-%m-%d %H:%M:%S"),
                              (data['dps']['20'])/10,
                              (data['dps']['18'])/1000,
                              (data['dps']['19'])/10)))
