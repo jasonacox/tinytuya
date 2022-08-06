@@ -1,5 +1,7 @@
 # User Contributed Device Modules
 
+[![Contrib Test](https://github.com/jasonacox/tinytuya/actions/workflows/contrib.yml/badge.svg)](https://github.com/jasonacox/tinytuya/actions/workflows/contrib.yml)
+
 In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` device support, the community is encourage to submit additional device modules which are available here.
 
 ## Devices
@@ -15,6 +17,21 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
     from tinytuya import Contrib
 
     thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    ```
+
+### IRRemoteControlDevice
+
+* IRRemoteControlDevice - A community-contributed Python module to add support for Tuya WiFi smart universal remote control simulators
+* Author: [Alexey 'Cluster' Avdyukhin](https://github.com/clusterm)
+* Example: [examples/IRRemoteControlDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/IRRemoteControlDevice-example.py)
+
+    ```python
+    # Example usage of community contributed device modules
+    from tinytuya import Contrib
+
+    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    button = ir.receive_button(timeout=15)
+    ir.send_button(button)
     ```
 
 ## Submit Your Device
