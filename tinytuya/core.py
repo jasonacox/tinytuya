@@ -945,8 +945,8 @@ class XenonDevice(object):
         if command_override is None:
             command_override = command
         if json_data is None:
-            # I have yet to see a device complain about unneeded attribs, but they *will* complain about
-            # missing attribs, so just include them all unless otherwise specified
+            # I have yet to see a device complain about included but unneeded attribs, but they *will*
+            # complain about missing attribs, so just include them all unless otherwise specified
             json_data = {"gwId": "", "devId": "", "uid": "", "t": ""}
 
         if "gwId" in json_data:
