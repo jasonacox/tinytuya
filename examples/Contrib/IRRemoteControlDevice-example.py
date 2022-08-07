@@ -1,5 +1,5 @@
 
-# TinyTuya ThermostatDevice Example
+# TinyTuya IRRemoteControlDevice- Example
 # -*- coding: utf-8 -*-
 """
  Example script using the community-contributed Python module for Tuya WiFi smart universal remote control simulators
