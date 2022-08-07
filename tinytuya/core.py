@@ -111,51 +111,28 @@ RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
 
 # Tuya Command Types
-UDP = 0  # HEAT_BEAT_CMD
-AP_CONFIG = 1  # PRODUCT_INFO_CMD
-ACTIVE = 2  # WORK_MODE_CMD
-BIND = 3  # WIFI_STATE_CMD - wifi working status
-RENAME_GW = 4  # WIFI_RESET_CMD - reset wifi
-RENAME_DEVICE = 5  # WIFI_MODE_CMD - Choose smartconfig/AP mode
-UNBIND = 6  # DATA_QUERT_CMD - issue command
-CONTROL = 7  # STATE_UPLOAD_CMD
-STATUS = 8  # STATE_QUERY_CMD
-HEART_BEAT = 9
-DP_QUERY = 10  # UPDATE_START_CMD - get data points
-QUERY_WIFI = 11  # UPDATE_TRANS_CMD
-TOKEN_BIND = 12  # GET_ONLINE_TIME_CMD - system time (GMT)
-CONTROL_NEW = 13  # FACTORY_MODE_CMD
-ENABLE_WIFI = 14  # WIFI_TEST_CMD
-DP_QUERY_NEW = 16
-SCENE_EXECUTE = 17
-UPDATEDPS = 18  # Request refresh of DPS
-UDP_NEW = 19
-AP_CONFIG_NEW = 20
-GET_LOCAL_TIME_CMD = 28
-WEATHER_OPEN_CMD = 32
-WEATHER_DATA_CMD = 33
-STATE_UPLOAD_SYN_CMD = 34
-STATE_UPLOAD_SYN_RECV_CMD = 35
-HEAT_BEAT_STOP = 37
-STREAM_TRANS_CMD = 38
-GET_WIFI_STATUS_CMD = 43
-WIFI_CONNECT_TEST_CMD = 44
-GET_MAC_CMD = 45
-GET_IR_STATUS_CMD = 46
-IR_TX_RX_TEST_CMD = 47
-LAN_GW_ACTIVE = 240
-LAN_SUB_DEV_REQUEST = 241
-LAN_DELETE_SUB_DEV = 242
-LAN_REPORT_SUB_DEV = 243
-LAN_SCENE = 244
-LAN_PUBLISH_CLOUD_CONFIG = 245
-LAN_PUBLISH_APP_CONFIG = 246
-LAN_EXPORT_APP_CONFIG = 247
-LAN_PUBLISH_SCENE_PANEL = 248
-LAN_REMOVE_GW = 249
-LAN_CHECK_GW_UPDATE = 250
-LAN_GW_UPDATE = 251
-LAN_SET_GW_CHANNEL = 252
+AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
+ACTIVE          = 2  # FRM_TP_ACTV (discard) # WORK_MODE_CMD
+BIND            = 3  # FRM_SECURITY_TYPE3 # WIFI_STATE_CMD - wifi working status
+RENAME_GW       = 4  # FRM_SECURITY_TYPE4 # WIFI_RESET_CMD - reset wifi
+RENAME_DEVICE   = 5  # FRM_SECURITY_TYPE5 # WIFI_MODE_CMD - Choose smartconfig/AP mode
+UNBIND          = 6  # FRM_TP_UNBIND_DEV  # DATA_QUERT_CMD - issue command
+CONTROL         = 7  # FRM_TP_CMD         # STATE_UPLOAD_CMD
+STATUS          = 8  # FRM_TP_STAT_REPORT # STATE_QUERY_CMD
+HEART_BEAT      = 9  # FRM_TP_HB
+DP_QUERY        = 0x0a # 10 # FRM_QUERY_STAT      # UPDATE_START_CMD - get data points
+QUERY_WIFI      = 0x0b # 11 # FRM_SSID_QUERY (discard) # UPDATE_TRANS_CMD
+TOKEN_BIND      = 0x0c # 12 # FRM_USER_BIND_REQ   # GET_ONLINE_TIME_CMD - system time (GMT)
+CONTROL_NEW     = 0x0d # 13 # FRM_TP_NEW_CMD      # FACTORY_MODE_CMD
+ENABLE_WIFI     = 0x0e # 14 # FRM_ADD_SUB_DEV_CMD # WIFI_TEST_CMD
+WIFI_INFO       = 0x0f # 15 # FRM_CFG_WIFI_INFO
+DP_QUERY_NEW    = 0x10 # 16 # FRM_QUERY_STAT_NEW
+SCENE_EXECUTE   = 0x11 # 17 # FRM_SCENE_EXEC
+UPDATEDPS       = 0x12 # 18 # FRM_LAN_QUERY_DP    # Request refresh of DPS
+UDP_NEW         = 0x13 # 19 # FR_TYPE_ENCRYPTION
+AP_CONFIG_NEW   = 0x14 # 20 # FRM_AP_CFG_WF_V40
+BOARDCAST_LPV34 = 0x23 # 35 # FR_TYPE_BOARDCAST_LPV34
+LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
 
 # Protocol Versions and Headers
 PROTOCOL_VERSION_BYTES_31 = b"3.1"
@@ -387,60 +364,43 @@ def error_json(number=None, payload=None):
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
 
-# Tuya Device Dictionary - Commands and Payload Template
-# See requests.json payload at http s://github.com/codetheweb/tuyapi
+# Tuya Device Dictionary - Command and Payload Overrides
+#
 # 'default' devices require the 0a command for the DP_QUERY request
 # 'device22' devices require the 0d command for the DP_QUERY request and a list of
 #            dps used set to Null in the request payload
+#
+# Any command not defined in payload_dict will be sent as-is with a
+#  payload of {"gwId": "", "devId": "", "uid": "", "t": ""}
 
 payload_dict = {
     # Default Device
     "default": {
         AP_CONFIG: {  # [BETA] Set Control Values on Device
-            "hexByte": "01",
             "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
         },
         CONTROL: {  # Set Control Values on Device
-            "hexByte": "07",
             "command": {"devId": "", "uid": "", "t": ""},
         },
         STATUS: {  # Get Status from Device
-            "hexByte": "08",
             "command": {"gwId": "", "devId": ""},
         },
-        HEART_BEAT: {"hexByte": "09", "command": {"gwId": "", "devId": ""}},
+        HEART_BEAT: {"command": {"gwId": "", "devId": ""}},
         DP_QUERY: {  # Get Data Points from Device
-            "hexByte": "0a",
             "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
         },
-        CONTROL_NEW: {"hexByte": "0d", "command": {"devId": "", "uid": "", "t": ""}},
-        DP_QUERY_NEW: {"hexByte": "0f", "command": {"devId": "", "uid": "", "t": ""}},
-        UPDATEDPS: {"hexByte": "12", "command": {"dpId": [18, 19, 20]}},
-        "prefix": "000055aa00000000000000",
-        # Next byte is command "hexByte" + length of remaining payload + command + suffix
-        # (unclear if multiple bytes used for length, zero padding implies could be more
-        # than one byte)
-        "suffix": "000000000000aa55",
+        CONTROL_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
+        DP_QUERY_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
+        UPDATEDPS: {"command": {"dpId": [18, 19, 20]}},
     },
     # Special Case Device with 22 character ID - Some of these devices
     # Require the 0d command as the DP_QUERY status request and the list of
     # dps requested payload
     "device22": {
         DP_QUERY: {  # Get Data Points from Device
-            "hexByte": "0d",  # Uses CONTROL_NEW command for some reason
+            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command for some reason
             "command": {"devId": "", "uid": "", "t": ""},
         },
-        CONTROL: {  # Set Control Values on Device
-            "hexByte": "07",
-            "command": {"devId": "", "uid": "", "t": ""},
-        },
-        HEART_BEAT: {"hexByte": "09", "command": {"gwId": "", "devId": ""}},
-        UPDATEDPS: {
-            "hexByte": "12",
-            "command": {"dpId": [18, 19, 20]},
-        },
-        "prefix": "000055aa00000000000000",
-        "suffix": "000000000000aa55",
     },
 }
 
@@ -621,7 +581,7 @@ class XenonDevice(object):
             # send request to device
             try:
                 if payload is not None and do_send:
-                    self.socket.send(payload)
+                    self.socket.sendall(payload)
                     time.sleep(self.sendWait)  # give device time to respond
                 if getresponse is True:
                     do_send = False
@@ -971,8 +931,26 @@ class XenonDevice(object):
             devId(str, optional): Will be used for devId
             uid(str, optional): Will be used for uid
         """
-        json_data = payload_dict[self.dev_type][command]["command"]
-        command_hb = payload_dict[self.dev_type][command]["hexByte"]
+        json_data = command_override = None
+
+        if command in payload_dict[self.dev_type]:
+            if 'command' in payload_dict[self.dev_type][command]:
+                json_data = payload_dict[self.dev_type][command]['command']
+            if 'command_override' in payload_dict[self.dev_type][command]:
+                command_override = payload_dict[self.dev_type][command]['command_override']
+
+        if self.dev_type != 'default':
+            if json_data is None and command in payload_dict['default'] and 'command' in payload_dict['default'][command]:
+                json_data = payload_dict['default'][command]['command']
+            if command_override is None and command in payload_dict['default'] and 'command_override' in payload_dict['default'][command]:
+                command_override = payload_dict['default'][command]['command_override']
+
+        if command_override is None:
+            command_override = command
+        if json_data is None:
+            # I have yet to see a device complain about included but unneeded attribs, but they *will*
+            # complain about missing attribs, so just include them all unless otherwise specified
+            json_data = {"gwId": "", "devId": "", "uid": "", "t": ""}
 
         if "gwId" in json_data:
             if gwId is not None:
@@ -997,7 +975,7 @@ class XenonDevice(object):
                 json_data["dpId"] = data
             else:
                 json_data["dps"] = data
-        if command_hb == "0d":  # CONTROL_NEW
+        if command_override == CONTROL_NEW:
             json_data["dps"] = self.dps_to_request
 
         # Create byte buffer from hex data
@@ -1012,7 +990,7 @@ class XenonDevice(object):
             self.cipher = AESCipher(self.local_key)
             payload = self.cipher.encrypt(payload, False)
             self.cipher = None
-            if command_hb != "0a" and command_hb != "12":
+            if command_override != DP_QUERY and command_override != UPDATEDPS:
                 # add the 3.3 header
                 payload = PROTOCOL_33_HEADER + payload
         elif command == CONTROL:
@@ -1039,7 +1017,7 @@ class XenonDevice(object):
             self.cipher = None
 
         # create Tuya message packet
-        msg = TuyaMessage(self.seqno, int(command_hb, 16), 0, payload, 0)
+        msg = TuyaMessage(self.seqno, command_override, 0, payload, 0)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg)
         log.debug("payload generated=%r",binascii.hexlify(buffer))
