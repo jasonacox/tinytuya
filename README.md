@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/github/license/jasonacox/tinytuya)](https://img.shields.io/github/license/jasonacox/tinytuya)
 [![PyPI version](https://badge.fury.io/py/tinytuya.svg)](https://badge.fury.io/py/tinytuya)
 [![Build Test](https://github.com/jasonacox/tinytuya/actions/workflows/test.yml/badge.svg)](https://github.com/jasonacox/tinytuya/actions/workflows/test.yml)
+[![Contrib Test](https://github.com/jasonacox/tinytuya/actions/workflows/contrib.yml/badge.svg)](https://github.com/jasonacox/tinytuya/actions/workflows/contrib.yml)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tinytuya)](https://img.shields.io/pypi/pyversions/tinytuya)
 [![PyPI Downloads](https://static.pepy.tech/badge/tinytuya/month)](https://static.pepy.tech/badge/tinytuya/month)
 

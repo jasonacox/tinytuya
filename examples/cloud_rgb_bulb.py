@@ -1,3 +1,15 @@
+# TinyTuya Example
+# -*- coding: utf-8 -*-
+"""
+ TinyTuya - Tuya Cloud Functions
+
+ This example uses the Tinytuya Cloud class and functions
+ to access the Tuya Cloud to control an RGB Smart Bulb
+
+ Author: Jason A. Cox
+ For more information see https://github.com/jasonacox/tinytuya
+
+""" 
 import tinytuya
 import colorsys
 import time
