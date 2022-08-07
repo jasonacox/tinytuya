@@ -1,6 +1,6 @@
 # RELEASE NOTES
 
-## v1.6.5 - Updated Payload Dictionary and Command Lit
+## v1.6.5 - Updated Payload Dictionary and Command List
 
 * PyPI 1.6.5
 * Reworked payload_dict and realigned the command list to match [Tuya's API](https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/166
