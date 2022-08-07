@@ -78,7 +78,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 6, 4)
+version_tuple = (1, 6, 5)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -111,6 +111,7 @@ RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
 
 # Tuya Command Types
+# Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
 AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
 ACTIVE          = 2  # FRM_TP_ACTV (discard) # WORK_MODE_CMD
 BIND            = 3  # FRM_SECURITY_TYPE3 # WIFI_STATE_CMD - wifi working status

@@ -1,9 +1,11 @@
 # RELEASE NOTES
 
-## Potential Future Release Features
+## v1.6.5 - Updated Payload Dictionary and Command Lit
 
-* IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
-* Add function to send multiple DPS index updates with one call
+* PyPI 1.6.5
+* Reworked payload_dict and realigned the command list to match [Tuya's API](https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/166
+* Changed socket.send() to socket.sendall() in _send_receive() by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/166
+* Created TuyaSmartPlug-example.py by @fajarmnrozaki in https://github.com/jasonacox/tinytuya/pull/163 and https://github.com/jasonacox/tinytuya/pull/165
 
 ## v1.6.4 - IRRemoteControlDevice and Read Improvements
 
