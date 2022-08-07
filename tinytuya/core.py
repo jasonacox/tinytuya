@@ -364,11 +364,14 @@ def error_json(number=None, payload=None):
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
 
-# Tuya Device Dictionary - Commands and Payload Template
-# See requests.json payload at http s://github.com/codetheweb/tuyapi
+# Tuya Device Dictionary - Command and Payload Overrides
+#
 # 'default' devices require the 0a command for the DP_QUERY request
 # 'device22' devices require the 0d command for the DP_QUERY request and a list of
 #            dps used set to Null in the request payload
+#
+# Any command not defined in payload_dict will be sent as-is with a
+#  payload of {"gwId": "", "devId": "", "uid": "", "t": ""}
 
 payload_dict = {
     # Default Device
