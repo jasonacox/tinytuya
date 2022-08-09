@@ -15,6 +15,7 @@
         get_current()
         get_power()
         get_get_voltage()
+        get_state()
     Inherited
         json = status()                    # returns json payload
         set_version(version)               # 3.1 [default] or 3.3

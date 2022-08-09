@@ -34,6 +34,21 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
     ir.send_button(button)
     ```
 
+### SocketDevice
+
+* SocketDevice - A community-contributed Python module to add support for Tuya WiFi smart sockets
+* Author: [Felix Pieschka](https://github.com/Felix-Pi)
+
+    ```python
+    # Example usage of community contributed device modules
+    from tinytuya.Contrib import SocketDevice
+
+    socket = SocketDevice('abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc', version=3.3)
+    
+    print(socket.get_energy_consumption())
+    print(socket.get_state())
+    ```
+  
 ## Submit Your Device
 
 * We welcome new device modules!
