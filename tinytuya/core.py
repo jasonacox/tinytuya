@@ -78,7 +78,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 6, 5)
+version_tuple = (1, 6, 6)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 

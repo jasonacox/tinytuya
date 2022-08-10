@@ -1,5 +1,20 @@
 # RELEASE NOTES
 
+## v1.6.6 - Updated Payload Dictionary and Command List
+
+* PyPI 1.6.6 (Unreleased)
+* Added SocketDevice by @Felix-Pi in https://github.com/jasonacox/tinytuya/pull/167
+
+```python
+# Example usage of community contributed device modules
+from tinytuya.Contrib import SocketDevice
+
+socket = SocketDevice('abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc', version=3.3)
+
+print(socket.get_energy_consumption())
+print(socket.get_state())
+```
+
 ## v1.6.5 - Updated Payload Dictionary and Command List
 
 * PyPI 1.6.5
