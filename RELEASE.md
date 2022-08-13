@@ -3,6 +3,7 @@
 ## v1.6.6 - Updated Payload Dictionary and Command List
 
 * PyPI 1.6.6 (Unreleased)
+* Added support for 3.2 protocol Tuya devices
 * Added SocketDevice by @Felix-Pi in https://github.com/jasonacox/tinytuya/pull/167
 
 ```python
