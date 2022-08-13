@@ -72,8 +72,7 @@ for i in tuyadevices:
     else:
         try:
             d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-            if ver == "3.3":
-                d.set_version(3.3)
+            d.set_version(float(ver)) # IMPORTANT to always set version 
             data = d.status()
             if 'dps' in data:
                 item['dps'] = data
