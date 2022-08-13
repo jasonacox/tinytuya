@@ -454,6 +454,10 @@ class XenonDevice(object):
             self.address = addr
             if ver == "3.3":
                 self.version = 3.3
+            if ver == "3.2": # 3.2 behaves like 3.3 with device22
+                self.version = 3.3  
+                self.dev_type="device22"  # 3.2 behaves like 3.3 with device22
+                self.dps_to_request = {"1": None}
             time.sleep(0.5)
 
     def __del__(self):
@@ -812,6 +816,10 @@ class XenonDevice(object):
 
     def set_version(self, version):
         self.version = version
+        if version == "3.2": # 3.2 behaves like 3.3 with device22
+                self.version = 3.3  
+                self.dev_type="device22"  
+                self.dps_to_request = {"1": None}
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
