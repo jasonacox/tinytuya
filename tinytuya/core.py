@@ -820,8 +820,9 @@ class XenonDevice(object):
         if version == 3.2: # 3.2 behaves like 3.3 with device22
                 self.version = 3.3  
                 self.dev_type="device22"  
-                self.dps_to_request = {"1": None}
-                self.dps_to_request = self.detect_available_dps()
+                if self.dps_to_request == {}:
+                    self.dps_to_request = {"1": None}
+                    self.dps_to_request = self.detect_available_dps()
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
