@@ -2,9 +2,10 @@
 
 ## v1.6.6 - Updated Payload Dictionary and Command List
 
-* PyPI 1.6.6 (Unreleased)
+* PyPI 1.6.6
 * Added support for 3.2 protocol Tuya devices
 * Added SocketDevice by @Felix-Pi in https://github.com/jasonacox/tinytuya/pull/167
+* Skip DPS detection for 3.2 protocol devices if it has already been set by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/169
 
 ```python
 # Example usage of community contributed device modules
