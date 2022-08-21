@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.6.7 - Unreleased
+
+* Added DoorbellDevice by @JonesMeUp in https://github.com/jasonacox/tinytuya/issues/162 
+
 ## v1.6.6 - Updated Payload Dictionary and Command List
 
 * PyPI 1.6.6
