@@ -41,8 +41,7 @@ watchdog = 0
 while True:
     try:
         d = tinytuya.OutletDevice(DEVICEID, DEVICEIP, DEVICEKEY)
-        if DEVICEVERS == "3.3":
-            d.set_version(3.3)
+        d.set_version(float(DEVICEVERS))
         data = d.status()
         if data:
             print("\nREADING TEST: Response %r" % data)

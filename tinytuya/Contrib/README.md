@@ -34,6 +34,51 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
     ir.send_button(button)
     ```
 
+### SocketDevice
+
+* SocketDevice - A community-contributed Python module to add support for Tuya WiFi smart sockets
+* Author: [Felix Pieschka](https://github.com/Felix-Pi)
+
+    ```python
+    # Example usage of community contributed device modules
+    from tinytuya.Contrib import SocketDevice
+
+    socket = SocketDevice('abcdefghijklmnop123456', '172.28.321.475', '', version=3.3)
+    
+    print(socket.get_energy_consumption())
+    print(socket.get_state())
+    ```
+
+### DoorbellDevice
+
+* DoorbellDevice - A community-contributed Python module to add support for Tuya WiFi doorbells.
+* Author: [JonesMeUp](https://github.com/jonesMeUp)
+* Note: Most doorbells will not stay online (to preserve battery) so controlling them locally is difficult.
+
+    ```python
+    import tinytuya
+    from tinytuya.Contrib import DoorbellDevice
+
+    d = DoorbellDevice('abcdefghijklmnop123456', '192.168.178.25', 
+        '1234567890123abc', 'device22')
+    d.set_version(3.3)
+    d.set_socketPersistent(True) # Keep socket connection open between commands
+
+    d.set_volume(3)
+    d.set_motion_area(0, 5, 50, 50)
+    d.set_motion_area_switch(True)
+
+    print(" > Begin Monitor Loop <")
+    while(True):
+        # See if any data is available
+        data = d.receive()
+        print('Data: %r' % data)
+        # Send keyalive heartbeat
+        print(" > Send Heartbeat Ping < ")
+        payload = d.generate_payload(tinytuya.HEART_BEAT)
+        d.send(payload)
+    ```
+
 ## Submit Your Device
 
 * We welcome new device modules!

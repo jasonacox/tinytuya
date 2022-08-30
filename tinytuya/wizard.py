@@ -401,8 +401,7 @@ def wizard(color=True, retries=None, forcescan=False):
             else:
                 try:
                     d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    if ver == "3.3":
-                        d.set_version(3.3)
+                    d.set_version(float(ver))
                     data = d.status()
                     if 'dps' in data:
                         item['dps'] = data

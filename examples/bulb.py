@@ -29,10 +29,7 @@ print('TESTING: Device %s at %s with key %s version %s' %
 
 # Connect to Tuya BulbDevice
 d = tinytuya.BulbDevice(DEVICEID, DEVICEIP, DEVICEKEY)
-if(DEVICEVERS == '3.3'):    # IMPORTANT to always set version 
-    d.set_version(3.3)
-else:
-    d.set_version(3.1)
+d.set_version(float(DEVICEVERS)) # IMPORTANT to always set version 
 # Keep socket connection open between commands
 d.set_socketPersistent(True)  
 
