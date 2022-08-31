@@ -35,6 +35,38 @@
             -> convert sequence of pulses and gaps length to HEX-encoded button code
                HEX-encoded codes are used in the Cloud API
 
+        IRRemoteControlDevice.nec_to_pulses ( address, data=None )
+            -> convert a 32-bit NEC button code (when data=None) or a 8/16-bit address and 8-bit data to sequence of pulses and gaps length
+               address - a 32-bit NEC button code (when data=None), or a 8-bit or 16-bit address
+               data - 8-bit data when address is 8-bit or 16-bit
+
+        IRRemoteControlDevice.pulses_to_nec ( pulses )
+            -> convert sequence of pulses and gaps length to a NEC button code
+               returns an array of dicts containing 'type'="nec", 'address' and 'data' (if valid), 'uint32' raw data, and 'hex' hex-encoded data
+
+        IRRemoteControlDevice.samsung_to_pulses ( address, data=None )
+            -> similar to nec_to_pulses() but for the Samsung format (start pulse 4.5ms instead of 9ms)
+
+        IRRemoteControlDevice.pulses_to_samsung ( pulses )
+            -> similar to pulses_to_nec() but for the Samsung format
+               returns same array of dict as pulses_to_nec() but with 'type'="samsung"
+
+        IRRemoteControlDevice.pronto_to_pulses ( pronto )
+            -> convert a Pronto code string to sequence of pulses and gaps length
+
+        IRRemoteControlDevice.pulses_to_pronto ( pulses )
+            -> convert sequence of pulses and gaps length to a Pronto code string
+
+        IRRemoteControlDevice.width_encoded_to_pulses ( uint32, start_mark=9000, start_space=4500, pulse_one=563, pulse_zero=563,
+          space_one=1688, space_zero=563, trailing_pulse=563, trailing_space=30000 )
+            -> flexible uint32 to sequence of pulses encoder
+               default values are for NEC format, set start_mark=4500 for Samsung format
+
+        IRRemoteControlDevice.pulses_to_width_encoded ( pulses, start_mark=None, start_space=None, pulse_threshold=None, space_threshold=None )
+            -> flexible space-width or pulse-width to uint32 decoder
+               converts sequence of pulses to a 32-bit unsigned integer
+               recommended *_threshold is `(length_of_zero + length_of_one) / 2`
+
 """
 
 import base64
@@ -157,3 +189,167 @@ class IRRemoteControlDevice(Device):
     @staticmethod
     def pulses_to_hex( pulses ):
         return "".join([f"{((x >> 8) | (x << 8)) & 0xFFFF:04x}" for x in pulses])
+
+    @staticmethod
+    def width_encoded_to_pulses( uint32, start_mark=9000, start_space=4500, pulse_one=563, pulse_zero=563, space_one=1688, space_zero=563, trailing_pulse=563, trailing_space=30000 ):
+        pulses = [ start_mark, start_space ]
+        one = [ pulse_one, space_one ]
+        zero =  [ pulse_zero, space_zero ]
+        for i in range(31, -1, -1):
+            pulses += one if uint32 & (1 << i) else zero
+        pulses.append( trailing_pulse )
+        pulses.append( trailing_space )
+        return pulses
+
+    @staticmethod
+    def pulses_to_width_encoded( pulses, start_mark=None, start_space=None, pulse_threshold=None, space_threshold=None ):
+        ret = [ ]
+        if len(pulses) < 68:
+            log.debug('Length of pulses must be a multiple of 68! (2 start + 64 data + 2 trailing)')
+            return ret
+        if (pulse_threshold is None) and (space_threshold is None):
+            log.debug('"pulse_threshold" and/or "space_threshold" must be supplied!')
+            return ret
+
+        if start_mark is not None:
+            while( len(pulses) >= 68 and (pulses[0] < (start_mark * 0.75) or pulses[0] > (start_mark * 1.25)) ):
+                pulses = pulses[1:]
+
+        while( len(pulses) >= 68 ):
+            if start_mark is not None:
+                if pulses[0] < (start_mark * 0.75) or pulses[0] > (start_mark * 1.25):
+                    log.debug('The start mark is not the correct length')
+                    return ret
+            if start_space is not None:
+                if pulses[1] < (start_space * 0.75) or pulses[1] > (start_space * 1.25):
+                    log.debug('The start space is not the correct length')
+                    return ret
+
+            pulses = pulses[2:]
+            uint32 = 0
+
+            for i in range(31, -1, -1):
+                pulse_match = space_match = None
+                if pulse_threshold is not None:
+                    if pulses[0] >= pulse_threshold:
+                        pulse_match = 1
+                    else:
+                        pulse_match = 0
+
+                if space_threshold is not None:
+                    if pulses[1] >= space_threshold:
+                        space_match = 1
+                    else:
+                        space_match = 0
+
+                if (pulse_match is not None) and (space_match is not None):
+                    if pulse_match != space_match:
+                        log.debug('Both "pulse_threshold" and "space_threshold" are supplied and bit %d conflicts with both!' % i)
+                        return ret
+                    res = space_match
+                elif pulse_match is None:
+                    res = space_match
+                else:
+                    res = pulse_match
+
+                uint32 |= res << i
+                pulses = pulses[2:]
+
+            pulses = pulses[2:]
+
+            if ret is None:
+                ret = [ uint32 ]
+            elif uint32 not in ret:
+                ret.append( uint32 )
+
+        return ret
+
+    @staticmethod
+    def nec_to_pulses( address, data=None ):
+        # address can be 8-bit or 16-bit
+        # if 8, it is repeated after complementing (just like the data)
+        if data is None:
+            uint32 = address
+        else:
+            if address < 256:
+                address = (address << 8) | (address ^ 0xFF)
+            data = (data << 8) | (data ^ 0xFF)
+            uint32 = (address << 16) | data
+        return IRRemoteControlDevice.width_encoded_to_pulses( uint32 )
+
+    @staticmethod
+    def pulses_to_nec( pulses ):
+        ret = [ ]
+        res = IRRemoteControlDevice.pulses_to_width_encoded( pulses, start_mark=9000, space_threshold=1125 )
+        for code in res:
+            addr = (code >> 24) & 0xFF
+            addr_not = (code >> 16) & 0xFF
+            data = (code >> 8) & 0xFF
+            data_not = code & 0xFF
+            # if the address is 8-bit, it is repeated after complementing (just like the data)
+            if addr != (addr_not ^ 0xFF):
+                addr = (addr << 8) | addr_not
+            d = { 'type': 'nec', 'uint32': code, 'address': None, 'data': None, 'hex': '%08X' % code }
+            if data == (data_not ^ 0xFF):
+                d['address'] = addr
+                d['data'] = data
+            ret.append(d)
+        return ret
+
+    @staticmethod
+    def samsung_to_pulses( address, data=None ):
+        if data is None:
+            uint32 = address
+        else:
+            uint32 = (address << 24) + (address << 16) + (data << 8) + (data ^ 0xFF)
+        return IRRemoteControlDevice.width_encoded_to_pulses( uint32, start_mark=4500 )
+
+    @staticmethod
+    def pulses_to_samsung( pulses ):
+        ret = [ ]
+        res = IRRemoteControlDevice.pulses_to_width_encoded( pulses, start_mark=4500, space_threshold=1125 )
+        for code in res:
+            addr = (code >> 24) & 0xFF
+            addr_not = (code >> 16) & 0xFF
+            data = (code >> 8) & 0xFF
+            data_not = code & 0xFF
+            d = { 'type': 'samsung', 'uint32': code, 'address': None, 'data': None, 'hex': '%08X' % code }
+            # samsung repeats the 8-bit address but complements the 8-bit data
+            if addr == addr_not and data == (data_not ^ 0xFF):
+                d['address'] = addr
+                d['data'] = data
+            ret.append(d)
+        return ret
+
+    @staticmethod
+    def pronto_to_pulses( pronto ):
+        pronto = [int(x, 16) for x in pronto.split(' ')]
+        ptype = pronto[0]
+        timebase = pronto[1]
+        pair1_len = pronto[2]
+        pair2_len = pronto[3]
+        if ptype != 0:
+            # only raw (learned) codes are handled
+            return None
+        if timebase < 90 or timebase > 139:
+            # only 38 kHz is supported?
+            return None
+        pronto = pronto[4:]
+        timebase *= 0.241246
+        ret = [ ]
+        for i in range(0, pair1_len*2, 2):
+            ret += [round(pronto[i] * timebase), round(pronto[i+1] * timebase)]
+        pronto = pronto[pair1_len*2:]
+        for i in range(0, pair2_len*2, 2):
+            ret += [round(pronto[i] * timebase), round(pronto[i+1] * timebase)]
+        return ret
+
+    @staticmethod
+    def pulses_to_pronto( pulses ):
+        # only 38 kHz is supported?
+        freq = 38000.0
+        scale = (1 / freq) * 1000000.0
+        ret = '%04X %04X %04X %04X' % (0, round(scale/0.241246), 0, len(pulses) >> 1)
+        for i in pulses:
+            ret += ' %04X' % round(i/scale)
+        return ret
