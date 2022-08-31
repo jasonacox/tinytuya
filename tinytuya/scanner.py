@@ -360,10 +360,10 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                             if verbose:
                                 print(dim + "    Status: %s" % dpsdata["dps"])
                     else:
-                        # Version 3.3+ requires device key
+                        # Version 3.2 and up requires device key
                         if dkey != "":
                             d = tinytuya.OutletDevice(gwId, ip, dkey)
-                            d.set_version(3.3)
+                            d.set_version(float(version))
                             dpsdata = d.status()
                             if "dps" not in dpsdata:
                                 if verbose:
@@ -513,8 +513,7 @@ def snapshot(color=True):
             else:
                 try:
                     d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    if ver == "3.3":
-                        d.set_version(3.3)
+                    d.set_version(float(ver))
                     data = d.status()
                     if 'dps' in data:
                         item['dps'] = data
@@ -623,8 +622,7 @@ def alldevices(color=True, retries=None):
             else:
                 try:
                     d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    if ver == "3.3":
-                        d.set_version(3.3)
+                    d.set_version(float(ver))
                     data = d.status()
                     if 'dps' in data:
                         item['dps'] = data
@@ -702,8 +700,7 @@ def snapshotjson():
         else:
             try:
                 d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                if ver == "3.3":
-                    d.set_version(3.3)
+                d.set_version(float(ver))
                 data = d.status()
                 if 'dps' in data:
                     item['dps'] = data

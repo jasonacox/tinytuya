@@ -490,7 +490,7 @@ d.set_value(25, '010e0d0000000000000003e803e8')
 
 ### Version 3.1 Devices
 
-#### Version 3.1 - Plug or Switch Type
+#### Version 3.1 (and some 3.3) - Plug or Switch Type
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
 |1|Switch|bool|True/False||
@@ -544,6 +544,8 @@ d.set_value(25, '010e0d0000000000000003e803e8')
 |42|UNKNOWN||||
 |43|UNKNOWN||||
 |44|UNKNOWN||||
+
+Note: Some 3.3 energy management plugs use the DPS values of the 3.1 plug above.
 
 #### Version 3.3 - Dimmer Switch
 | DP ID        | Function Point | Type        | Range       | Units |

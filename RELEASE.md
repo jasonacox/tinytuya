@@ -1,9 +1,32 @@
 # RELEASE NOTES
 
-## Potential Future Release Features
+## v1.6.7 - Unreleased
 
-* IPv6 Support - Use socket.getaddrinfo() for AF_INET & AF_INET6
-* Add function to send multiple DPS index updates with one call
+* Added DoorbellDevice by @JonesMeUp in https://github.com/jasonacox/tinytuya/issues/162 
+
+## v1.6.6 - Updated Payload Dictionary and Command List
+
+* PyPI 1.6.6
+* Added support for 3.2 protocol Tuya devices
+* Added SocketDevice by @Felix-Pi in https://github.com/jasonacox/tinytuya/pull/167
+* Skip DPS detection for 3.2 protocol devices if it has already been set by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/169
+
+```python
+# Example usage of community contributed device modules
+from tinytuya.Contrib import SocketDevice
+
+socket = SocketDevice('abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc', version=3.3)
+
+print(socket.get_energy_consumption())
+print(socket.get_state())
+```
+
+## v1.6.5 - Updated Payload Dictionary and Command List
+
+* PyPI 1.6.5
+* Reworked payload_dict and realigned the command list to match [Tuya's API](https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/166
+* Changed socket.send() to socket.sendall() in _send_receive() by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/166
+* Created TuyaSmartPlug-example.py by @fajarmnrozaki in https://github.com/jasonacox/tinytuya/pull/163 and https://github.com/jasonacox/tinytuya/pull/165
 
 ## v1.6.4 - IRRemoteControlDevice and Read Improvements
 
