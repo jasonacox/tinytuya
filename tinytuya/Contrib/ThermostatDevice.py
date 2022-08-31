@@ -618,7 +618,7 @@ class ThermostatDevice(Device):
                         coolto -= coolmod
                         if coolmod >= 25: coolto += 50
 
-                    print( 'CF is:', cf, self.heatto, heatto / 100, 'cool:', self.coolto, coolto / 100, self.time )
+                    log.info( 'CF is: %r %r %r cool: %r %r %r', cf, self.heatto, heatto / 100, self.coolto, coolto / 100, self.time )
 
                     # if self.time is a string then it needs to be in 24-hour HH:MM[:SS] format!
                     if isinstance( self.time, str ):
