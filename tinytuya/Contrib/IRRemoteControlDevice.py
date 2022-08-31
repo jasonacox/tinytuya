@@ -265,6 +265,16 @@ class IRRemoteControlDevice(Device):
         return ret
 
     @staticmethod
+    def _mirror_bits( data, bits=8 ):
+        shift = bits - 1
+        out = 0
+        for i in range(bits):
+            if data & (1 << i):
+                out |= 1 << shift
+            shift -= 1
+        return out
+
+    @staticmethod
     def nec_to_pulses( address, data=None ):
         # address can be 8-bit or 16-bit
         # if 8, it is repeated after complementing (just like the data)
@@ -272,7 +282,11 @@ class IRRemoteControlDevice(Device):
             uint32 = address
         else:
             if address < 256:
+                address = IRRemoteControlDevice._mirror_bits(address)
                 address = (address << 8) | (address ^ 0xFF)
+            else:
+                address = (IRRemoteControlDevice._mirror_bits( (address >> 8) & 0xFF) << 8) | IRRemoteControlDevice._mirror_bits(address & 0xFF)
+            data = IRRemoteControlDevice._mirror_bits(data)
             data = (data << 8) | (data ^ 0xFF)
             uint32 = (address << 16) | data
         return IRRemoteControlDevice.width_encoded_to_pulses( uint32 )
@@ -282,10 +296,10 @@ class IRRemoteControlDevice(Device):
         ret = [ ]
         res = IRRemoteControlDevice.pulses_to_width_encoded( pulses, start_mark=9000, space_threshold=1125 )
         for code in res:
-            addr = (code >> 24) & 0xFF
-            addr_not = (code >> 16) & 0xFF
-            data = (code >> 8) & 0xFF
-            data_not = code & 0xFF
+            addr = IRRemoteControlDevice._mirror_bits((code >> 24) & 0xFF)
+            addr_not = IRRemoteControlDevice._mirror_bits((code >> 16) & 0xFF)
+            data = IRRemoteControlDevice._mirror_bits((code >> 8) & 0xFF)
+            data_not = IRRemoteControlDevice._mirror_bits(code & 0xFF)
             # if the address is 8-bit, it is repeated after complementing (just like the data)
             if addr != (addr_not ^ 0xFF):
                 addr = (addr << 8) | addr_not
@@ -301,6 +315,8 @@ class IRRemoteControlDevice(Device):
         if data is None:
             uint32 = address
         else:
+            address = IRRemoteControlDevice._mirror_bits(address)
+            data = IRRemoteControlDevice._mirror_bits(data)
             uint32 = (address << 24) + (address << 16) + (data << 8) + (data ^ 0xFF)
         return IRRemoteControlDevice.width_encoded_to_pulses( uint32, start_mark=4500 )
 
@@ -316,8 +332,8 @@ class IRRemoteControlDevice(Device):
             d = { 'type': 'samsung', 'uint32': code, 'address': None, 'data': None, 'hex': '%08X' % code }
             # samsung repeats the 8-bit address but complements the 8-bit data
             if addr == addr_not and data == (data_not ^ 0xFF):
-                d['address'] = addr
-                d['data'] = data
+                d['address'] = IRRemoteControlDevice._mirror_bits(addr)
+                d['data'] = IRRemoteControlDevice._mirror_bits(data)
             ret.append(d)
         return ret
 
