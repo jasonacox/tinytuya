@@ -323,6 +323,7 @@ class IRRemoteControlDevice(Device):
 
     @staticmethod
     def pronto_to_pulses( pronto ):
+        ret = [ ]
         pronto = [int(x, 16) for x in pronto.split(' ')]
         ptype = pronto[0]
         timebase = pronto[1]
@@ -330,13 +331,12 @@ class IRRemoteControlDevice(Device):
         pair2_len = pronto[3]
         if ptype != 0:
             # only raw (learned) codes are handled
-            return None
+            return ret
         if timebase < 90 or timebase > 139:
             # only 38 kHz is supported?
-            return None
+            return ret
         pronto = pronto[4:]
         timebase *= 0.241246
-        ret = [ ]
         for i in range(0, pair1_len*2, 2):
             ret += [round(pronto[i] * timebase), round(pronto[i+1] * timebase)]
         pronto = pronto[pair1_len*2:]
