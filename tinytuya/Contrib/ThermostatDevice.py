@@ -51,6 +51,8 @@
           occupied -> sensor detected occupancy flag True/False
           temperature -> temperature in degrees C as a float
           raw_temperature -> temperature as reported by the sensor (degrees C * 100)
+          temperature_used -> the rounded temperature used in averaging calculations
+          raw_temperature_used -> the rounded temperature used in averaging calculations (degrees C * 100)
           online -> sensor online flag True/False
           participation -> schedule participation bitmask ['wake', 'away', 'home', 'sleep']
           battery -> battery percentage remaining
@@ -988,8 +990,10 @@ class ThermostatSensorList(object):
 
     class ThermostatSensorData(object):
         # unpack the 52-byte long binary blob
-        struct_format = '>I30s??h?BBBB?8s'
-        keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'unknown3')
+        struct_format = '>I30s??h?BBBB?h6s'
+        keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature_used', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'raw_temperature', 'unknown3')
+        raw_temperature_used_idx = keys.index( 'raw_temperature_used' )
+        raw_temperature_idx = keys.index( 'raw_temperature' )
 
         def __init__( self, parent_sensorlist ):
             self.parent_sensorlist = parent_sensorlist
@@ -1000,6 +1004,8 @@ class ThermostatSensorList(object):
             self.occupied = True
             self.raw_temperature = 0
             self.temperature = 0.0
+            self.raw_temperature_used = 0
+            self.temperature_used = 0.0
             self.online = True
             self.participation = 0
             self.battery = 0
@@ -1018,6 +1024,12 @@ class ThermostatSensorList(object):
             self.changed = [ ]
             self.sensor_added = False
             self.delay_updates = False
+
+            if new[self.raw_temperature_idx] == 0:
+                new = list(new)
+                new[self.raw_temperature_idx] = new[self.raw_temperature_used_idx]
+                # "int( N / 50 ) * 50" does a pretty good job of matching what the thermostat does
+                new[self.raw_temperature_used_idx] = int(new[self.raw_temperature_used_idx] / 50) * 50
 
             for i in range(len(self.keys)):
                 k = self.keys[i]
@@ -1040,6 +1052,11 @@ class ThermostatSensorList(object):
                 self.changed.remove('raw_temperature')
                 self.changed.append('temperature')
                 self.temperature = self.raw_temperature / 100.0
+
+            if 'raw_temperature_used' in self.changed:
+                self.changed.remove('raw_temperature_used')
+                self.changed.append('temperature_used')
+                self.temperature_used = self.raw_temperature_used / 100.0
 
             self.want_update = [ ]
 
