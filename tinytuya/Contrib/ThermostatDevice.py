@@ -51,6 +51,8 @@
           occupied -> sensor detected occupancy flag True/False
           temperature -> temperature in degrees C as a float
           raw_temperature -> temperature as reported by the sensor (degrees C * 100)
+          temperature_used -> the rounded temperature used in averaging calculations
+          raw_temperature_used -> the rounded temperature used in averaging calculations (degrees C * 100)
           online -> sensor online flag True/False
           participation -> schedule participation bitmask ['wake', 'away', 'home', 'sleep']
           battery -> battery percentage remaining
@@ -555,7 +557,8 @@ class ThermostatDevice(Device):
     class ThermostatSchedule(object):
         class ScheduleDay:
             class SchedulePeriod:
-                def __init__( self ):
+                def __init__( self, sched ):
+                    self.sched = sched
                     self.participation = 0xFF
                     self.time = 0xFFFF
                     self.heatto = -32768
@@ -591,10 +594,16 @@ class ThermostatDevice(Device):
                     yield self.coolto
 
                 def __bytes__( self ):
+                    cf = self.sched.parent.getCF( self.sched.cf )
+
                     if self.heatto < -100 or self.heatto > 100:
                         heatto = round(self.heatto)
                     else:
-                        heatto = round(self.heatto * 100)
+                        heatto = self.heatto
+                        # schedule is in C, so convert from F
+                        if cf == 'f':
+                            heatto = (heatto - 32) / 1.8
+                        heatto = round(heatto * 100)
                         heatmod = heatto % 50
                         heatto -= heatmod
                         if heatmod >= 25: heatto += 50
@@ -602,20 +611,39 @@ class ThermostatDevice(Device):
                     if self.coolto < -100 or self.coolto > 100:
                         coolto = round(self.coolto)
                     else:
-                        coolto = round(self.coolto * 100)
+                        coolto = self.coolto
+                        # schedule is in C, so convert from F
+                        if cf == 'f':
+                            coolto = (coolto - 32) / 1.8
+                        coolto = round(coolto * 100)
                         coolmod = coolto % 50
                         coolto -= coolmod
                         if coolmod >= 25: coolto += 50
 
-                    return struct.pack( '>BHhh', self.participation, self.time, heatto, coolto )
+                    log.info( 'CF is: %r %r %r cool: %r %r %r', cf, self.heatto, heatto / 100, self.coolto, coolto / 100, self.time )
+
+                    # if self.time is a string then it needs to be in 24-hour HH:MM[:SS] format!
+                    if isinstance( self.time, str ):
+                        tparts = self.time.split( ':' )
+                        if len(tparts) >= 2:
+                            ptime = (int(tparts[0]) * 60) + int(tparts[1])
+                        else:
+                            ptime = int(tparts[0])
+                    elif isinstance( self.time, int ):
+                        ptime =	self.time
+                    else:
+                        ptime = int(self.time)
+
+                    return struct.pack( '>BHhh', self.participation, ptime, heatto, coolto )
 
                 def __repr__( self ):
                     return bytes(self).hex().upper()
 
-            def __init__( self ):
+            def __init__( self, sched ):
+                self.sched = sched
                 self.periods = [ ]
                 for i in range( 5 ):
-                    sp = self.SchedulePeriod()
+                    sp = self.SchedulePeriod( sched )
                     self.periods.append( sp )
 
             def period_to_idx( self, period ):
@@ -679,11 +707,12 @@ class ThermostatDevice(Device):
             self.parent = parent
             self.dps = dps
             self.have_data = False
+            self.cf = None
 
             self.day_data = [ ]
 
             for i in range( 7 ):
-                sd = self.ScheduleDay()
+                sd = self.ScheduleDay( self )
                 self.day_data.append( sd )
 
         def day_to_idx( self, day ):
@@ -732,7 +761,7 @@ class ThermostatDevice(Device):
             #period = self.period_to_idx( period )
 
             if 'delete' in kwargs:
-                self.day_data[day][period] = self.ScheduleDay.SchedulePeriod()
+                self.day_data[day][period] = self.ScheduleDay.SchedulePeriod( self )
 
             if 'participation' in kwargs:
                 self.day_data[day][period].participation = kwargs['participation']
@@ -751,6 +780,9 @@ class ThermostatDevice(Device):
                     log.warn('Selected participation flag is out of range, setting to %d', period)
                 self.day_data[day][period][0] = period & 3
 
+        def setCF( self, cf ):
+            self.cf = cf
+
         def update( self, data ):
             self.have_data = False
 
@@ -758,6 +790,7 @@ class ThermostatDevice(Device):
                 log.warn( 'Schedule data is in an unknown format, ignoring schedule' )
                 return False
 
+            cf = self.parent.getCF( self.cf )
             daylen = int(len(data) / 7)
             for dow in range( 7 ):
                 offset = dow * daylen
@@ -783,8 +816,21 @@ class ThermostatDevice(Device):
                     for i in range( len(newdata) ):
                         self.day_data[dow][period][i] = newdata[i]
 
-                    self.day_data[dow][period].heatto /= 100
-                    self.day_data[dow][period].coolto /= 100
+                    # display the time as 24-hour HH:MM
+                    if self.day_data[dow][period].time < 1440:
+                        hrs = int(self.day_data[dow][period].time / 60)
+                        mins = self.day_data[dow][period].time % 60
+                        self.day_data[dow][period].time = '%d:%02d' % (hrs,mins)
+
+                    if self.day_data[dow][period].heatto > -10000 and self.day_data[dow][period].heatto < 10000:
+                        self.day_data[dow][period].heatto /= 100
+                        if cf == 'f':
+                            self.day_data[dow][period].heatto = round((self.day_data[dow][period].heatto * 1.8) + 32)
+
+                    if self.day_data[dow][period].coolto > -10000 and self.day_data[dow][period].coolto < 10000:
+                        self.day_data[dow][period].coolto /= 100
+                        if cf == 'f':
+                            self.day_data[dow][period].coolto = round((self.day_data[dow][period].coolto * 1.8) + 32)
 
             self.have_data = True
 
@@ -812,6 +858,9 @@ class ThermostatDevice(Device):
 
         def __setitem__( self, key, data ):
             if isinstance( key, str ):
+                if key == 'cf':
+                    self.cf = data
+                    return
                 key = self.day_to_idx( key )
             elif not isinstance( key, int ):
                 setattr( self, key, data )
@@ -941,8 +990,10 @@ class ThermostatSensorList(object):
 
     class ThermostatSensorData(object):
         # unpack the 52-byte long binary blob
-        struct_format = '>I30s??h?BBBB?8s'
-        keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'unknown3')
+        struct_format = '>I30s??h?BBBB?h6s'
+        keys = ('raw_id', 'raw_name', 'enabled', 'occupied', 'raw_temperature_used', 'online', 'participation', 'battery', 'firmware_version', 'unknown2', 'averaging', 'raw_temperature', 'unknown3')
+        raw_temperature_used_idx = keys.index( 'raw_temperature_used' )
+        raw_temperature_idx = keys.index( 'raw_temperature' )
 
         def __init__( self, parent_sensorlist ):
             self.parent_sensorlist = parent_sensorlist
@@ -953,6 +1004,8 @@ class ThermostatSensorList(object):
             self.occupied = True
             self.raw_temperature = 0
             self.temperature = 0.0
+            self.raw_temperature_used = 0
+            self.temperature_used = 0.0
             self.online = True
             self.participation = 0
             self.battery = 0
@@ -971,6 +1024,12 @@ class ThermostatSensorList(object):
             self.changed = [ ]
             self.sensor_added = False
             self.delay_updates = False
+
+            if new[self.raw_temperature_idx] == 0:
+                new = list(new)
+                new[self.raw_temperature_idx] = new[self.raw_temperature_used_idx]
+                # "int( N / 50 ) * 50" does a pretty good job of matching what the thermostat does
+                new[self.raw_temperature_used_idx] = int(new[self.raw_temperature_used_idx] / 50) * 50
 
             for i in range(len(self.keys)):
                 k = self.keys[i]
@@ -993,6 +1052,11 @@ class ThermostatSensorList(object):
                 self.changed.remove('raw_temperature')
                 self.changed.append('temperature')
                 self.temperature = self.raw_temperature / 100.0
+
+            if 'raw_temperature_used' in self.changed:
+                self.changed.remove('raw_temperature_used')
+                self.changed.append('temperature_used')
+                self.temperature_used = self.raw_temperature_used / 100.0
 
             self.want_update = [ ]
 
