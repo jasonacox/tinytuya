@@ -81,8 +81,6 @@ def getmyIP():
 # Scan function shortcut
 def scan(scantime=None, color=True, forcescan=False):
     """Scans your network for Tuya devices with output to stdout"""
-    # Terminal formatting
-    #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
     devices(verbose=True, scantime=scantime, color=color, poll=True, forcescan=forcescan)
 
 def _generate_ip_connected(networks, verbose, termcolors, connect=True):
@@ -102,7 +100,7 @@ def _generate_ip_connected(networks, verbose, termcolors, connect=True):
         if verbose:
             print(bold + '\n    Starting Scan for network %r' % netblock + dim)
         # Loop through each host
-        for addr in ipaddress.IPv4Network(network).hosts():
+        for addr in ipaddress.IPv4Network(network):
             if connect:
                 a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 #a_socket.settimeout(TCPTIMEOUT)
@@ -279,6 +277,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             socklist.remove(sock)
             del socktimeouts[sock]
             try:
+                # getpeername() blows up with "OSError: [Errno 107] Transport endpoint is
+                # not connected" if the connection was refused
                 addr = sock.getpeername()[0]
             except:
                 continue
@@ -286,11 +286,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 sock.close()
 
             ip = "%s" % addr
-            mac = "" #get_mac_address(ip=ip)
+            mac = get_mac_address(ip=ip) if SCANLIBS else None
             ip_list[ip] = mac
-            log.debug("Found Device %s [%s] (%d)", ip, mac, len(ip_list))
+            log.debug("Found Device %s [%s] (total devices: %d)", ip, mac, len(ip_list))
             if verbose:
-                print(" Force-Scan Found Device %s [%s] (%d) (%d)" % (ip, mac, len(ip_list), len(socklist)))
+                print(" Force-Scan Found Device %s [%s]" % (ip, mac))
 
             #if verbose:
             #    print(dim + '\r      Done                           ' +normal +
