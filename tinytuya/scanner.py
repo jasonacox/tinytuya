@@ -63,7 +63,7 @@ UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 
 scan_time = 18
-max_parallel = 200
+max_parallel = 150
 connect_timeout = 3
 
 # Logging
@@ -191,17 +191,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             % (subbold, UDPPORT, UDPPORTS, scantime, normal)
         )
 
-    if forcescan:
-        #if not SCANLIBS:
-        #    if verbose:
-        #        print(alert +
-        #            '    ERROR: force network scanning requested but not available - disabled.\n'
-        #            '           (Requires: pip install getmac)\n' + dim)
-        #    forcescan = False
-        #else:
-        if verbose:
-            print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
-
     deviceslist = {}
     count = 0
     counts = 0
@@ -214,9 +203,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     scan_end_time = time.time() + scantime
 
     if forcescan:
+        if verbose:
+            print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
+
         networks = [ ]
         try:
-            ip = u'172.20.0.0/18' # u''+getmyIP()+'/24'
+            ip = u'172.20.10.0/24' # u''+getmyIP()+'/24'
             networks.append( ip )
         except:
             networks.append( u''+DEFAULT_NETWORK )
