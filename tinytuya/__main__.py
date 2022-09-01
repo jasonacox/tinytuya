@@ -19,7 +19,7 @@ import tinytuya
 from . import wizard
 from . import scanner
 
-retries = tinytuya.MAXCOUNT
+retries = 18 #tinytuya.MAXCOUNT
 state = 0
 color = True
 retriesprovided = False
@@ -52,7 +52,7 @@ for i in sys.argv:
 # State 0 = Run Network Scan
 if state == 0:
     if retriesprovided:
-        scanner.scan(maxretry=retries, color=color, forcescan=force)
+        scanner.scan(scantime=retries, color=color, forcescan=force)
     else:
         scanner.scan(color=color, forcescan=force)
 

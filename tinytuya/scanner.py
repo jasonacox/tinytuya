@@ -18,6 +18,7 @@ import ipaddress
 import json
 import logging
 import socket
+import select
 import sys
 import time
 from colorama import init
@@ -61,6 +62,10 @@ UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 
+scan_time = 18
+max_parallel = 200
+connect_timeout = 3
+
 # Logging
 log = logging.getLogger(__name__)
 
@@ -74,21 +79,48 @@ def getmyIP():
 
 
 # Scan function shortcut
-def scan(maxretry=None, color=True, forcescan=False):
+def scan(scantime=None, color=True, forcescan=False):
     """Scans your network for Tuya devices with output to stdout"""
     # Terminal formatting
-    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
-    devices(verbose=True, maxretry=maxretry, color=color, poll=True, forcescan=forcescan)
+    #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    devices(verbose=True, scantime=scantime, color=color, poll=True, forcescan=forcescan)
+
+def _generate_ip_connected(networks, verbose, termcolors, connect=True):
+    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = termcolors
+    for netblock in networks:
+        try:
+            # Fetch my IP address and assume /24 network
+            network = ipaddress.IPv4Interface(netblock).network
+            log.debug("Starting brute force network scan %r", network)
+        except:
+            log.debug("Unable to get network for %r, ignoring", netblock)
+            if verbose:
+                print(alert +
+                    'ERROR: Unable to get network for %r, ignoring.' % netblock + normal)
+            continue
+
+        if verbose:
+            print(bold + '\n    Starting Scan for network %r' % netblock + dim)
+        # Loop through each host
+        for addr in ipaddress.IPv4Network(network).hosts():
+            if connect:
+                a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                #a_socket.settimeout(TCPTIMEOUT)
+                a_socket.setblocking(False)
+                a_socket.connect_ex( (str(addr), TCPPORT) )
+                yield addr, a_socket
+            else:
+                yield addr, None
 
 
 # Scan function
-def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
     Parameters:
         verbose = True or False, print formatted output to stdout [Default: False]
-        maxretry = The number of loops to wait to pick up UDP from all devices
+        scantime = The time to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
         forcescan = True or False, force network scan for device IP addresses
@@ -111,16 +143,14 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     tuyadevices = []
 
     # Terminal formatting
-    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    termcolors = tinytuya.termcolor(color)
+    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = termcolors
 
     # Lookup Tuya device info by (id) returning (name, key)
     def tuyaLookup(deviceid):
         for i in tuyadevices:
-            if i["id"] == deviceid:
-                if "mac" in i:
-                    return (i["name"], i["key"], i["mac"])
-                else:
-                    return (i["name"], i["key"], "")
+            if "id" in i and i["id"] == deviceid:
+                return (i["name"], i["key"], i["mac"] if "mac" in i else "")
         return ("", "", "")
 
     # Check to see if we have additional Device info
@@ -130,27 +160,24 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
             tuyadevices = json.load(f)
             havekeys = True
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-            # If no maxretry value set, base it on number of devices
-            if maxretry is None:
-                maxretry = len(tuyadevices) + tinytuya.MAXCOUNT
     except:
         # No Device info
         pass
 
-    # If no maxretry value set use default
-    if maxretry is None:
-        maxretry = tinytuya.MAXCOUNT
+    # If no scantime value set use default
+    if scantime is None:
+        scantime = scan_time #tinytuya.MAXCOUNT
 
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     client.bind(("", UDPPORT))
-    client.settimeout(TIMEOUT)
+    #client.settimeout(TIMEOUT)
     # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
     clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     clients.bind(("", UDPPORTS))
-    clients.settimeout(TIMEOUT)
+    #clients.settimeout(TIMEOUT)
 
     if verbose:
         print(
@@ -160,20 +187,20 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
         if havekeys:
             print("%s[Loaded devices.json - %d devices]\n" % (dim, len(tuyadevices)))
         print(
-            "%sScanning on UDP ports %s and %s for devices (%s retries)...%s\n"
-            % (subbold, UDPPORT, UDPPORTS, maxretry, normal)
+            "%sScanning on UDP ports %s and %s for devices for %d seconds...%s\n"
+            % (subbold, UDPPORT, UDPPORTS, scantime, normal)
         )
 
     if forcescan:
-        if not SCANLIBS:
-            if verbose:
-                print(alert +
-                    '    ERROR: force network scanning requested but not available - disabled.\n'
-                    '           (Requires: pip install getmac)\n' + dim)
-            forcescan = False
-        else:
-            if verbose:
-                print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
+        #if not SCANLIBS:
+        #    if verbose:
+        #        print(alert +
+        #            '    ERROR: force network scanning requested but not available - disabled.\n'
+        #            '           (Requires: pip install getmac)\n' + dim)
+        #    forcescan = False
+        #else:
+        if verbose:
+            print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
     deviceslist = {}
     count = 0
@@ -181,165 +208,169 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     spinnerx = 0
     spinner = "|/-\\|"
     ip_list = {}
+    socklist = []
+    socktimeouts = {}
+    ip_scan_running = False
+    scan_end_time = time.time() + scantime
 
     if forcescan:
-        # Force Scan - Get list of all local ip addresses
+        networks = [ ]
         try:
-            # Fetch my IP address and assume /24 network
-            ip = getmyIP()
-            network = ipaddress.IPv4Interface(u''+ip+'/24').network
-            log.debug("Starting brute force network scan %r", network)
+            ip = u'172.20.0.0/18' # u''+getmyIP()+'/24'
+            networks.append( ip )
         except:
-            network = DEFAULT_NETWORK
-            ip = None
-            log.debug("Unable to get local network, using default %r", network)
+            networks.append( u''+DEFAULT_NETWORK )
+            log.debug("Unable to get local network, using default %r", DEFAULT_NETWORK)
             if verbose:
                 print(alert +
                     'ERROR: Unable to get your IP address and network automatically.'
-                    '       (using %s)' % network + normal)
+                    '       (using %s)' % DEFAULT_NETWORK + normal)
 
-        try:
-            # Warn user of scan duration
-            if verbose:
-                print("\n" + bold + "Scanning local network.  This may take a while..." + dim)
-                print(bold + '\n    Running Scan...' + dim)
-            # Loop through each host
-            for addr in ipaddress.IPv4Network(network):
-                # Fetch my IP address and assume /24 network
-                if verbose:
-                    print(dim + '\r      Host: ' + subbold + '%s ...' % addr + normal, end='')
-                a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                a_socket.settimeout(TCPTIMEOUT)
-                location = (str(addr), TCPPORT)
-                result_of_check = a_socket.connect_ex(location)
-                if result_of_check == 0:
-                    # TODO: Verify Tuya Device
-                    ip = "%s" % addr
-                    mac = get_mac_address(ip=ip)
-                    ip_list[ip] = mac
-                    log.debug("Found Device [%s]", mac)
-                    if verbose:
-                        print(" Found Device [%s]" % mac)
-                a_socket.close()
+        scan_ips = _generate_ip_connected( networks, verbose, termcolors )
+        ip_scan_running = True
+        reap_time = time.time() + 5
 
-            if verbose:
-                print(dim + '\r      Done                           ' +normal +
-                            '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
-
-        except:
-            log.debug("Error scanning network - Ignoring")
-            if verbose:
-                print('\n' + alert + '    Error scanning network - Ignoring' + dim)
-            forcescan = False
+        # Warn user of scan duration
+        if verbose:
+            print(bold + '\n    Running Scan...' + dim)
 
     log.debug("Listening for Tuya devices on UDP 6666 and 6667")
-    while (count + counts) <= maxretry:
-        note = "invalid"
+    start_time = time.time()
+    client_socks = [client, clients]
+    current_ip = None
+    while ip_scan_running or scan_end_time > time.time():
+        if ip_scan_running:
+            if reap_time < time.time():
+                reap_time = time.time() + connect_timeout
+                rem = []
+                for k in socktimeouts:
+                    if socktimeouts[k] < time.time():
+                        rem.append(k)
+                for k in rem:
+                    del socktimeouts[k]
+                    socklist.remove(k)
+                    k.close()
+            if len(socklist) < max_parallel:
+                want = max_parallel - len(socklist)
+                for i in range(want):
+                    current_scan = next( scan_ips, None )
+                    if current_scan is None:
+                        ip_scan_running = False
+                        scan_end_time = time.time() + scantime
+                        break
+                    else:
+                        current_ip = current_scan[0]
+                        socklist.append( current_scan[1] )
+                        socktimeouts[current_scan[1]] = time.time() + connect_timeout
+                        time.sleep(0.015)
+
         if verbose:
-            print("%sScanning... %s\r" % (dim, spinner[spinnerx]), end="")
+            tim = 'FS:'+str(current_ip) if ip_scan_running else str(int(scan_end_time - time.time()))
+            print("%sScanning... %s (%s)                 \r" % (dim, spinner[spinnerx], tim), end="")
             spinnerx = (spinnerx + 1) % 4
             sys.stdout.flush()
-            time.sleep(0.1)
+            #time.sleep(0.1)
 
-        if count <= counts:  # alternate between 6666 and 6667 ports
-            try:
-                data, addr = client.recvfrom(4048)
-            except KeyboardInterrupt as err:
-                log.debug("Keyboard Interrupt - Exiting")
-                if verbose:
-                    print("\n**User Break**")
-                sys.exit()
-            except Exception as err:
-                # Timeout
-                count = count + 1
-                continue
-        else:
-            try:
-                data, addr = clients.recvfrom(4048)
-            except KeyboardInterrupt as err:
-                log.debug("Keyboard Interrupt - Exiting")
-                if verbose:
-                    print("\n**User Break**")
-                sys.exit()
-            except Exception as err:
-                # Timeout
-                counts = counts + 1
-                continue
-        ip = addr[0]
-        gwId = productKey = version = dname = dkey = mac = mac2 = suffix = ""
-        result = data
         try:
-            result = data[20:-8]
+            if len(socklist) > 0:
+                rd, wr, _ = select.select( client_socks, socklist, [], 0.1 )
+            else:
+                rd, _, _ = select.select( client_socks, [], [], 0.1 )
+                wr = []
+        except KeyboardInterrupt as err:
+            log.debug("Keyboard Interrupt - Exiting")
+            if verbose: print("\n**User Break**")
+            sys.exit()
+
+        for sock in wr:
+            # TODO: Verify Tuya Device
+            socklist.remove(sock)
+            del socktimeouts[sock]
             try:
-                result = tinytuya.decrypt_udp(result)
+                addr = sock.getpeername()[0]
             except:
-                result = result.decode()
+                continue
+            finally:
+                sock.close()
 
-            result = json.loads(result)
-            log.debug("Received valid UDP packet: %r", result)
-
-            note = "Valid"
-            ip = result["ip"]
-            gwId = result["gwId"]
-            productKey = result["productKey"]
-            version = result["version"]
-        except:
+            ip = "%s" % addr
+            mac = "" #get_mac_address(ip=ip)
+            ip_list[ip] = mac
+            log.debug("Found Device %s [%s] (%d)", ip, mac, len(ip_list))
             if verbose:
-                print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
-            result = {"ip": ip}
-            note = "Unknown"
-            log.debug("Invalid UDP Packet: %r", result)
+                print(" Force-Scan Found Device %s [%s] (%d) (%d)" % (ip, mac, len(ip_list), len(socklist)))
 
-        # check to see if we have seen this device before and add to devices array
-        if tinytuya.appenddevice(result, deviceslist) is False:
+            #if verbose:
+            #    print(dim + '\r      Done                           ' +normal +
+            #                '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
 
-            # new device found - back off count if we keep getting new devices
-            if version == "3.1":
-                count = tinytuya.floor(count - 1)
-            else:
-                counts = tinytuya.floor(counts - 1)
-            # check if we have MAC address
-            if havekeys:
-                try:
-                    # Try to pull name and key data
-                    (dname, dkey, mac2) = tuyaLookup(gwId)
-                except:
-                    pass
-            if mac2 == "" and ip in ip_list:
-                mac = ip_list[ip]
-            else:
-                mac = mac2
-            suffix = dim + ", MAC = " + mac + ""
-            if verbose:
-                if dname == "":
-                    dname = gwId
-                    devicename = "Unknown v%s%s Device%s" % (normal, version, dim)
-                else:
-                    devicename = normal + dname + dim
-                print(
-                    "%s   Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s%s"
-                    % (
-                        devicename,
-                        productKey,
-                        note,
-                        subbold,
-                        ip,
-                        cyan,
-                        gwId,
-                        red,
-                        dkey,
-                        yellow,
-                        version,
-                        suffix
-                    )
-                )
-
+        for sock in rd:
+            data, addr = sock.recvfrom(4048)
+            ip = addr[0]
+            #print( 'inspecting', addr, data.hex().upper())
+            gwId = productKey = version = dname = dkey = mac = mac2 = suffix = ""
+            note = "invalid"
+            result = data
             try:
-                if poll:
-                    time.sleep(0.1)  # give device a break before polling
-                    if version == "3.1":
-                        # Version 3.1 - no device key requires - poll for status data points
-                        d = tinytuya.OutletDevice(gwId, ip, dkey)
+                result = data[20:-8]
+                try:
+                    result = tinytuya.decrypt_udp(result)
+                except:
+                    result = result.decode()
+
+                result = json.loads(result)
+                log.debug("Received valid UDP packet: %r", result)
+
+                note = "Valid"
+                ip = result["ip"]
+                gwId = result["gwId"]
+                productKey = result["productKey"]
+                version = result["version"]
+            except:
+                if verbose:
+                    print(alertdim + "*  Unexpected payload=%r\n" + normal, result)
+                result = {"ip": ip}
+                note = "Unknown"
+                log.debug("Invalid UDP Packet: %r", result)
+
+            # check to see if we have seen this device before and add to devices array
+            if tinytuya.appenddevice(result, deviceslist) is False:
+                # check if we have MAC address
+                if havekeys:
+                    # Try to pull name and key data
+                    (dname, dkey, mac) = tuyaLookup(gwId)
+                suffix = dim + ", MAC = " + mac + ""
+                if verbose:
+                    if dname == "":
+                        dname = gwId
+                        devicename = "Unknown v%s%s Device%s" % (normal, version, dim)
+                    else:
+                        devicename = normal + dname + dim
+                    print(
+                        "%s   Product ID = %s  [%s payload]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s%s"
+                        % (
+                            devicename,
+                            productKey,
+                            note,
+                            subbold,
+                            ip,
+                            cyan,
+                            gwId,
+                            red,
+                            dkey,
+                            yellow,
+                            version,
+                            suffix
+                        )
+                    )
+
+            """
+            #    try:
+            #    if poll:
+            #        time.sleep(0.1)  # give device a break before polling
+            #        if version == "3.1":
+            #            # Version 3.1 - no device key requires - poll for status data points
+            #            d = tinytuya.OutletDevice(gwId, ip, dkey)
                         d.set_version(3.1)
                         dpsdata = d.status()
                         if "dps" not in dpsdata:
@@ -394,22 +425,25 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
                 if verbose:
                     print(alertdim + "    Unexpected error for %s: Unable to poll" % ip)
                 deviceslist[ip]["err"] = "Unable to poll"
-            if dname != "":
-                deviceslist[ip]["name"] = dname
-                deviceslist[ip]["key"] = dkey
-            if mac != "":
-                deviceslist[ip]["mac"] = mac
-            deviceslist[ip]["id"] = gwId
-            deviceslist[ip]["ver"] = version
-        else:
-            if version == "3.1":
-                count = count + 1
-            else:
-                counts = counts + 1
+"""
+            if dname != "": deviceslist[ip]["name"] = dname
+            if dkey != "": deviceslist[ip]["key"] = dkey
+            if mac != "": deviceslist[ip]["mac"] = mac
+            if gwId != "": deviceslist[ip]["id"] = gwId
+            if version != "": deviceslist[ip]["ver"] = version
+
+
+
+
+
+
+
+
+    print( 'Scanned in', time.time() - start_time )
 
     # Add Force Scan Devices
-    for ip in ip_list:
-        deviceslist[ip]["mac"] = ip_list[ip]
+    #for ip in ip_list:
+    #    deviceslist[ip]["mac"] = ip_list[ip]
     if verbose:
         print(
             "                    \n%sScan Complete!  Found %s devices."
@@ -434,6 +468,12 @@ def devices(verbose=False, maxretry=None, color=True, poll=True, forcescan=False
     log.debug("Scan complete with %s devices found", len(deviceslist))
     clients.close()
     client.close()
+    for a_socket in socklist:
+        try:
+            a_socket.close()
+        except:
+            pass
+
     if byID:
         # Create dictionary by id
         ids = {}
