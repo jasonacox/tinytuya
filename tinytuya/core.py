@@ -457,8 +457,7 @@ class XenonDevice(object):
             if ver == "3.2": # 3.2 behaves like 3.3 with device22
                 self.version = 3.3  
                 self.dev_type="device22"
-                self.dps_to_request = {"1": None}
-                self.dps_to_request = self.detect_available_dps()
+                self.detect_available_dps()
             time.sleep(0.5)
 
     def __del__(self):
@@ -804,8 +803,10 @@ class XenonDevice(object):
                 self.dps_cache.update(data["dps"])
 
             if self.dev_type == "default":
+                self.dps_to_request = self.dps_cache
                 return self.dps_cache
         log.debug("Detected dps: %s", self.dps_cache)
+        self.dps_to_request = self.dps_cache
         return self.dps_cache
 
     def add_dps_to_request(self, dp_indicies):
@@ -821,8 +822,7 @@ class XenonDevice(object):
                 self.version = 3.3  
                 self.dev_type="device22"  
                 if self.dps_to_request == {}:
-                    self.dps_to_request = {"1": None}
-                    self.dps_to_request = self.detect_available_dps()
+                    self.detect_available_dps()
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
