@@ -19,7 +19,7 @@ import tinytuya
 from . import wizard
 from . import scanner
 
-retries = 18 #tinytuya.MAXCOUNT
+retries = 0
 state = 0
 color = True
 retriesprovided = False

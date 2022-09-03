@@ -97,6 +97,7 @@ else:
 
 # Globals Network Settings
 MAXCOUNT = 15       # How many tries before stopping
+SCANTIME = 18       # How many seconds to wait before stopping
 UDPPORT = 6666      # Tuya 3.1 UDP Port
 UDPPORTS = 6667     # Tuya 3.3 encrypted UDP Port
 TCPPORT = 6668      # Tuya TCP Local Port
@@ -215,30 +216,39 @@ class AESCipher(object):
         else:
             return crypted_text
 
-    def decrypt(self, enc, use_base64=True):
+    def decrypt(self, enc, use_base64=True, verify_padding=False):
         if use_base64:
             enc = base64.b64decode(enc)
+
+        if len(enc) % 16 != 0:
+            raise ValueError("invalid length")
 
         if Crypto:
             cipher = AES.new(self.key, AES.MODE_ECB)
             raw = cipher.decrypt(enc)
-            return self._unpad(raw).decode("utf-8")
+            return self._unpad(raw, verify_padding).decode("utf-8")
 
         else:
             cipher = pyaes.blockfeeder.Decrypter(
-                pyaes.AESModeOfOperationECB(self.key)
+                pyaes.AESModeOfOperationECB(self.key),
+                pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
             )  # no IV, auto pads to 16
-            plain_text = cipher.feed(enc)
-            plain_text += cipher.feed()  # flush final block
-            return plain_text
+            raw = cipher.feed(enc)
+            raw += cipher.feed()  # flush final block
+            return self._unpad(raw, verify_padding).decode("utf-8") if verify_padding else plain_text.decode("utf-8")
 
     def _pad(self, s):
         padnum = self.bs - len(s) % self.bs
         return s + padnum * chr(padnum).encode()
 
     @staticmethod
-    def _unpad(s):
-        return s[: -ord(s[len(s) - 1 :])]
+    def _unpad(s, verify_padding=False):
+        padlen = ord(s[-1:])
+        if padlen < 1 or padlen > 16:
+            raise ValueError("invalid padding byte")
+        if verify_padding and s[-padlen:] != padlen * chr(padlen).encode():
+            raise ValueError("invalid padding data")
+        return s[:-padlen]
 
 
 # Misc Helpers
@@ -272,6 +282,19 @@ def set_debug(toggle=True, color=True):
         log.debug("TinyTuya [%s]\n", __version__)
     else:
         log.setLevel(logging.NOTSET)
+
+def message_length(msg=None):
+    """Calculate how many bytes a packed TuyaMessage would take."""
+    # 4-word header plus return code
+    header_len = struct.calcsize(MESSAGE_HEADER_FMT)
+    retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
+    end_len = struct.calcsize(MESSAGE_END_FMT)
+    msg_len = 0
+
+    if msg:
+        msg_len = len(msg)
+
+    return header_len+retcode_len+end_len+msg_len
 
 def pack_message(msg):
     """Pack a TuyaMessage into bytes."""
@@ -312,7 +335,8 @@ def unpack_message(data, header=None):
         raise DecodeError('Not enough data to unpack payload')
 
     retcode = struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
-    payload = data[headret_len:headret_len+header.length]
+    # the retcode is technically part of the payload, but strip it as we do not want it here
+    payload = data[header_len+retcode_len:header_len+header.length]
     crc, suffix = struct.unpack(MESSAGE_END_FMT, payload[-end_len:])
     have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
