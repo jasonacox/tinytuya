@@ -43,7 +43,7 @@ except NameError:
 try:
     import netifaces
     NETIFLIBS = True
-else:
+except:
     NETIFLIBS = False
 
 # Colorama terminal color capability for all platforms
@@ -78,8 +78,22 @@ def getmyIP():
     return r
 
 def getmyIPs():
-    ret = []
-    return ret
+    ips = {}
+    interfaces = netifaces.interfaces()
+    try:
+        interfaces.remove('lo')
+    except:
+        pass
+    for interface in interfaces:
+        addresses = netifaces.ifaddresses(interface)
+        #for address_family in (netifaces.AF_INET, netifaces.AF_INET6):
+        family_addresses = addresses.get(netifaces.AF_INET)
+        if not family_addresses:
+            continue
+        for address in family_addresses:
+            k = str(ipaddress.IPv4Interface(address['addr']+'/'+address['netmask']).network)
+            ips[k] = True
+    return ips.keys()
 
 # Scan function shortcut
 def scan(scantime=None, color=True, forcescan=False):
@@ -101,7 +115,7 @@ def _generate_ip_connected(networks, verbose, termcolors, connect=True):
             continue
 
         if verbose:
-            print(bold + '\n    Starting Scan for network %r' % netblock + dim)
+            print(bold + '    Starting Scan for network %r' % netblock + dim)
         # Loop through each host
         for addr in ipaddress.IPv4Network(network):
             if connect:
@@ -246,10 +260,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
         if not NETIFLIBS:
-             print(alert +
-                    '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
-                    '           (Requires: pip install netifaces)\n' + dim)
-             networks = []
+            print(alert +
+                  '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
+                  '           (Requires: pip install netifaces)\n' + dim)
+            networks = []
         else:
             networks = getmyIPs()
 
