@@ -21,6 +21,7 @@ import socket
 import select
 import sys
 import time
+import errno
 from colorama import init
 import tinytuya
 
@@ -217,7 +218,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             % (subbold, UDPPORT, UDPPORTS, scantime, normal)
         )
 
-    debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191'] #, '172.20.10.101','172.20.10.102', '172.20.10.1']
+    debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191'] #,'172.20.10.102', '172.20.10.1']
     deviceslist = {}
     count = 0
     counts = 0
@@ -361,7 +362,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     print(traceback.format_exc())
 
             if not addr:
-                closeit = True
                 if sock in poll_devices:
                     # connect failed when polling device, close it and let the loop retry it
                     ip = poll_devices[sock]['ip']
@@ -370,23 +370,29 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     # sometimes the devices accept the connection, but then immediately close it
                     # so, retry if that happens
                     try:
+                        # this should throw either ConnectionResetError or ConnectionRefusedError
                         r = sock.recv( 5000 )
-                        #print('recv:', r)
-                    except ConnectionResetError:
-                        # connected, but then closed.  retry
-                        closeit = False
-                        #print('retrying', sock_ips[sock])
-                        sock.connect_ex( (sock_ips[sock], TCPPORT) )
-                        write_socks.append(sock)
-                    except ConnectionRefusedError:
-                        pass
+                        print('recv:', r)
+                    # ugh, ConnectionResetError and ConnectionRefusedError are not available on python 2.7
+                    #except ConnectionResetError:
+                    except OSError as e:
+                        if e.errno == errno.ECONNRESET:
+                            # connected, but then closed.  retry
+                            print('retrying', sock_ips[sock])
+                            a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            a_socket.setblocking(False)
+                            a_socket.connect_ex( (sock_ips[sock], TCPPORT) )
+                            write_socks.append(a_socket)
+                            socktimeouts[a_socket] = time.time() + connect_timeout
+                        elif sock in debug_socks:
+                            print('failed 1', sock_ips[sock], e.errno, errno.ECONNRESET)
+                            print(traceback.format_exc())
                     except:
                         if sock in debug_socks:
-                            print('failed', sock_ips[sock])
+                            print('failed 2', sock_ips[sock])
                             print(traceback.format_exc())
 
-                if closeit:
-                    sock.close()
+                sock.close()
                 continue
 
             if sock in poll_devices:
