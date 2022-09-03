@@ -40,6 +40,12 @@ try:
 except NameError:
     pass
 
+try:
+    import netifaces
+    NETIFLIBS = True
+else:
+    NETIFLIBS = False
+
 # Colorama terminal color capability for all platforms
 init()
 
@@ -71,6 +77,9 @@ def getmyIP():
     s.close()
     return r
 
+def getmyIPs():
+    ret = []
+    return ret
 
 # Scan function shortcut
 def scan(scantime=None, color=True, forcescan=False):
@@ -236,17 +245,25 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if verbose:
             print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
-        networks = [ ]
-        try:
-            ip = u'172.20.10.0/24' # u''+getmyIP()+'/24'
-            networks.append( ip )
-        except:
-            networks.append( u''+DEFAULT_NETWORK )
-            log.debug("Unable to get local network, using default %r", DEFAULT_NETWORK)
-            if verbose:
-                print(alert +
-                    'ERROR: Unable to get your IP address and network automatically.'
-                    '       (using %s)' % DEFAULT_NETWORK + normal)
+        if not NETIFLIBS:
+             print(alert +
+                    '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
+                    '           (Requires: pip install netifaces)\n' + dim)
+             networks = []
+        else:
+            networks = getmyIPs()
+
+        if len(networks) == 0:
+            try:
+                ip = u'172.20.10.0/24' # u''+getmyIP()+'/24'
+                networks.append( ip )
+            except:
+                networks.append( u''+DEFAULT_NETWORK )
+                log.debug("Unable to get local network, using default %r", DEFAULT_NETWORK)
+                if verbose:
+                    print(alert +
+                          'ERROR: Unable to get your IP address and network automatically.'
+                          '       (using %s)' % DEFAULT_NETWORK + normal)
 
         scan_ips = _generate_ip_connected( networks, verbose, termcolors )
         ip_scan_running = True
@@ -266,8 +283,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     need_sleep = 0.1
     while ip_scan_running or scan_end_time > time.time():
         if ip_scan_running:
+            # half-speed the spinner while force-scanning
             need_sleep = 0.2
+            # time out any sockets which have not yet connected
             if reap_time < time.time():
+                # no need to run this every single time through the loop
                 reap_time = time.time() + connect_timeout
                 rem = []
                 for k in socktimeouts:
@@ -284,11 +304,14 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     k.close()
             if len(write_socks) < max_parallel:
                 want = max_parallel - len(write_socks)
+                # only open 10 at most during each pass through select()
                 if want > 10: want = 10
                 for i in range(want):
                     current_scan = next( scan_ips, None )
+                    # all done!
                     if current_scan is None:
                         ip_scan_running = False
+                        # reset the end time to the larger of scantime or connect_timeout
                         scan_end_time = time.time() + (scantime if scantime > connect_timeout else connect_timeout)
                         need_sleep = 0.1
                         break
@@ -299,6 +322,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         socktimeouts[current_scan[1]] = time.time() + connect_timeout
                         if current_ip in debug_ips:
                             debug_socks[current_scan[1]] = current_ip
+                        # we slept here so adjust the loop sleep time accordingly
                         time.sleep(0.02)
                         need_sleep -= 0.02
 
@@ -309,6 +333,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             sys.stdout.flush()
 
         for sock in poll_devices:
+            # if a device poll sock has been removed from both read_socks and write_socks then it was closed, so retry
             if (sock not in read_socks) and (sock not in write_socks):
                 # connection failed, retry
                 if poll_devices[sock]['retries'] > 0:
@@ -326,16 +351,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     ip = poll_devices[sock]['ip']
                     if verbose:
                         _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
-                        print(
-                            "%s    Polling %s Failed: %s"
-                            % (alertdim, ip, deviceslist[ip]["err"])
-                        )
+                        print("%s    Polling %s Failed: %s" % (alertdim, ip, deviceslist[ip]["err"]))
                     del poll_devices[sock]
 
-        if need_sleep > 0:
-            time.sleep( need_sleep )
-
         try:
+            if need_sleep > 0:
+                time.sleep( need_sleep )
             if len(write_socks) > 0:
                 rd, wr, _ = select.select( read_socks, write_socks, [], 0 )
             else:
@@ -346,6 +367,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if verbose: print("\n**User Break**")
             sys.exit()
 
+        # these sockets are now writable (just connected) or failed
         for sock in wr:
             write_socks.remove(sock)
             if sock in socktimeouts:
@@ -361,11 +383,15 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     print(sock)
                     print(traceback.format_exc())
 
+            # connection failed
             if not addr:
+                # connection failed while trying to poll a device
                 if sock in poll_devices:
-                    # connect failed when polling device, close it and let the loop retry it
+                    # close it and let the loop retry it
                     ip = poll_devices[sock]['ip']
                     deviceslist[ip]["err"] = "Connection Failed"
+
+                # if it is in sock_ips then we can retry
                 elif sock in sock_ips:
                     # sometimes the devices accept the connection, but then immediately close it
                     # so, retry if that happens
@@ -395,6 +421,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 sock.close()
                 continue
 
+            # connection succeeded!
+            # see if we are trying to poll this device
             if sock in poll_devices:
                 ip = poll_devices[sock]['ip']
                 try:
@@ -410,25 +438,30 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
                 continue
 
+            # not polling, so it is from force-scanning
             ip = "%s" % addr
+            # get the MAC address if it is available
             mac = get_mac_address(ip=ip) if SCANLIBS else None
             ip_list[ip] = mac
             log.debug("Found Device %s [%s] (total devices: %d)", ip, mac, len(ip_list))
             if verbose:
                 print(" Force-Scan Found Device %s [%s]" % (ip, mac))
 
+            # since we do not have a MAC address to match against, try and get a response so we can brute-force the key
             if not mac:
                 try:
-                    # try and get a response so we can brute-force the key
                     sock.sendall( provoke_response )
                     read_socks.append( sock )
                 except:
                     #print(traceback.format_exc())
                     sock.close()
+            # we have a MAC address, so no need to get anything else
             else:
                 sock.close()
 
+        # these sockets are now have data waiting to be read
         for sock in rd:
+            # this sock is not a UDP listener
             if sock is not client and sock is not clients:
                 try:
                     addr = sock.getpeername()[0]
@@ -443,82 +476,83 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                             msgs.append(msg)
                         except:
                             break
+
                         data = data[tinytuya.message_length(msg.payload):]
 
                     for msg in msgs:
-                        if len(msg.payload) > 0:
+                        # ignore NULL packets
+                        if len(msg.payload) == 0:
+                            continue
+
+                        if sock in poll_devices:
+                            dev_type = poll_devices[sock]['device'].dev_type
+                            try:
+                                # Data available: seqno cmd retcode payload crc
+                                log.debug("raw unpacked message = %r", msg)
+                                result = poll_devices[sock]['device']._decode_payload(msg.payload)
+                            except:
+                                log.debug("error unpacking or decoding tuya JSON payload")
+                                result = error_json(ERR_PAYLOAD)
+
+                            # Did we detect a device22 device? Return ERR_DEVTYPE error.
+                            if dev_type != poll_devices[sock]['device'].dev_type:
+                                log.debug(
+                                    "Device22 detected and updated (%s -> %s) - Update payload and try again",
+                                    dev_type,
+                                    poll_devices[sock]['device'].dev_type,
+                                )
+                                sock.sendall( poll_devices[sock]['device'].generate_payload(tinytuya.DP_QUERY) )
+                                break
+
+                            finished = True
                             if sock in poll_devices:
-                                dev_type = poll_devices[sock]['device'].dev_type
-                                try:
-                                    # Data available: seqno cmd retcode payload crc
-                                    log.debug("raw unpacked message = %r", msg)
-                                    result = poll_devices[sock]['device']._decode_payload(msg.payload)
-                                except:
-                                    log.debug("error unpacking or decoding tuya JSON payload")
-                                    result = error_json(ERR_PAYLOAD)
+                                del poll_devices[sock]
 
-                                # Did we detect a device22 device? Return ERR_DEVTYPE error.
-                                if dev_type != poll_devices[sock]['device'].dev_type:
-                                    log.debug(
-                                        "Device22 detected and updated (%s -> %s) - Update payload and try again",
-                                        dev_type,
-                                        poll_devices[sock]['device'].dev_type,
-                                    )
-                                    sock.sendall( poll_devices[sock]['device'].generate_payload(tinytuya.DP_QUERY) )
-                                    break
-
-                                finished = True
-                                if sock in poll_devices:
-                                    del poll_devices[sock]
-
-                                if not result or "dps" not in result:
-                                    if verbose:
-                                        _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
-                                        if result and "Error" in result:
-                                            print(
-                                                "%s    Access rejected by %s: %s"
-                                                % (alertdim, ip, result["Error"])
-                                            )
-                                        else:
-                                            print(
-                                                "%s    Check DEVICE KEY - Invalid response from %s: %r"
-                                                % (alertdim, ip, result)
-                                            )
-                                    deviceslist[ip]["err"] = "Unable to poll"
-                                else:
-                                    deviceslist[ip]["dps"] = result
-                                    if verbose:
-                                        _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
-                                        print(dim + "    Status: %s" % result["dps"])
+                            if not result or "dps" not in result:
+                                if verbose:
+                                    _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
+                                    if result and "Error" in result:
+                                        print("%s    Access rejected by %s: %s" % (alertdim, ip, result["Error"]))
+                                    else:
+                                        print("%s    Check DEVICE KEY - Invalid response from %s: %r" % (alertdim, ip, result))
+                                deviceslist[ip]["err"] = "Unable to poll"
                             else:
-                                #print(ip, msg.payload)
-                                msg2 = (msg, data)
-                                if ip in response_list:
-                                    response_list[ip].append(msg2)
-                                else:
-                                    response_list[ip] = [msg2]
+                                deviceslist[ip]["dps"] = result
+                                if verbose:
+                                    _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
+                                    print(dim + "    Status: %s" % result["dps"])
+                        else:
+                            #print(ip, msg.payload)
+                            #msg2 = (msg, data)
+                            if ip in response_list:
+                                response_list[ip].append(msg)
+                            else:
+                                response_list[ip] = [msg]
 
-                                if msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_31) or msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_33):
-                                    finished = True
-                                    if sock in sock_ips:
-                                        del sock_ips[sock]
+                            # we now have the version, so close it since there is nothing else we can get
+                            if msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_31) or msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_33):
+                                finished = True
+                                if sock in sock_ips:
+                                    del sock_ips[sock]
                     if finished:
                         sock.close()
                         read_socks.remove( sock )
 
+                # connection lost??
                 except:
                     #print(traceback.format_exc())
                     sock.close()
                     if sock in read_socks:
                         read_socks.remove(sock)
+                    # FIXME should we retry?
                     if sock in sock_ips:
                         del sock_ips[sock]
 
                 continue
 
+            # if we are here then it is from a UDP listener
             data, addr = sock.recvfrom(4048)
             ip = addr[0]
-            #print( 'inspecting', addr, data.hex().upper())
             try:
                 result = data[20:-8]
                 try:
@@ -554,6 +588,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                                 % (alertdim, ip, dim)
                             )
                     else:
+                        # open a connection and dump it into the select()
                         a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         a_socket.setblocking(False)
                         a_socket.connect_ex( (ip, TCPPORT) )
@@ -574,8 +609,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     for sock in write_socks:
         sock.close()
 
-    print( 'Scanned in', time.time() - start_time )
-    #print( len(response_list), response_list )
+    if verbose:
+        print( 'Scanned in', time.time() - start_time )
+        #print( len(response_list), response_list )
 
     found = []
     mac_matches = 0
@@ -586,7 +622,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             # we received a broadcast from this device, so ignore it
             found.append(ip)
             continue
-        # next, if we found a MAC address for this device, match on that
+        # next, if we have a MAC address for this device, match on that
         if ip_list[ip]:
             for item in tuyadevices:
                 if 'mac' in item and item['mac'] and item['mac'] == ip_list[ip]:
@@ -594,6 +630,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     mac_matches += 1
                     found.append(ip)
                     ver = '0.0'
+                    # see if we got some data from it which we can use to detect the version
                     if ip in response_list:
                         for resp in response_list[ip]:
                             if resp.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_31):
@@ -603,7 +640,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                                 ver = '3.3'
                                 break
                     result = {'ip': ip, 'id': item['id'], 'gwId': item['id'], 'active': -1, 'ablilty': -1, 'encrypt': True, 'productKey': None, 'version': ver}
-                    if ver and ver != '0.0': result['version'] = ver
+                    if ver and ver != '0.0': result['ver'] = ver
                     if tinytuya.appenddevice(result, deviceslist) is False:
                         # Try to pull name and key data
                         (dname, dkey, mac) = tuyaLookup(item['id'])
@@ -611,8 +648,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         deviceslist[ip]["key"] = dkey
                         deviceslist[ip]["mac"] = mac
                         if verbose:
-                            _print_device_info( result, 'Force Scanned', termcolors ) # note
+                            _print_device_info( result, 'Force Scanned', termcolors )
                     break
+        # no broadcast or MAC address, we are going to need to brute-force the key
+    # if we found a broadcast or MAC, clean it out of the 'unknown' lists
     for ip in found:
         del ip_list[ip]
         if ip in response_list:
@@ -638,7 +677,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             ver = '0.0'
 
             for resp in response_list[ip]:
-                payload = resp[0].payload
+                payload = resp.payload
 
                 if payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_31):
                     ver = '3.1'
@@ -690,7 +729,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         print('Done!')
 
     # at this point:
-    #  ip_list contains a list of devices which did not respond to our DP_QUERY and have an unknown MAC
+    #  ip_list contains a list of devices which did not respond to our DP_QUERY and also have an unknown MAC
     #  response_list contains a list of devices for which we do not have a key
     #  matches contains a list of devices which we (probably) added to deviceslist
 

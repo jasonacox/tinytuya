@@ -235,7 +235,7 @@ class AESCipher(object):
             )  # no IV, auto pads to 16
             raw = cipher.feed(enc)
             raw += cipher.feed()  # flush final block
-            return self._unpad(raw, verify_padding).decode("utf-8") if verify_padding else plain_text.decode("utf-8")
+            return self._unpad(raw, verify_padding).decode("utf-8") if verify_padding else raw.decode("utf-8")
 
     def _pad(self, s):
         padnum = self.bs - len(s) % self.bs
