@@ -143,23 +143,23 @@ def _print_device_info( result, note, termcolors ):
             devicename = "Unknown v%s%s Device%s" % (normal, version, dim)
         else:
             devicename = normal + result['name'] + dim
-            print(
-                "%s   Product ID = %s  [%s]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s%s"
-                % (
-                    devicename,
-                    productKey,
-                    note,
-                    subbold,
-                    ip,
-                    cyan,
-                    gwId,
-                    red,
-                    dkey,
-                    yellow,
-                    version,
-                    suffix
-                )
+        print(
+            "%s   Product ID = %s  [%s]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s%s"
+            % (
+                devicename,
+                productKey,
+                note,
+                subbold,
+                ip,
+                cyan,
+                gwId,
+                red,
+                dkey,
+                yellow,
+                version,
+                suffix
             )
+        )
 
 
 
@@ -363,6 +363,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     write_socks.append( a_socket )
                 else:
                     ip = poll_devices[sock]['ip']
+                    mac2 = get_mac_address(ip=ip) if SCANLIBS else None
+                    if mac2:
+                        deviceslist[ip]["mac"] = mac2
+
                     if verbose:
                         _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
                         print("%s    Polling %s Failed: %s" % (alertdim, ip, deviceslist[ip]["err"]))
@@ -522,6 +526,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                             if sock in poll_devices:
                                 del poll_devices[sock]
 
+                            mac2 = get_mac_address(ip=ip) if SCANLIBS else None
+                            if mac2:
+                                deviceslist[ip]["mac"] = mac2
+
                             if not result or "dps" not in result:
                                 if verbose:
                                     _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
@@ -532,6 +540,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                                 deviceslist[ip]["err"] = "Unable to poll"
                             else:
                                 deviceslist[ip]["dps"] = result
+                                deviceslist[ip]["err"] = ""
                                 if verbose:
                                     _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
                                     print(dim + "    Status: %s" % result["dps"])
@@ -587,16 +596,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             # check to see if we have seen this device before and add to devices array
             if tinytuya.appenddevice(result, deviceslist) is False:
                 # Try to pull name and key data
+                mac2 = get_mac_address(ip=ip) if SCANLIBS else None
                 (dname, dkey, mac) = tuyaLookup(result['gwId'])
                 deviceslist[ip]["name"] = dname
                 deviceslist[ip]["key"] = dkey
-                deviceslist[ip]["mac"] = mac
+                deviceslist[ip]["mac"] = mac2 if mac2 else mac
 
                 if poll:
                     # v3.1 does not require a key for polling, but v3.2+ do
                     if result['version'] != "3.1" and not dkey:
                         if verbose:
-                            _print_device_info( result, 'Valid Broadcast', termcolors )
+                            _print_device_info( deviceslist[ip], 'Valid Broadcast', termcolors )
                             print(
                                 "%s    No Stats for %s: DEVICE KEY required to poll for status%s"
                                 % (alertdim, ip, dim)
@@ -615,7 +625,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         write_socks.append( a_socket )
                 elif verbose:
                     _print_device_info( result, 'Valid Broadcast', termcolors )
-
 
 
     for sock in read_socks:
