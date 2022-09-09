@@ -114,9 +114,9 @@ SNAPSHOTFILE = 'snapshot.json'
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
 AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
 ACTIVE          = 2  # FRM_TP_ACTV (discard) # WORK_MODE_CMD
-BIND            = 3  # FRM_SECURITY_TYPE3 # WIFI_STATE_CMD - wifi working status
-RENAME_GW       = 4  # FRM_SECURITY_TYPE4 # WIFI_RESET_CMD - reset wifi
-RENAME_DEVICE   = 5  # FRM_SECURITY_TYPE5 # WIFI_MODE_CMD - Choose smartconfig/AP mode
+SESS_KEY_NEG_START  = 3  # FRM_SECURITY_TYPE3 # negotiate session key
+SESS_KEY_NEG_RESP   = 4  # FRM_SECURITY_TYPE4 # negotiate session key response
+SESS_KEY_NEG_FINISH = 5  # FRM_SECURITY_TYPE5 # finalize session key negotiation
 UNBIND          = 6  # FRM_TP_UNBIND_DEV  # DATA_QUERT_CMD - issue command
 CONTROL         = 7  # FRM_TP_CMD         # STATE_UPLOAD_CMD
 STATUS          = 8  # FRM_TP_STAT_REPORT # STATE_QUERY_CMD
@@ -138,14 +138,19 @@ LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
 # Protocol Versions and Headers
 PROTOCOL_VERSION_BYTES_31 = b"3.1"
 PROTOCOL_VERSION_BYTES_33 = b"3.3"
-PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + 12 * b"\x00"
+PROTOCOL_VERSION_BYTES_34 = b"3.4"
+PROTOCOL_3x_HEADER = 12 * b"\x00"
+PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + PROTOCOL_3x_HEADER
+PROTOCOL_34_HEADER = PROTOCOL_VERSION_BYTES_34 + PROTOCOL_3x_HEADER
 MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
 MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
 MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
+MESSAGE_END_FMT_HMAC = ">32sI"  # 32s:hmac, uint32:suffix
 PREFIX_VALUE = 0x000055AA
 PREFIX_BIN = b"\x00\x00U\xaa"
 SUFFIX_VALUE = 0x0000AA55
 SUFFIX_BIN = b"\x00\x00\xaaU"
+NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH ]
 
 # Tuya Packet Format
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
@@ -197,15 +202,16 @@ class AESCipher(object):
         self.bs = 16
         self.key = key
 
-    def encrypt(self, raw, use_base64=True):
+    def encrypt(self, raw, use_base64=True, pad=True):
         if Crypto:
-            raw = self._pad(raw)
+            if pad: raw = self._pad(raw)
             cipher = AES.new(self.key, mode=AES.MODE_ECB)
             crypted_text = cipher.encrypt(raw)
         else:
             _ = self._pad(raw)
             cipher = pyaes.blockfeeder.Encrypter(
-                pyaes.AESModeOfOperationECB(self.key)
+                pyaes.AESModeOfOperationECB(self.key),
+                pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE
             )  # no IV, auto pads to 16
             crypted_text = cipher.feed(raw)
             crypted_text += cipher.feed()  # flush final block
@@ -273,8 +279,9 @@ def set_debug(toggle=True, color=True):
     else:
         log.setLevel(logging.NOTSET)
 
-def pack_message(msg):
+def pack_message(msg,hmac=None):
     """Pack a TuyaMessage into bytes."""
+    end_fmt = MESSAGE_END_FMT_HMAC if hmac else MESSAGE_END_FMT
     # Create full message excluding CRC and suffix
     buffer = (
         struct.pack(
@@ -282,22 +289,28 @@ def pack_message(msg):
             PREFIX_VALUE,
             msg.seqno,
             msg.cmd,
-            len(msg.payload) + struct.calcsize(MESSAGE_END_FMT),
+            len(msg.payload) + struct.calcsize(end_fmt),
         )
         + msg.payload
     )
+    if hmac:
+        cipher = AESCipher(hmac)
+        crc = cipher.hmac(buffer)
+    else:
+        crc = binascii.crc32(buffer) & 0xFFFFFFFF
     # Calculate CRC, add it together with suffix
     buffer += struct.pack(
-        MESSAGE_END_FMT, binascii.crc32(buffer) & 0xFFFFFFFF, SUFFIX_VALUE
+        end_fmt, crc, SUFFIX_VALUE
     )
     return buffer
 
-def unpack_message(data, header=None):
+def unpack_message(data, hmac=None, header=None):
     """Unpack bytes into a TuyaMessage."""
+    end_fmt = MESSAGE_END_FMT_HMAC if hmac else MESSAGE_END_FMT
     # 4-word header plus return code
     header_len = struct.calcsize(MESSAGE_HEADER_FMT)
     retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
-    end_len = struct.calcsize(MESSAGE_END_FMT)
+    end_len = struct.calcsize(end_fmt)
     headret_len = header_len + retcode_len
 
     if len(data) < headret_len+end_len:
@@ -313,14 +326,22 @@ def unpack_message(data, header=None):
 
     retcode = struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
     payload = data[headret_len:headret_len+header.length]
-    crc, suffix = struct.unpack(MESSAGE_END_FMT, payload[-end_len:])
-    have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
+    crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
+
+    if hmac:
+        cipher = AESCipher(hmac)
+        have_crc = cypher.hmac(data[:(header_len+header.length)-end_len])
+    else:
+        have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
     if suffix != SUFFIX_VALUE:
         log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
 
     if crc != have_crc:
-        log.debug('CRC wrong! %08X != %08X', have_crc, crc)
+        if hmac:
+            log.debug('HMAC checksum wrong! %r != %r', binascii.hexlify(have_crc), binascii.hexlify(crc))
+        else:
+            log.debug('CRC wrong! %08X != %08X', have_crc, crc)
 
     return TuyaMessage(header.seqno, header.cmd, retcode, payload[:-end_len], crc)
 
@@ -403,6 +424,12 @@ payload_dict = {
             "command": {"devId": "", "uid": "", "t": ""},
         },
     },
+    "v3.4": {
+        CONTROL: {
+            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
+            "command": {"ctype": 0, "gwId": "", "devId": "", "uid": "", "t": ""},
+            }
+    }
 }
 
 
@@ -430,8 +457,8 @@ class XenonDevice(object):
         self.address = address
         self.local_key = local_key
         self.local_key = local_key.encode("latin1")
+        self.real_local_key = self.local_key
         self.connection_timeout = connection_timeout
-        self.version = 3.1
         self.retry = True
         self.dev_type = dev_type
         self.disabledetect = False  # if True do not detect device22
@@ -452,13 +479,10 @@ class XenonDevice(object):
                 log.debug("Unable to find device on network (specify IP address)")
                 raise Exception("Unable to find device on network (specify IP address)")
             self.address = addr
-            if ver == "3.3":
-                self.version = 3.3
-            if ver == "3.2": # 3.2 behaves like 3.3 with device22
-                self.version = 3.3  
-                self.dev_type="device22"
-                self.detect_available_dps()
+            self.set_version(float(ver))
             time.sleep(0.5)
+        else:
+            self.set_version(3.1)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -487,6 +511,8 @@ class XenonDevice(object):
                 try:
                     retries = retries + 1
                     self.socket.connect((self.address, self.port))
+                    if self.version == 3.4:
+                        self._negotiate_session_key()
                     return True
                 except socket.timeout as err:
                     # unable to open socket
@@ -558,7 +584,7 @@ class XenonDevice(object):
         log.debug("received data=%r", binascii.hexlify(data))
         return unpack_message(data, header=header)
 
-    def _send_receive(self, payload, minresponse=28, getresponse=True):
+    def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True):
         """
         Send single buffer `payload` and receive a single buffer.
 
@@ -682,6 +708,9 @@ class XenonDevice(object):
             log.debug("raw unpacked message = %r", msg)
             return None
 
+        if not decode_response:
+            return msg
+
         # option - decode Message with hard coded offsets
         # result = self._decode_payload(data[20:-8])
 
@@ -720,13 +749,11 @@ class XenonDevice(object):
             # Decrypt payload
             # Remove 16-bytes of MD5 hexdigest of payload
             payload = cipher.decrypt(payload[16:])
-        elif self.version == 3.3:
+        elif self.version >= 3.3: # 3.3 or 3.4
             # Trim header for non-default device type
-            if self.dev_type != "default" or payload.startswith(
-                PROTOCOL_VERSION_BYTES_33
-            ):
-                payload = payload[len(PROTOCOL_33_HEADER) :]
-                log.debug("removing 3.3=%r", payload)
+            if payload.startswith( self.version_bytes ):
+                payload = payload[len(self.version_header) :]
+                log.debug("removing 3.x=%r", payload)
             try:
                 log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
@@ -734,7 +761,7 @@ class XenonDevice(object):
                 log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
                 return error_json(ERR_PAYLOAD)
 
-            log.debug("decrypted 3.3 payload=%r", payload)
+            log.debug("decrypted 3.x payload=%r", payload)
             # Try to detect if device22 found
             log.debug("payload type = %s", type(payload))
             if not isinstance(payload, str):
@@ -764,6 +791,99 @@ class XenonDevice(object):
         except:
             json_payload = error_json(ERR_JSON, payload)
         return json_payload
+
+    def _negotiate_session_key(self):
+        self.local_session_key = b'0123456789abcdef' # not-so-random random key
+        self.remote_session_key = b''
+        self.local_key = self.real_local_key
+
+        rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_session_key ), decode_response=False )
+        if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) == 0:
+            # error
+            log.debug("session key negotiation failed on step 1", exc_info=True)
+            return None
+
+        if rkey.cmd != SESS_KEY_NEG_RESP:
+            log.debug("session key negotiation step 1 returned wrong command %d", rkey.cmd, exc_info=True)
+            return None
+
+        payload = rkey.payload
+        if payload.startswith( self.version_bytes ):
+            payload = payload[len(self.version_header) :]
+            log.debug("removing 3.x=%r", payload)
+        try:
+            log.debug("decrypting=%r", payload)
+            cipher = AESCipher(self.real_local_key)
+            payload = cipher.decrypt(payload, False)
+        except:
+            log.debug("session key negotiation decrypt failed on step 1, payload=%r (len:%d)", payload, len(payload), exc_info=True)
+            return None
+
+        log.debug("decrypted session key negotiation step 1 payload=%r", payload)
+        log.debug("payload type = %s", type(payload))
+
+        if len(payload) < 48:
+            log.debug("session key negotiation step 1, too short response", exc_info=True)
+            return None
+
+        self.remote_session_key = payload[:16]
+        cipher = AESCipher(self.local_key)
+        hmac_check = cipher.hmac(self.local_session_key)
+
+        if hmac_check != payload[16:48]:
+            log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
+
+        cipher = AESCipher(self.local_key)
+        rkey_hmac = cipher.hmac(self.remote_session_key)
+        self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac ), getresponse=False )
+
+        try:
+            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_session_key,self.remote_session_key) ] )
+        except TypeError: # ugh, python2
+            k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_session_key,self.remote_session_key) ]
+            self.local_key = ''.join(k)
+
+        cipher = AESCipher(self.local_key)
+        self.local_key = cipher.encrypt(self.local_key, False, pad=False)
+
+    def _generate_message( self, cmd, payload ):
+        hmac_key = self.local_key if self.version == 3.4 else None
+        if self.version >= 3.3:
+            # expect to connect and then disconnect to set new
+            self.cipher = AESCipher(self.local_key)
+            payload = self.cipher.encrypt(payload, False)
+            self.cipher = None
+            if cmd not in NO_PROTOCOL_HEADER_CMDS:
+                # add the 3.x header
+                payload = self.version_header + payload
+        elif cmd == CONTROL:
+            # need to encrypt
+            self.cipher = AESCipher(self.local_key)
+            payload = self.cipher.encrypt(payload)
+            preMd5String = (
+                b"data="
+                + payload
+                + b"||lpv="
+                + PROTOCOL_VERSION_BYTES_31
+                + b"||"
+                + self.local_key
+            )
+            m = md5()
+            m.update(preMd5String)
+            hexdigest = m.hexdigest()
+            # some tuya libraries strip 8: to :24
+            payload = (
+                PROTOCOL_VERSION_BYTES_31
+                + hexdigest[8:][:16].encode("latin1")
+                + payload
+            )
+            self.cipher = None
+
+        msg = TuyaMessage(self.seqno, cmd, 0, payload, 0)
+        self.seqno += 1  # increase message sequence number
+        buffer = pack_message(msg,hmac=hmac_key)
+        log.debug("payload generated=%r",binascii.hexlify(buffer))
+        return buffer
 
     def receive(self):
         """
@@ -818,11 +938,15 @@ class XenonDevice(object):
 
     def set_version(self, version):
         self.version = version
+        self.version_bytes = str(version).encode('latin1')
+        self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
         if version == 3.2: # 3.2 behaves like 3.3 with device22
                 self.version = 3.3  
                 self.dev_type="device22"  
                 if self.dps_to_request == {}:
                     self.detect_available_dps()
+        elif version == 3.4:
+            self.dev_type = "v3.4"
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
@@ -990,6 +1114,9 @@ class XenonDevice(object):
         if command_override == CONTROL_NEW:
             json_data["dps"] = self.dps_to_request
 
+        if self.version == 3.4:
+            json_data = {"data": json_data, "protocol": 5, "t": json_data["t"] }
+
         # Create byte buffer from hex data
         payload = json.dumps(json_data)
         # if spaces are not removed device does not respond!
@@ -997,43 +1124,8 @@ class XenonDevice(object):
         payload = payload.encode("utf-8")
         log.debug("building command %s payload=%r", command, payload)
 
-        if self.version == 3.3:
-            # expect to connect and then disconnect to set new
-            self.cipher = AESCipher(self.local_key)
-            payload = self.cipher.encrypt(payload, False)
-            self.cipher = None
-            if command_override != DP_QUERY and command_override != UPDATEDPS:
-                # add the 3.3 header
-                payload = PROTOCOL_33_HEADER + payload
-        elif command == CONTROL:
-            # need to encrypt
-            self.cipher = AESCipher(self.local_key)
-            payload = self.cipher.encrypt(payload)
-            preMd5String = (
-                b"data="
-                + payload
-                + b"||lpv="
-                + PROTOCOL_VERSION_BYTES_31
-                + b"||"
-                + self.local_key
-            )
-            m = md5()
-            m.update(preMd5String)
-            hexdigest = m.hexdigest()
-            # some tuya libraries strip 8: to :24
-            payload = (
-                PROTOCOL_VERSION_BYTES_31
-                + hexdigest[8:][:16].encode("latin1")
-                + payload
-            )
-            self.cipher = None
-
         # create Tuya message packet
-        msg = TuyaMessage(self.seqno, command_override, 0, payload, 0)
-        self.seqno += 1  # increase message sequence number
-        buffer = pack_message(msg)
-        log.debug("payload generated=%r",binascii.hexlify(buffer))
-        return buffer
+        return self._generate_message(command_override, payload)
 
 
 class Device(XenonDevice):
@@ -1042,8 +1134,12 @@ class Device(XenonDevice):
 
     def status(self):
         """Return device status."""
+        if self.version >= 3.4:
+            query_type = DP_QUERY_NEW
+        else:
+            query_type = DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
-        payload = self.generate_payload(DP_QUERY)
+        payload = self.generate_payload(query_type)
 
         data = self._send_receive(payload)
         log.debug("status() received data=%r", data)
@@ -1052,7 +1148,7 @@ class Device(XenonDevice):
             if data["Err"] == str(ERR_DEVTYPE):
                 # Device22 detected and change - resend with new payload
                 log.debug("status() rebuilding payload for device22")
-                payload = self.generate_payload(DP_QUERY)
+                payload = self.generate_payload(query_type)
                 data = self._send_receive(payload)
 
         return data
