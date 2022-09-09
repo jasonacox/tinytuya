@@ -153,12 +153,15 @@ SUFFIX_VALUE = 0x0000AA55
 SUFFIX_BIN = b"\x00\x00\xaaU"
 NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH ]
 
-# Tuya Packet Format
-TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
-TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc")
-
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
+
+# Tuya Packet Format
+TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
+if IS_PY2:
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good")
+else:
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good", defaults=(True,))
 
 # TinyTuya Error Response Codes
 ERR_JSON = 900
@@ -280,9 +283,9 @@ def set_debug(toggle=True, color=True):
     else:
         log.setLevel(logging.NOTSET)
 
-def pack_message(msg,hmac=None):
+def pack_message(msg,hmac_key=None):
     """Pack a TuyaMessage into bytes."""
-    end_fmt = MESSAGE_END_FMT_HMAC if hmac else MESSAGE_END_FMT
+    end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT
     # Create full message excluding CRC and suffix
     buffer = (
         struct.pack(
@@ -294,8 +297,8 @@ def pack_message(msg,hmac=None):
         )
         + msg.payload
     )
-    if hmac:
-        crc = hmac.new(hmac, buffer, sha256).digest()
+    if hmac_key:
+        crc = hmac.new(hmac_key, buffer, sha256).digest()
     else:
         crc = binascii.crc32(buffer) & 0xFFFFFFFF
     # Calculate CRC, add it together with suffix
@@ -304,9 +307,9 @@ def pack_message(msg,hmac=None):
     )
     return buffer
 
-def unpack_message(data, hmac=None, header=None):
+def unpack_message(data, hmac_key=None, header=None):
     """Unpack bytes into a TuyaMessage."""
-    end_fmt = MESSAGE_END_FMT_HMAC if hmac else MESSAGE_END_FMT
+    end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT
     # 4-word header plus return code
     header_len = struct.calcsize(MESSAGE_HEADER_FMT)
     retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
@@ -328,8 +331,8 @@ def unpack_message(data, hmac=None, header=None):
     payload = data[headret_len:headret_len+header.length]
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
 
-    if hmac:
-        have_crc = hmac.new(hmac, data[:(header_len+header.length)-end_len], sha256).digest()
+    if hmac_key:
+        have_crc = hmac.new(hmac_key, data[:(header_len+header.length)-end_len], sha256).digest()
     else:
         have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
@@ -337,12 +340,12 @@ def unpack_message(data, hmac=None, header=None):
         log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
 
     if crc != have_crc:
-        if hmac:
+        if hmac_key:
             log.debug('HMAC checksum wrong! %r != %r', binascii.hexlify(have_crc), binascii.hexlify(crc))
         else:
             log.debug('CRC wrong! %08X != %08X', have_crc, crc)
 
-    return TuyaMessage(header.seqno, header.cmd, retcode, payload[:-end_len], crc)
+    return TuyaMessage(header.seqno, header.cmd, retcode, payload[:-end_len], crc, crc == have_crc)
 
 def parse_header(data):
     header_len = struct.calcsize(MESSAGE_HEADER_FMT)
@@ -438,7 +441,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-        self, dev_id, address, local_key="", dev_type="default", connection_timeout=5
+            self, dev_id, address, local_key="", dev_type="default", connection_timeout=5, version=None
     ):
         """
         Represents a Tuya device.
@@ -480,6 +483,8 @@ class XenonDevice(object):
             self.address = addr
             self.set_version(float(ver))
             time.sleep(0.1)
+        elif version:
+            self.set_version(float(version))
         else:
             self.set_version(3.1)
 
@@ -511,7 +516,8 @@ class XenonDevice(object):
                     retries = retries + 1
                     self.socket.connect((self.address, self.port))
                     if self.version == 3.4:
-                        self._negotiate_session_key()
+                        if not self._negotiate_session_key():
+                            raise Exception('Session key negotiate failed')
                     return True
                 except socket.timeout as err:
                     # unable to open socket
@@ -519,7 +525,9 @@ class XenonDevice(object):
                         "socket unable to connect - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
-                    self.socket.close()
+                    if self.socket:
+                        self.socket.close()
+                    self.socket = None
                     time.sleep(0.1)
                 except Exception as err:
                     # unable to open socket
@@ -527,7 +535,9 @@ class XenonDevice(object):
                         "socket unable to connect - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
-                    self.socket.close()
+                    if self.socket:
+                        self.socket.close()
+                    self.socket = None
                     time.sleep(5)
             # unable to get connection
             return False
@@ -581,7 +591,8 @@ class XenonDevice(object):
             data += self._recv_all(remaining)
 
         log.debug("received data=%r", binascii.hexlify(data))
-        return unpack_message(data, header=header)
+        hmac_key = self.local_key if self.version == 3.4 else None
+        return unpack_message(data, header=header, hmac_key=hmac_key)
 
     def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True):
         """
@@ -800,11 +811,11 @@ class XenonDevice(object):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) == 0:
             # error
             log.debug("session key negotiation failed on step 1", exc_info=True)
-            return None
+            return False
 
         if rkey.cmd != SESS_KEY_NEG_RESP:
-            log.debug("session key negotiation step 1 returned wrong command %d", rkey.cmd, exc_info=True)
-            return None
+            log.debug("session key negotiation step 1 returned wrong command: %d", rkey.cmd, exc_info=True)
+            return False
 
         payload = rkey.payload
         if payload.startswith( self.version_bytes ):
@@ -816,14 +827,14 @@ class XenonDevice(object):
             payload = cipher.decrypt(payload, False)
         except:
             log.debug("session key negotiation decrypt failed on step 1, payload=%r (len:%d)", payload, len(payload), exc_info=True)
-            return None
+            return False
 
         log.debug("decrypted session key negotiation step 1 payload=%r", payload)
         log.debug("payload type = %s", type(payload))
 
         if len(payload) < 48:
             log.debug("session key negotiation step 1, too short response", exc_info=True)
-            return None
+            return False
 
         self.remote_session_key = payload[:16]
         hmac_check = hmac.new(self.local_key, self.local_session_key, sha256).digest()
@@ -842,6 +853,7 @@ class XenonDevice(object):
 
         cipher = AESCipher(self.local_key)
         self.local_key = cipher.encrypt(self.local_key, False, pad=False)
+        return True
 
     def _generate_message( self, cmd, payload ):
         hmac_key = self.local_key if self.version == 3.4 else None
@@ -876,9 +888,9 @@ class XenonDevice(object):
             )
             self.cipher = None
 
-        msg = TuyaMessage(self.seqno, cmd, 0, payload, 0)
+        msg = TuyaMessage(self.seqno, cmd, 0, payload, 0, True)
         self.seqno += 1  # increase message sequence number
-        buffer = pack_message(msg,hmac=hmac_key)
+        buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload generated=%r",binascii.hexlify(buffer))
         return buffer
 
@@ -1126,8 +1138,8 @@ class XenonDevice(object):
 
 
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
-        super(Device, self).__init__(dev_id, address, local_key, dev_type)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=None):
+        super(Device, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def status(self):
         """Return device status."""
