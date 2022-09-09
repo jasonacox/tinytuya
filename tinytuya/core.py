@@ -52,7 +52,8 @@ from __future__ import print_function  # python 2.7 support
 import binascii
 from collections import namedtuple
 import base64
-from hashlib import md5
+from hashlib import md5,sha256
+import hmac
 import json
 import logging
 import socket
@@ -294,8 +295,7 @@ def pack_message(msg,hmac=None):
         + msg.payload
     )
     if hmac:
-        cipher = AESCipher(hmac)
-        crc = cipher.hmac(buffer)
+        crc = hmac.new(hmac, buffer, sha256).digest()
     else:
         crc = binascii.crc32(buffer) & 0xFFFFFFFF
     # Calculate CRC, add it together with suffix
@@ -329,8 +329,7 @@ def unpack_message(data, hmac=None, header=None):
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
 
     if hmac:
-        cipher = AESCipher(hmac)
-        have_crc = cypher.hmac(data[:(header_len+header.length)-end_len])
+        have_crc = hmac.new(hmac, data[:(header_len+header.length)-end_len], sha256).digest()
     else:
         have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
@@ -827,14 +826,12 @@ class XenonDevice(object):
             return None
 
         self.remote_session_key = payload[:16]
-        cipher = AESCipher(self.local_key)
-        hmac_check = cipher.hmac(self.local_session_key)
+        hmac_check = hmac.new(self.local_key, self.local_session_key, sha256).digest()
 
         if hmac_check != payload[16:48]:
             log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
 
-        cipher = AESCipher(self.local_key)
-        rkey_hmac = cipher.hmac(self.remote_session_key)
+        rkey_hmac = hmac.new(self.local_key, self.remote_session_key, sha256).digest()
         self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac ), getresponse=False )
 
         try:
