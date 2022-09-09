@@ -158,10 +158,10 @@ IS_PY2 = sys.version_info[0] == 2
 
 # Tuya Packet Format
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
-if IS_PY2:
-    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good")
-else:
+try:
     TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good", defaults=(True,))
+except:
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good")
 
 # TinyTuya Error Response Codes
 ERR_JSON = 900
@@ -845,11 +845,11 @@ class XenonDevice(object):
         rkey_hmac = hmac.new(self.local_key, self.remote_session_key, sha256).digest()
         self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac ), getresponse=False )
 
-        try:
-            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_session_key,self.remote_session_key) ] )
-        except TypeError: # ugh, python2
+        if IS_PY2:
             k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_session_key,self.remote_session_key) ]
             self.local_key = ''.join(k)
+        else:
+            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_session_key,self.remote_session_key) ] )
 
         cipher = AESCipher(self.local_key)
         self.local_key = cipher.encrypt(self.local_key, False, pad=False)
