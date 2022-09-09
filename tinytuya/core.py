@@ -479,7 +479,7 @@ class XenonDevice(object):
                 raise Exception("Unable to find device on network (specify IP address)")
             self.address = addr
             self.set_version(float(ver))
-            time.sleep(0.5)
+            time.sleep(0.1)
         else:
             self.set_version(3.1)
 
@@ -995,55 +995,55 @@ class XenonDevice(object):
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         client.bind(("", UDPPORT))
-        client.settimeout(TIMEOUT)
+        client.setblocking(False)
         # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
         clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         clients.bind(("", UDPPORTS))
-        clients.settimeout(TIMEOUT)
+        clients.setblocking(False)
 
         count = 0
         counts = 0
-        maxretry = 30
+        maxretry = 180
         ret = (None, None)
 
-        while (count + counts) <= maxretry:
-            if count <= counts:  # alternate between 6666 and 6667 ports
-                count = count + 1
+        while maxretry:
+            maxretry -= 1
+            time.sleep(0.1)
+            while True:
+                data = addr = None
                 try:
                     data, addr = client.recvfrom(4048)
                 except:
                     # Timeout
-                    continue
-            else:
-                counts = counts + 1
+                    try:
+                        data, addr = clients.recvfrom(4048)
+                    except:
+                        # Timeout
+                        break
+                ip = addr[0]
+                gwId = version = ""
+                result = data
                 try:
-                    data, addr = clients.recvfrom(4048)
-                except:
-                    # Timeout
-                    continue
-            ip = addr[0]
-            gwId = version = ""
-            result = data
-            try:
-                result = data[20:-8]
-                try:
-                    result = decrypt_udp(result)
-                except:
-                    result = result.decode()
+                    result = data[20:-8]
+                    try:
+                        result = decrypt_udp(result)
+                    except:
+                        result = result.decode()
 
-                result = json.loads(result)
-                ip = result["ip"]
-                gwId = result["gwId"]
-                version = result["version"]
-            except:
-                result = {"ip": ip}
+                    result = json.loads(result)
+                    ip = result["ip"]
+                    gwId = result["gwId"]
+                    version = result["version"]
+                except:
+                    result = {"ip": ip}
 
-            # Check to see if we are only looking for one device
-            if gwId == did:
-                # We found it!
-                ret = (ip, version)
-                break
+                # Check to see if we are only looking for one device
+                if gwId == did:
+                    # We found it!
+                    ret = (ip, version)
+                    maxretry = False
+                    break
 
         # while
         clients.close()
