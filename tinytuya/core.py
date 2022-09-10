@@ -808,32 +808,29 @@ class XenonDevice(object):
         self.local_key = self.real_local_key
 
         rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_session_key ), decode_response=False )
-        if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) == 0:
+        if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
-            log.debug("session key negotiation failed on step 1", exc_info=True)
+            log.debug("session key negotiation failed on step 1")
             return False
 
         if rkey.cmd != SESS_KEY_NEG_RESP:
-            log.debug("session key negotiation step 1 returned wrong command: %d", rkey.cmd, exc_info=True)
+            log.debug("session key negotiation step 2 returned wrong command: %d", rkey.cmd)
             return False
 
         payload = rkey.payload
-        if payload.startswith( self.version_bytes ):
-            payload = payload[len(self.version_header) :]
-            log.debug("removing 3.x=%r", payload)
         try:
             log.debug("decrypting=%r", payload)
             cipher = AESCipher(self.real_local_key)
             payload = cipher.decrypt(payload, False)
         except:
-            log.debug("session key negotiation decrypt failed on step 1, payload=%r (len:%d)", payload, len(payload), exc_info=True)
+            log.debug("session key negotiation decrypt failed on step 2, payload=%r (len:%d)", payload, len(payload))
             return False
 
-        log.debug("decrypted session key negotiation step 1 payload=%r", payload)
+        log.debug("decrypted session key negotiation step 2 payload=%r", payload)
         log.debug("payload type = %s", type(payload))
 
         if len(payload) < 48:
-            log.debug("session key negotiation step 1, too short response", exc_info=True)
+            log.debug("session key negotiation step 2 failed, too short response")
             return False
 
         self.remote_session_key = payload[:16]
