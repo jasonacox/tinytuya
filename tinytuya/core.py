@@ -759,7 +759,7 @@ class XenonDevice(object):
             # Decrypt payload
             # Remove 16-bytes of MD5 hexdigest of payload
             payload = cipher.decrypt(payload[16:])
-        elif self.version >= 3.3: # 3.3 or 3.4
+        elif self.version >= 3.2: # 3.2 or 3.3 or 3.4
             # Trim header for non-default device type
             if payload.startswith( self.version_bytes ):
                 payload = payload[len(self.version_header) :]
@@ -857,7 +857,7 @@ class XenonDevice(object):
 
     def _generate_message( self, cmd, payload ):
         hmac_key = self.local_key if self.version == 3.4 else None
-        if self.version >= 3.3:
+        if self.version >= 3.2:
             # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
             payload = self.cipher.encrypt(payload, False)
@@ -950,7 +950,7 @@ class XenonDevice(object):
         self.version_bytes = str(version).encode('latin1')
         self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
         if version == 3.2: # 3.2 behaves like 3.3 with device22
-                self.version = 3.3  
+                #self.version = 3.3
                 self.dev_type="device22"  
                 if self.dps_to_request == {}:
                     self.detect_available_dps()
@@ -1143,10 +1143,7 @@ class Device(XenonDevice):
 
     def status(self):
         """Return device status."""
-        if self.version >= 3.4:
-            query_type = DP_QUERY_NEW
-        else:
-            query_type = DP_QUERY
+        query_type = DP_QUERY if self.version < 3.4 else DP_QUERY_NEW
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(query_type)
 
