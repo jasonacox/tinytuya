@@ -696,6 +696,8 @@ class XenonDevice(object):
                     if partial_success:
                         return None
                     # no valid messages received
+                    self.socket.close()
+                    self.socket = None
                     return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
@@ -895,14 +897,27 @@ class XenonDevice(object):
         hmac_key = None
         if self.version == 3.4:
             if check_socket:
+                t1 = None
+                t2 = time.time()
                 if not self.socket:
+                    t1 = time.time()
                     if not self._get_socket(False):
                         raise Exception('Socket connect failed, cannot get session key')
+                    t1 = time.time() - t1
                 if self.real_local_key == self.local_key:
-                    self.socket.settimeout(30)
+                    # the device can be slow to respond at times
+                    # if it retries due to a time-out during key negotiation then the wrong key will be retrieved and further commands will fail
+                    t3 = time.time()
+                    orig_retries = self.socketRetryLimit
+                    self.socketRetryLimit = 0
+                    orig_timeo = self.socket.gettimeout()
+                    if orig_timeo < 10: self.socket.settimeout(10)
                     if not self._negotiate_session_key():
+                        self.socketRetryLimit = orig_retries
                         raise Exception('Session key negotiate failed')
+                    log.debug("sock timeo: %r\n\nconnect time:  %r\nsess key time: %r\ntotal: %r\n" % (orig_timeo, t1, (time.time() - t3), (time.time() - t2)))
                     self.socket.settimeout(self.connection_timeout)
+                    self.socketRetryLimit = orig_retries
             # local_key is updated by _negotiate_session_key()
             hmac_key = self.local_key
 
@@ -1186,7 +1201,10 @@ class XenonDevice(object):
             json_data["dps"] = self.dps_to_request
 
         # Create byte buffer from hex data
-        payload = json.dumps(json_data)
+        if json_data == "":
+            payload = ""
+        else:
+            payload = json.dumps(json_data)
         # if spaces are not removed device does not respond!
         payload = payload.replace(" ", "")
         payload = payload.encode("utf-8")
