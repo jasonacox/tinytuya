@@ -316,12 +316,12 @@ def pack_message(msg,hmac_key=None):
     )
     return buffer
 
-def unpack_message(data, hmac_key=None, header=None):
+def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
     """Unpack bytes into a TuyaMessage."""
     end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT
     # 4-word header plus return code
     header_len = struct.calcsize(MESSAGE_HEADER_FMT)
-    retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
+    retcode_len = 0 if no_retcode else struct.calcsize(MESSAGE_RETCODE_FMT)
     end_len = struct.calcsize(end_fmt)
     headret_len = header_len + retcode_len
 
@@ -336,8 +336,9 @@ def unpack_message(data, hmac_key=None, header=None):
         log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
         raise DecodeError('Not enough data to unpack payload')
 
-    retcode = struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
-    payload = data[headret_len:headret_len+header.length]
+    retcode = 0 if no_retcode else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
+    # the retcode is technically part of the payload, but strip it as we do not want it here
+    payload = data[header_len+retcode_len:header_len+header.length]
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
 
     if hmac_key:
@@ -438,8 +439,9 @@ payload_dict = {
     "v3.4": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
-            "command": {"ctype": 0, "gwId": "", "devId": "", "uid": "", "t": ""},
-            }
+            "command": {"protocol":5, "t": "int", "data": ""}
+            },
+        DP_QUERY: { "command_override": DP_QUERY_NEW },
     }
 }
 
@@ -513,6 +515,9 @@ class XenonDevice(object):
             self.socket.close()
             self.socket = None
         if self.socket is None:
+            if self.version == 3.4:
+                # restart session key negotiation
+                self.local_key = self.real_local_key
             # Set up Socket
             retries = 0
             while retries < self.socketRetryLimit:
@@ -530,19 +535,16 @@ class XenonDevice(object):
                         "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
-                    if self.socket:
-                        self.socket.close()
-                    self.socket = None
-                    time.sleep(0.1)
                 except Exception as err:
                     # unable to open socket
                     log.debug(
                         "socket unable to connect (exception) - retry %d/%d",
                         retries, self.socketRetryLimit, exc_info=True
                     )
-                    if self.socket:
-                        self.socket.close()
+                if self.socket:
+                    self.socket.close()
                     self.socket = None
+                if retries < self.socketRetryLimit:
                     time.sleep(5)
             # unable to get connection
             return False
@@ -744,7 +746,7 @@ class XenonDevice(object):
             if result is None:
                 log.debug("_decode_payload() failed!")
         except:
-            log.debug("error unpacking or decoding tuya JSON payload")
+            log.debug("error unpacking or decoding tuya JSON payload", exc_info=True)
             result = error_json(ERR_PAYLOAD)
 
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
@@ -762,6 +764,18 @@ class XenonDevice(object):
         log.debug("decode payload=%r", payload)
         cipher = AESCipher(self.local_key)
 
+        if self.version == 3.4:
+            # 3.4 devices encrypt the version header in addition to the payload
+            try:
+                log.debug("decrypting=%r", payload)
+                payload = cipher.decrypt(payload, False, decode_text=False)
+            except:
+                log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                return error_json(ERR_PAYLOAD)
+
+            log.debug("decrypted 3.x payload=%r", payload)
+            log.debug("payload type = %s", type(payload))
+
         if payload.startswith(PROTOCOL_VERSION_BYTES_31):
             # Received an encrypted payload
             # Remove version header
@@ -777,16 +791,19 @@ class XenonDevice(object):
             elif self.dev_type == "device22" and (len(payload) & 0x0F) != 0:
                 payload = payload[len(self.version_header) :]
                 log.debug("removing device22 3.x header=%r", payload)
-            try:
-                log.debug("decrypting=%r", payload)
-                payload = cipher.decrypt(payload, False)
-            except:
-                log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
-                return error_json(ERR_PAYLOAD)
 
-            log.debug("decrypted 3.x payload=%r", payload)
-            # Try to detect if device22 found
-            log.debug("payload type = %s", type(payload))
+            if self.version != 3.4:
+                try:
+                    log.debug("decrypting=%r", payload)
+                    payload = cipher.decrypt(payload, False)
+                except:
+                    log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                    return error_json(ERR_PAYLOAD)
+
+                log.debug("decrypted 3.x payload=%r", payload)
+                # Try to detect if device22 found
+                log.debug("payload type = %s", type(payload))
+
             if not isinstance(payload, str):
                 try:
                     payload = payload.decode()
@@ -813,6 +830,11 @@ class XenonDevice(object):
             json_payload = json.loads(payload)
         except:
             json_payload = error_json(ERR_JSON, payload)
+
+        # v3.4 stuffs it into {"data":{"dps":{"1":true}}, ...}
+        if "dps" not in json_payload and "data" in json_payload and "dps" in json_payload['data']:
+            json_payload['dps'] = json_payload['data']['dps']
+
         return json_payload
 
     def _negotiate_session_key(self):
@@ -820,7 +842,7 @@ class XenonDevice(object):
         self.remote_nonce = b''
         self.local_key = self.real_local_key
 
-        rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_nonce ), decode_response=False )
+        rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_nonce, check_socket=False ), decode_response=False )
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
             log.debug("session key negotiation failed on step 1")
@@ -855,7 +877,7 @@ class XenonDevice(object):
         log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
 
         rkey_hmac = hmac.new(self.local_key, self.remote_nonce, sha256).digest()
-        self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac ), getresponse=False )
+        self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac, check_socket=False ), getresponse=False )
 
         if IS_PY2:
             k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_nonce,self.remote_nonce) ]
@@ -869,17 +891,30 @@ class XenonDevice(object):
         log.debug("Session key negotiate success! session key: %r", self.local_key)
         return True
 
-    def _generate_message( self, cmd, payload ):
+    def _generate_message( self, cmd, payload, check_socket=True ):
         hmac_key = None
         if self.version == 3.4:
-            if not self.socket:
-                if not self._get_socket(False):
-                    raise Exception('Socket connect failed, cannot get session key')
-                if not self._negotiate_session_key():
-                    raise Exception('Session key negotiate failed')
+            if check_socket:
+                if not self.socket:
+                    if not self._get_socket(False):
+                        raise Exception('Socket connect failed, cannot get session key')
+                if self.real_local_key == self.local_key:
+                    self.socket.settimeout(30)
+                    if not self._negotiate_session_key():
+                        raise Exception('Session key negotiate failed')
+                    self.socket.settimeout(self.connection_timeout)
+            # local_key is updated by _negotiate_session_key()
             hmac_key = self.local_key
 
-        if self.version >= 3.2:
+        if self.version == 3.4:
+            if cmd not in NO_PROTOCOL_HEADER_CMDS:
+                # add the 3.x header
+                payload = self.version_header + payload
+            log.debug('final payload: %r', payload)
+            self.cipher = AESCipher(self.local_key)
+            payload = self.cipher.encrypt(payload, False)
+            self.cipher = None
+        elif self.version >= 3.2:
             # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
             payload = self.cipher.encrypt(payload, False)
@@ -1135,18 +1170,20 @@ class XenonDevice(object):
             else:
                 json_data["uid"] = self.id
         if "t" in json_data:
-            json_data["t"] = str(int(time.time()))
+            if json_data['t'] == "int":
+                json_data["t"] = int(time.time())
+            else:
+                json_data["t"] = str(int(time.time()))
 
         if data is not None:
             if "dpId" in json_data:
                 json_data["dpId"] = data
+            elif "data" in json_data:
+                json_data["data"] = {"dps": data}
             else:
                 json_data["dps"] = data
-        if command_override == CONTROL_NEW:
+        elif self.dev_type == "device22" and command == DP_QUERY:
             json_data["dps"] = self.dps_to_request
-
-        if self.version == 3.4:
-            json_data = {"data": json_data, "protocol": 5, "t": json_data["t"] }
 
         # Create byte buffer from hex data
         payload = json.dumps(json_data)
@@ -1165,7 +1202,7 @@ class Device(XenonDevice):
 
     def status(self):
         """Return device status."""
-        query_type = DP_QUERY if self.version < 3.4 else DP_QUERY_NEW
+        query_type = DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(query_type)
 
