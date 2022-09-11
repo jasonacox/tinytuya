@@ -225,31 +225,40 @@ class AESCipher(object):
         else:
             return crypted_text
 
-    def decrypt(self, enc, use_base64=True):
+    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False):
         if use_base64:
             enc = base64.b64decode(enc)
+
+        if len(enc) % 16 != 0:
+            raise ValueError("invalid length")
 
         if Crypto:
             cipher = AES.new(self.key, AES.MODE_ECB)
             raw = cipher.decrypt(enc)
-            return self._unpad(raw).decode("utf-8")
-
+            raw = self._unpad(raw, verify_padding)
+            return raw.decode("utf-8") if decode_text else raw
         else:
             cipher = pyaes.blockfeeder.Decrypter(
-                pyaes.AESModeOfOperationECB(self.key)
+                pyaes.AESModeOfOperationECB(self.key),
+                pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
             )  # no IV, auto pads to 16
-            plain_text = cipher.feed(enc)
-            plain_text += cipher.feed()  # flush final block
-            return plain_text
+            raw = cipher.feed(enc)
+            raw += cipher.feed()  # flush final block
+            if verify_padding: raw = self._unpad(raw, verify_padding)
+            return raw.decode("utf-8") if decode_text else raw
 
     def _pad(self, s):
         padnum = self.bs - len(s) % self.bs
         return s + padnum * chr(padnum).encode()
 
     @staticmethod
-    def _unpad(s):
-        return s[: -ord(s[len(s) - 1 :])]
-
+    def _unpad(s, verify_padding=False):
+        padlen = ord(s[-1:])
+        if padlen < 1 or padlen > 16:
+            raise ValueError("invalid padding length byte")
+        if verify_padding and s[-padlen:] != (padlen * chr(padlen).encode()):
+            raise ValueError("invalid padding data")
+        return s[:-padlen]
 
 # Misc Helpers
 def bin2hex(x, pretty=False):
@@ -457,7 +466,6 @@ class XenonDevice(object):
 
         self.id = dev_id
         self.address = address
-        self.local_key = local_key
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
         self.connection_timeout = connection_timeout
@@ -471,7 +479,7 @@ class XenonDevice(object):
         self.socketRetryLimit = 5
         self.cipher = AESCipher(self.local_key)
         self.dps_to_request = {}
-        self.seqno = 0
+        self.seqno = 1
         self.sendWait = 0.01
         self.dps_cache = {}
         if address is None or address == "Auto" or address == "0.0.0.0":
@@ -515,14 +523,11 @@ class XenonDevice(object):
                 try:
                     retries = retries + 1
                     self.socket.connect((self.address, self.port))
-                    if self.version == 3.4:
-                        if not self._negotiate_session_key():
-                            raise Exception('Session key negotiate failed')
                     return True
                 except socket.timeout as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d",
+                        "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
                     if self.socket:
@@ -532,8 +537,8 @@ class XenonDevice(object):
                 except Exception as err:
                     # unable to open socket
                     log.debug(
-                        "socket unable to connect - retry %d/%d",
-                        retries, self.socketRetryLimit
+                        "socket unable to connect (exception) - retry %d/%d",
+                        retries, self.socketRetryLimit, exc_info=True
                     )
                     if self.socket:
                         self.socket.close()
@@ -551,10 +556,12 @@ class XenonDevice(object):
         while length > 0:
             newdata = self.socket.recv(length)
             if not newdata or len(newdata) == 0:
+                log.debug("_recv_all(): no data? %r", newdata)
                 # connection closed?
                 tries -= 1
                 if tries == 0:
                     raise DecodeError('No data received - connection closed?')
+                time.sleep(0.1)
                 continue
             data += newdata
             length -= len(newdata)
@@ -622,6 +629,7 @@ class XenonDevice(object):
             # send request to device
             try:
                 if payload is not None and do_send:
+                    log.debug("sending payload")
                     self.socket.sendall(payload)
                     time.sleep(self.sendWait)  # give device time to respond
                 if getresponse is True:
@@ -676,7 +684,8 @@ class XenonDevice(object):
                     return json_payload
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                self._get_socket(True)
+                if self.version != 3.4:
+                    self._get_socket(True)
             except DecodeError as err:
                 log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
@@ -709,7 +718,8 @@ class XenonDevice(object):
                     return json_payload
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                self._get_socket(True)
+                if self.version != 3.4:
+                    self._get_socket(True)
             # except
         # while
 
@@ -803,11 +813,11 @@ class XenonDevice(object):
         return json_payload
 
     def _negotiate_session_key(self):
-        self.local_session_key = b'0123456789abcdef' # not-so-random random key
-        self.remote_session_key = b''
+        self.local_nonce = b'0123456789abcdef' # not-so-random random key
+        self.remote_nonce = b''
         self.local_key = self.real_local_key
 
-        rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_session_key ), decode_response=False )
+        rkey = self._send_receive( self._generate_message( SESS_KEY_NEG_START, self.local_nonce ), decode_response=False )
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
             log.debug("session key negotiation failed on step 1")
@@ -821,39 +831,51 @@ class XenonDevice(object):
         try:
             log.debug("decrypting=%r", payload)
             cipher = AESCipher(self.real_local_key)
-            payload = cipher.decrypt(payload, False)
+            payload = cipher.decrypt(payload, False, decode_text=False)
         except:
-            log.debug("session key negotiation decrypt failed on step 2, payload=%r (len:%d)", payload, len(payload))
+            log.debug("session key step 2 decrypt failed, payload=%r (len:%d)", payload, len(payload), exc_info=True)
             return False
 
         log.debug("decrypted session key negotiation step 2 payload=%r", payload)
-        log.debug("payload type = %s", type(payload))
+        log.debug("payload type = %s len = %d", type(payload), len(payload))
 
         if len(payload) < 48:
             log.debug("session key negotiation step 2 failed, too short response")
             return False
 
-        self.remote_session_key = payload[:16]
-        hmac_check = hmac.new(self.local_key, self.local_session_key, sha256).digest()
+        self.remote_nonce = payload[:16]
+        hmac_check = hmac.new(self.local_key, self.local_nonce, sha256).digest()
 
         if hmac_check != payload[16:48]:
             log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
 
-        rkey_hmac = hmac.new(self.local_key, self.remote_session_key, sha256).digest()
+        log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
+
+        rkey_hmac = hmac.new(self.local_key, self.remote_nonce, sha256).digest()
         self._send_receive( self._generate_message( SESS_KEY_NEG_FINISH, rkey_hmac ), getresponse=False )
 
         if IS_PY2:
-            k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_session_key,self.remote_session_key) ]
+            k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_nonce,self.remote_nonce) ]
             self.local_key = ''.join(k)
         else:
-            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_session_key,self.remote_session_key) ] )
+            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_nonce,self.remote_nonce) ] )
+        log.debug("Session nonce XOR'd: %r" % self.local_key)
 
-        cipher = AESCipher(self.local_key)
+        cipher = AESCipher(self.real_local_key)
         self.local_key = cipher.encrypt(self.local_key, False, pad=False)
+        log.debug("Session key negotiate success! session key: %r", self.local_key)
         return True
 
     def _generate_message( self, cmd, payload ):
-        hmac_key = self.local_key if self.version == 3.4 else None
+        hmac_key = None
+        if self.version == 3.4:
+            if not self.socket:
+                if not self._get_socket(False):
+                    raise Exception('Socket connect failed, cannot get session key')
+                if not self._negotiate_session_key():
+                    raise Exception('Session key negotiate failed')
+            hmac_key = self.local_key
+
         if self.version >= 3.2:
             # expect to connect and then disconnect to set new
             self.cipher = AESCipher(self.local_key)
