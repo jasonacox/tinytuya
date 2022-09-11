@@ -774,6 +774,9 @@ class XenonDevice(object):
             if payload.startswith( self.version_bytes ):
                 payload = payload[len(self.version_header) :]
                 log.debug("removing 3.x=%r", payload)
+            elif self.dev_type == "device22" and (len(payload) & 0x0F) != 0:
+                payload = payload[len(self.version_header) :]
+                log.debug("removing device22 3.x header=%r", payload)
             try:
                 log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False)
