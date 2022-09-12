@@ -625,8 +625,11 @@ class XenonDevice(object):
             self._check_socket_close(True)
             return None
         while recv_retries:
-            msg = self._receive()
-            if  msg and len(msg.payload) != 0:
+            try:
+                msg = self._receive()
+            except:
+                msg = None
+            if msg and len(msg.payload) != 0:
                 return msg
             recv_retries -= 1
             if recv_retries == 0:
