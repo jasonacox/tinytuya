@@ -79,7 +79,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 6, 6)
+version_tuple = (1, 7, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -518,6 +518,7 @@ class XenonDevice(object):
             if self.version == 3.4:
                 # restart session key negotiation
                 self.local_key = self.real_local_key
+                self.socketPersistent = True
             # Set up Socket
             retries = 0
             while retries < self.socketRetryLimit:
