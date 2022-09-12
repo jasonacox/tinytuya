@@ -496,6 +496,10 @@ class XenonDevice(object):
             time.sleep(0.1)
         elif version:
             self.set_version(float(version))
+        else:
+            # make sure we call our set_version() and not a subclass since some of
+            # them (such as BulbDevice) make connections when called
+            XenonDevice.set_version(self, 3.1)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
