@@ -518,7 +518,6 @@ class XenonDevice(object):
             if self.version == 3.4:
                 # restart session key negotiation
                 self.local_key = self.real_local_key
-                self.socketPersistent = True
             # Set up Socket
             retries = 0
             while retries < self.socketRetryLimit:
@@ -913,12 +912,19 @@ class XenonDevice(object):
                     self.socketRetryLimit = 0
                     orig_timeo = self.socket.gettimeout()
                     if orig_timeo < 10: self.socket.settimeout(10)
+                    # non-persistent sockets cannot be closed quite yet
+                    orig_persistent = self.socketPersistent
+                    self.socketPersistent = True
+                    if orig_timeo < 10: self.socket.settimeout(10)
                     if not self._negotiate_session_key():
                         self.socketRetryLimit = orig_retries
+                        self.set_socketPersistent( orig_persistent ) # will close it for us if needed
                         raise Exception('Session key negotiate failed')
                     log.debug("sock timeo: %r\n\nconnect time:  %r\nsess key time: %r\ntotal: %r\n" % (orig_timeo, t1, (time.time() - t3), (time.time() - t2)))
                     self.socket.settimeout(self.connection_timeout)
                     self.socketRetryLimit = orig_retries
+                    # if it is non-persistent then it will be closed the next time through _send_receive()
+                    self.socketPersistent = orig_persistent
             # local_key is updated by _negotiate_session_key()
             hmac_key = self.local_key
 
