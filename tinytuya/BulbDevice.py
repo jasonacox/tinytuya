@@ -229,7 +229,7 @@ class BulbDevice(Device):
             Type B has keys 20-29
             Type C is Feit type bulbs from costco
         """
-        self.version = version
+        super(BulbDevice, self).set_version(version)
 
         # Try to determine type of BulbDevice Type based on DPS indexes
         status = self.status()

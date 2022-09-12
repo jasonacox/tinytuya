@@ -496,7 +496,8 @@ class XenonDevice(object):
         elif version:
             self.set_version(float(version))
         else:
-            self.set_version(3.1)
+            # make sure we call our set_version() and not a subclass
+            XenonDevice.set_version(self, 3.1)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
