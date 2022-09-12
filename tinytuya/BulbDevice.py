@@ -114,8 +114,8 @@ class BulbDevice(Device):
     has_colourtemp = False
     has_colour = False
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
-        super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=None):
+        super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):

@@ -81,8 +81,8 @@ class DoorbellDevice(Device):
         "169": "motion_area",         # String ["maxlen":255]
     }
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
-        super(DoorbellDevice, self).__init__(dev_id, address, local_key, dev_type)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
+        super(DoorbellDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def set_basic_indicator(self, val=True, nowait=False):
         """ Set the basic incicator """

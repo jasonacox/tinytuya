@@ -453,7 +453,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address, local_key="", dev_type="default", connection_timeout=5, version=None
+            self, dev_id, address, local_key="", dev_type="default", connection_timeout=5, version=3.1
     ):
         """
         Represents a Tuya device.
@@ -496,9 +496,6 @@ class XenonDevice(object):
             time.sleep(0.1)
         elif version:
             self.set_version(float(version))
-        else:
-            # make sure we call our set_version() and not a subclass
-            XenonDevice.set_version(self, 3.1)
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -1220,7 +1217,7 @@ class XenonDevice(object):
 
 
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=None):
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
         super(Device, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def status(self):

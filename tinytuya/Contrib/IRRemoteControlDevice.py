@@ -95,9 +95,8 @@ class IRRemoteControlDevice(Device):
     NSDP_HEAD = "head"             # Actually used but not documented
     NSDP_KEY1 = "key1"             # Actually used but not documented
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True):
-        super(IRRemoteControlDevice, self).__init__(dev_id, address, local_key, dev_type)
-        self.set_version(3.3)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True, version=3.3):
+        super(IRRemoteControlDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def receive_button( self, timeout ):
         log.debug("Receiving button")
