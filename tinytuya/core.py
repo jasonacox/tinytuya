@@ -1034,6 +1034,8 @@ class XenonDevice(object):
                     self.detect_available_dps()
         elif version == 3.4:
             self.dev_type = "v3.4"
+        elif self.dev_type = "v3.4":
+            self.dev_type = "default"
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
