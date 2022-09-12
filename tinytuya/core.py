@@ -556,6 +556,11 @@ class XenonDevice(object):
         # existing socket active
         return True
 
+    def _check_socket_close(self, force=False):
+        if (force or not self.socketPersistent) and self.socket:
+            self.socket.close()
+            self.socket = None
+
     def _recv_all(self, length):
         tries = 2
         data = b''
@@ -617,9 +622,7 @@ class XenonDevice(object):
         try:
             self.socket.sendall(enc_payload)
         except:
-            if self.socket:
-                self.socket.close()
-                self.socket = None
+            self._check_socket_close(True)
             return None
         while recv_retries:
             msg = self._receive()
@@ -654,9 +657,7 @@ class XenonDevice(object):
             # open up socket if device is available
             if not self._get_socket(False):
                 # unable to get a socket - device likely offline
-                if self.socket is not None:
-                    self.socket.close()
-                self.socket = None
+                self._check_socket_close(True)
                 return error_json(ERR_OFFLINE)
             # send request to device
             try:
@@ -682,11 +683,9 @@ class XenonDevice(object):
                     else:
                         success = True
                         log.debug("received message=%r", msg)
-                # legacy/default mode avoids persisting socket across commands
-                if (not self.socketPersistent) and (success or not getresponse):
-                    self.socket.close()
-                    self.socket = None
                 if not getresponse:
+                    # legacy/default mode avoids persisting socket across commands
+                    self._check_socket_close()
                     return None
             except (KeyboardInterrupt, SystemExit) as err:
                 log.debug("Keyboard Interrupt - Exiting")
@@ -695,18 +694,17 @@ class XenonDevice(object):
                 # a socket timeout occurred
                 if payload is None:
                     # Receive only mode - return None
+                    self._check_socket_close()
                     return None
                 do_send = True
                 retries += 1
+                self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
                     retries, self.socketRetryLimit
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
-                    if self.socket is not None:
-                        self.socket.close()
-                        self.socket = None
                     log.debug(
                         "Exceeded tinytuya retry limit (%s)",
                         self.socketRetryLimit
@@ -718,32 +716,29 @@ class XenonDevice(object):
                     return json_payload
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                if self.version != 3.4:
-                    self._get_socket(True)
+                self._get_socket(True)
             except DecodeError as err:
                 log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
                 if recv_retries > max_recv_retries:
                     # we recieved at least 1 valid message with a null payload, so the send was successful
                     if partial_success:
+                        self._check_socket_close()
                         return None
                     # no valid messages received
-                    self.socket.close()
-                    self.socket = None
+                    self._check_socket_close(True)
                     return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
                 do_send = True
                 retries += 1
+                self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
                     retries, self.socketRetryLimit, exc_info=True
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
-                    if self.socket is not None:
-                        self.socket.close()
-                        self.socket = None
                     log.debug(
                         "Exceeded tinytuya retry limit (%s)",
                         self.socketRetryLimit
@@ -754,10 +749,12 @@ class XenonDevice(object):
                     return json_payload
                 # retry:  wait a bit, toss old socket and get new one
                 time.sleep(0.1)
-                if self.version != 3.4:
-                    self._get_socket(True)
+                self._get_socket(True)
             # except
         # while
+
+        # legacy/default mode avoids persisting socket across commands
+        self._check_socket_close()
 
         # could be None or have a null payload
         if not decode_response:
