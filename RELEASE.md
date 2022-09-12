@@ -1,13 +1,17 @@
 # RELEASE NOTES
 
-## v1.6.7 - Unreleased
+## v1.7.0 - Tuya Protocol v3.4 Device Support - Unreleased
 
+* Add support for v3.4 protocol Tuya devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/179
+* Optimize detect_available_dps() by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/176
+* Update ThermostatDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/174
+* Add Pronto/NEC/Samsung IR code conversion functions to IRRemoteControlDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/173
 * Added DoorbellDevice by @JonesMeUp in https://github.com/jasonacox/tinytuya/issues/162 
 
 ## v1.6.6 - Updated Payload Dictionary and Command List
 
 * PyPI 1.6.6
-* Added support for 3.2 protocol Tuya devices
+* Added support for v3.2 protocol Tuya devices
 * Added SocketDevice by @Felix-Pi in https://github.com/jasonacox/tinytuya/pull/167
 * Skip DPS detection for 3.2 protocol devices if it has already been set by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/169
 
