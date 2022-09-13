@@ -262,9 +262,8 @@ class ThermostatDevice(Device):
         '130': { 'name': 'weather_forcast' }
         }
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True):
-        super(ThermostatDevice, self).__init__(dev_id, address, local_key, dev_type)
-        self.set_version(3.3)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True, version=3.3):
+        super(ThermostatDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
         # set persistant so we can receive sensor broadcasts
         if persist:
             self.set_socketPersistent(True)
