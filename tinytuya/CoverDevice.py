@@ -60,8 +60,8 @@ class CoverDevice(Device):
         "101": "backlight",
     }
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
-        super(CoverDevice, self).__init__(dev_id, address, local_key, dev_type)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
+        super(CoverDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def open_cover(self, switch=1, nowait=False):
         """Open the cover"""

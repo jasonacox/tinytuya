@@ -50,8 +50,8 @@ class OutletDevice(Device):
         local_key (str, optional): The encryption key. Defaults to None.
     """
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default"):
-        super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type)
+    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
+        super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def set_dimmer(self, percentage=None, value=None, dps_id=3, nowait=False):
         """Set dimmer value
