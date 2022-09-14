@@ -582,7 +582,7 @@ def _print_device_info( result, note, term ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, forceips=None, forceids=None, snapshot=None):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -682,8 +682,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     response_list = {}
     connect_this_round = []
     connect_next_round = []
-    ip_forceips = bool(forceips)
-    ip_forceids = bool(forceids)
+    ip_wantips = bool(wantips)
+    ip_wantids = bool(wantids)
     ip_force_wants_end = False
     ip_scan = False
     ip_scan_running = False
@@ -705,10 +705,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         'tuyadevices': tuyadevices,
     }
 
-    if not forceips:
-        forceips = [] #'172.20.10.3']
-    if not forceids:
-        forceids = [] #['abcdef']
+    if not wantips:
+        wantips = [] #'172.20.10.3']
+    if not wantids:
+        wantids = [] #['abcdef']
 
     if forcescan:
         if verbose:
@@ -921,10 +921,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 else:
                     broadcasted_devices[ip].close()
 
-                if ip in forceips:
-                    forceips.remove(ip)
-                if broadcasted_devices[ip].deviceinfo['gwId'] in forceids:
-                    forceids.remove( broadcasted_devices[ip].deviceinfo['gwId'] )
+                if ip in wantips:
+                    wantips.remove(ip)
+                if broadcasted_devices[ip].deviceinfo['gwId'] in wantids:
+                    wantids.remove( broadcasted_devices[ip].deviceinfo['gwId'] )
 
         for ip in connect_this_round:
             broadcasted_devices[ip].connect()
@@ -932,24 +932,24 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             check_end_time = time.time() + connect_timeout
             if check_end_time > device_end_time: device_end_time = check_end_time
 
-        if (not ip_scan_running) and forceips and scan_end_time <= time.time() and device_end_time <= time.time():
+        if (not ip_scan_running) and wantips and scan_end_time <= time.time() and device_end_time <= time.time():
             if verbose:
-                print("Not all devices were found by broadcast, starting force-scan for missing devices %r" % forceips)
-            scan_ips = (i for i in forceips)
-            forceips = None
+                print("Not all devices were found by broadcast, starting force-scan for missing devices %r" % wantips)
+            scan_ips = (i for i in wantips)
+            wantips = None
             ip_scan_running = True
 
-        if ip_forceids and (not bool(forceips)) and (not bool(forceids)):
+        if ip_wantids and (not bool(wantips)) and (not bool(wantids)):
             if verbose:
                 print('Found all the device IDs we wanted, ending scan early')
-            ip_forceids = False
+            ip_wantids = False
             ip_force_wants_end = True
             scan_end_time = 0
 
-        if ip_forceips and (not bool(forceips)) and (not bool(forceids)):
+        if ip_wantips and (not bool(wantips)) and (not bool(wantids)):
             if verbose:
                 print('Found all the device IPs we wanted, ending scan early')
-            ip_forceips = False
+            ip_wantips = False
             ip_force_wants_end = True
             scan_end_time = 0
             for dev in devicelist:
@@ -1063,10 +1063,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         #if len(ip_list) > 0:
         #    print("\nInvalid Entries:", ip_list)
 
-        if forceips:
-            print('%s%sDid not find %s devices by ip: %r%s' % (term.alert, term.yellow, len(forceips), forceips, term.normal))
-        if forceids:
-            print('%s%sDid not find %s devices by ID: %r%s' % (term.alert, term.yellow, len(forceids), forceids, term.normal))
+        if wantips:
+            print('%s%sDid not find %s devices by ip: %r%s' % (term.alert, term.yellow, len(wantips), wantips, term.normal))
+        if wantids:
+            print('%s%sDid not find %s devices by ID: %r%s' % (term.alert, term.yellow, len(wantids), wantids, term.normal))
 
     if byID:
         k = 'gwId'
@@ -1257,7 +1257,7 @@ def alldevices(color=True, retries=None):
         by_id = [x['id'] for x in tuyadevices]
         # Scan network for devices and provide polling data
         print(term.normal + "\nScanning local network for Tuya devices...")
-        result = devices(verbose=False, poll=True, byID=True, forceids=by_id, show_timer=True)
+        result = devices(verbose=False, poll=True, byID=True, wantids=by_id, show_timer=True)
         print("    %s%s local devices discovered%s" % (term.dim, len(result), term.normal))
         print("")
 
