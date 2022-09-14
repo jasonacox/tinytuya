@@ -83,7 +83,7 @@ def getmyIP():
     s.connect(("8.8.8.8", 80))
     r = s.getsockname()[0]
     s.close()
-    return r
+    return str(r)
 
 def getmyIPs():
     ips = {}
@@ -104,7 +104,7 @@ def getmyIPs():
     return ips.keys()
 
 class DeviceDetect():
-    def __init__(self):
+    def __init__(self, deviceinfo):
         self.ip = None
         self.deviceinfo = None
         self.device = None
@@ -118,6 +118,14 @@ class DeviceDetect():
         self.write = False
         self.remove = False
         self.timeo = 0
+
+        if not deviceinfo:
+            deviceinfo = []
+        self.deviceinfo = deviceinfo
+        for k in devinfo_keys:
+            if k not in deviceinfo:
+                self.deviceinfo[k] = None
+
 
     def connect( self ):
         if self.debug:
@@ -211,8 +219,8 @@ class DeviceDetect():
 
 
 class ForceScannedDevice(DeviceDetect):
-    def __init__( self, ip, options, debug ):
-        super(ForceScannedDevice, self).__init__()
+    def __init__( self, ip, deviceinfo, options, debug ):
+        super(ForceScannedDevice, self).__init__( deviceinfo )
         self.ip = ip
         self.options = options
         self.debug = debug
@@ -271,12 +279,7 @@ class ForceScannedDevice(DeviceDetect):
         self.timeo = time.time() + self.options['data_timeout']
         self.scanned = True
         self.write = False
-        self.deviceinfo = {}
         mac = get_mac_address(ip=self.ip,network_request=False) if SCANLIBS else None
-
-        for k in devinfo_keys:
-            self.deviceinfo[k] = None
-
         self.deviceinfo['ip'] = self.ip
         self.deviceinfo['mac'] = mac
         log.debug("Found Device %s [%s] (total devices: %d)", self.ip, mac, 0) # FIXME
@@ -351,18 +354,13 @@ class ForceScannedDevice(DeviceDetect):
 
 class PollDevice(DeviceDetect):
     def __init__( self, ip, deviceinfo, options, debug ):
-        super(PollDevice, self).__init__()
+        super(PollDevice, self).__init__( deviceinfo )
         self.ip = ip
-        self.deviceinfo = deviceinfo
         self.options = options
         self.debug = debug
         self.broadcasted = True
         self.retries = options['retries']
         self.message = None
-
-        for k in devinfo_keys:
-            if k not in deviceinfo:
-                self.deviceinfo[k] = None
 
     def close(self):
         super(PollDevice, self).close()
@@ -446,7 +444,8 @@ class PollDevice(DeviceDetect):
             data = self.sock.recv( 5000 )
         except:
             if self.retries > 0:
-                print('read_data() failed, retrying', self.ip)
+                if self.options['verbose']:
+                    print('read_data() failed, retrying', self.ip)
                 self.timeout()
                 return
 
@@ -537,7 +536,7 @@ def _generate_ip(networks, verbose, term):
         except:
             log.debug("Unable to get network for %r, ignoring", netblock)
             if verbose:
-                print(alert +
+                print(term.alert +
                     'ERROR: Unable to get network for %r, ignoring.' % netblock + term.normal)
             continue
 
@@ -583,7 +582,7 @@ def _print_device_info( result, note, term ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, forceips=None, forceids=None):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, forceips=None, forceids=None, snapshot=None):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -634,20 +633,25 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         # No Device info
         pass
 
-    # If no scantime value set use default
+    if discover:
+        # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        client.bind(("", UDPPORT))
+        #client.settimeout(TIMEOUT)
+        # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+        clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        clients.bind(("", UDPPORTS))
+        #clients.settimeout(TIMEOUT)
+    else:
+        client = clients = None
+
     if scantime is None:
         scantime = tinytuya.SCANTIME
 
-    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
-    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    client.bind(("", UDPPORT))
-    #client.settimeout(TIMEOUT)
-    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
-    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    clients.bind(("", UDPPORTS))
-    #clients.settimeout(TIMEOUT)
+    if show_timer is None:
+        show_timer = verbose
 
     if verbose:
         print(
@@ -662,10 +666,14 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         )
 
     #debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67'] #,'172.20.10.102', '172.20.10.1']
-    debug_ips = ['172.20.10.67']
+    #debug_ips = ['172.20.10.67']
+    debug_ips = []
+    networks = []
     scanned_devices = {}
     broadcasted_devices = {}
     devicelist = []
+    read_socks = []
+    write_socks = []
     count = 0
     counts = 0
     spinnerx = 0
@@ -708,9 +716,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
         fstype = type(forcescan)
         if fstype != list and fstype != tuple:
-            networks = []
             if not NETIFLIBS:
-                print(alert +
+                print(term.alert +
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
                       '           (Requires: pip install netifaces)\n' + term.dim)
             else:
@@ -718,16 +725,26 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
             if len(networks) == 0:
                 try:
-                    ip = u''+getmyIP()+'/24'
+                    ip = getmyIP()+'/24'
                     networks.append( ip )
                 except:
                     networks.append( u''+DEFAULT_NETWORK )
                     log.debug("Unable to get local network, using default %r", DEFAULT_NETWORK)
                     if verbose:
-                        print(alert +
+                        print(term.alert +
                               'ERROR: Unable to get your IP address and network automatically.'
                               '       (using %s)' % DEFAULT_NETWORK + term.normal)
+        else:
+            for ip in forcescan:
+                networks.append( ip )
 
+    if snapshot:
+        for ip in snapshot:
+            networks.append( ip )
+    else:
+        snapshot = []
+
+    if networks:
         scan_ips = _generate_ip( networks, verbose, term )
         ip_scan = ip_scan_running = True
 
@@ -735,11 +752,16 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if verbose:
             print(term.bold + '\n    Running Scan...' + term.dim)
 
-    print(scan_end_time)
-    print('')
+    # If no scantime value set use default
+    if not scantime:
+        scantime = 0 if ip_scan_running else tinytuya.SCANTIME
 
     while ip_scan_running or scan_end_time > time.time() or device_end_time > time.time() or connect_next_round:
-        read_socks = [client, clients]
+        if client:
+            read_socks = [client, clients]
+        else:
+            read_socks = []
+
         write_socks = []
         all_socks = {}
         remove = []
@@ -800,8 +822,18 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     else:
                         if current_ip in broadcasted_devices:
                             pass
+                        elif current_ip in snapshot and snapshot[current_ip]['version'] and snapshot[current_ip]['gwId']:
+                            ip = current_ip
+                            broadcasted_devices[ip] = PollDevice( ip, snapshot[current_ip], options, ip in debug_ips )
+                            broadcasted_devices[ip].connect()
+                            devicelist.append( broadcasted_devices[ip] )
+                            check_end_time = time.time() + connect_timeout
+                            if check_end_time > device_end_time: device_end_time = check_end_time
                         else:
-                            dev = ForceScannedDevice( current_ip, options, current_ip in debug_ips )
+                            if current_ip in snapshot:
+                                dev = ForceScannedDevice( current_ip, snapshot[current_ip], options, current_ip in debug_ips )
+                            else:
+                                dev = ForceScannedDevice( current_ip, None, options, current_ip in debug_ips )
                             devicelist.append(dev)
                             write_socks.append(dev.sock)
                             all_socks[dev.sock] = dev
@@ -810,9 +842,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         time.sleep(0.02)
                         need_sleep -= 0.02
 
-        if verbose:
-            end_time = scan_end_time if scan_end_time > device_end_time else device_end_time
-            tim = 'FS:'+str(current_ip) if ip_scan_running else str(int(end_time - time.time()))
+        if show_timer:
+            end_time = int((scan_end_time if scan_end_time > device_end_time else device_end_time) - time.time())
+            if end_time < 0: end_time = 0
+            tim = 'FS:'+str(current_ip) if ip_scan_running else str(end_time)
             print("%sScanning... %s (%s)                 \r" % (term.dim, spinner[spinnerx], tim), end="")
             spinnerx = (spinnerx + 1) % 4
             sys.stdout.flush()
@@ -832,12 +865,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
         # these sockets are now writable (just connected) or failed
         for sock in wr:
-            a = time.time()
             all_socks[sock].write_data()
-            b = time.time()
-            if (b - a) > 0.01:
-                print('long wr loop time', (b - a))
-                print(all_socks[sock].deviceinfo)
 
         # these sockets are now have data waiting to be read
         for sock in rd:
@@ -918,7 +946,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             ip_force_wants_end = True
             scan_end_time = 0
 
-        if ip_forceips and (not forceips) and (not forceids):
+        if ip_forceips and (not bool(forceips)) and (not bool(forceids)):
             if verbose:
                 print('Found all the device IPs we wanted, ending scan early')
             ip_forceips = False
@@ -932,6 +960,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         sock.close()
     for sock in write_socks:
         sock.close()
+
+    if client:
+        client.close()
+        clients.close()
 
     if verbose:
         print( 'Scanned in', time.time() - start_time )
@@ -1036,25 +1068,23 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if forceids:
             print('%s%sDid not find %s devices by ID: %r%s' % (term.alert, term.yellow, len(forceids), forceids, term.normal))
 
+    if byID:
+        k = 'gwId'
+    else:
+        k = 'ip'
     devices = {}
     for ip in broadcasted_devices:
-        dev = broadcasted_devices[ip]
-        k = dev.deviceinfo['gwId']
-        devices[k] = dev.deviceinfo
-        if 'ver' not in devices[k]:
-            devices[k]['ver'] = devices[k]['version']
-        if 'id' not in devices[k]:
-            devices[k]['id'] = devices[k]['gwId']
+        dev = broadcasted_devices[ip].deviceinfo
+        dev['ip'] = ip
+        dkey = dev[k]
+        devices[dkey] = dev
 
     for ip in scanned_devices:
-        dev = scanned_devices[ip]
-        k = dev.deviceinfo['gwId']
-        if dev.found and k not in devices:
-            devices[k] = dev.deviceinfo
-            if 'ver' not in devices[k]:
-                devices[k]['ver'] = devices[k]['version']
-            if 'id' not in devices[k]:
-                devices[k]['id'] = devices[k]['gwId']
+        dev = scanned_devices[ip].deviceinfo
+        dev['ip'] = ip
+        dkey = dev[k]
+        if scanned_devices[ip].found and dkey not in devices:
+            devices[dkey] = dev
 
     if verbose:
         # Save polling data into snapshot format
@@ -1073,12 +1103,54 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             outfile.write(output)
 
     log.debug("Scan complete with %s devices found", found_count)
+    return devices
 
-    if byID:
-        return devices
+def _get_gwid( old ):
+    if 'gwId' in old and old['gwId']:
+        return old["gwId"]
+    if 'id' in old and old['id']:
+        return old["id"]
+    return 0
+
+def _build_item( old, new ):
+    item = {}
+    item['id'] = item['gwId'] = _get_gwid( old )
+    ip = ver = 0
+    items = { 'ip':0, 'version':0, 'ver':0, 'name':'', 'key':'', 'mac':None }
+    for itm in items:
+        if new and itm in new and new[itm]:
+            item[itm] = new[itm]
+        elif itm in old and old[itm]:
+            item[itm] = old[itm]
+        else:
+            item[itm] = items[itm]
+    if item['version']:
+        item['ver'] = item['version']
+    elif item['ver']:
+        item['version'] = item['ver']
+    return item
+
+def _display_status( item, dps, term ):
+    name = item['name']
+    ip = item['ip']
+    if not ip:
+        print("    %s[%-25.25s] %sError: No IP found%s" %
+              (term.subbold, name, term.alert, term.normal))
+    elif not dps:
+        print("    %s[%-25.25s] %s%-18s - %sNo Response" %
+              (term.subbold, name, term.dim, ip, term.alert))
     else:
-        return list(devices.values())
-
+        if '1' in dps or '20' in dps:
+            state = term.alertdim + "[Off]" + term.dim
+            if '1' in dps and dps['1'] is True:
+                state = term.bold + "[On] " + term.dim
+            elif '20' in dps and dps['20'] is True:
+                state = term.bold + "[On] " + term.dim
+            print("    %s[%-25.25s] %s%-18s - %s - DPS: %r" %
+                  (term.subbold, name, term.dim, ip, state, dps))
+        else:
+            print("    %s[%-25.25s] %s%-18s - DPS: %r" %
+                  (term.subbold, name, term.dim, ip, dps))
 
 # Scan Devices in tuyascan.json
 def snapshot(color=True):
@@ -1088,96 +1160,61 @@ def snapshot(color=True):
         color = True or False, print output in color [Default: True]
     """
     # Terminal formatting
-    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    termcolors = tinytuya.termcolor(color)
+    term = TermColors( *termcolors )
+
 
     print(
         "\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"
-        % (bold, normal, dim, tinytuya.__version__)
+        % (term.bold, term.normal, term.dim, tinytuya.__version__)
     )
 
     try:
         with open(SNAPSHOTFILE) as json_file:
             data = json.load(json_file)
     except:
-        print("%s ERROR: Missing %s file\n" % (alert, SNAPSHOTFILE))
+        print("%s ERROR: Missing %s file\n" % (term.alert, SNAPSHOTFILE))
         return
 
-    print("%sLoaded %s - %d devices:\n" % (dim, SNAPSHOTFILE, len(data["devices"])))
+    print("%sLoaded %s - %d devices:\n" % (term.dim, SNAPSHOTFILE, len(data["devices"])))
 
     # Print a table with all devices
     table = []
-    print("%s%-25s %-24s %-16s %-17s %-5s" % (normal, "Name","ID", "IP","Key","Version"))
-    print(dim)
-    for idx in sorted(data["devices"], key=lambda x: x['name']):
-        device = idx
-        ver = ip = ""
-        if "ver"  in device:
-            ver = device["ver"]
-        if "ip"  in device:
-            ip = device["ip"]
-        name = device["name"]
-        gwId = device["id"]
-        key = device["key"]
-        print("%s%-25.25s %s%-24s %s%-16s %s%-17s %s%-5s" %
-            (dim, name, cyan, gwId, subbold, ip, red, key, yellow, ver))
-
+    print("%s%-25s %-24s %-18s %-17s %-5s" % (term.normal, "Name","ID", "IP","Key","Version"))
+    print(term.dim)
+    by_ip = {}
     devicesx = sorted(data["devices"], key=lambda x: x['name'])
+    for idx in devicesx:
+        device = _build_item( idx, None )
+        ips = device['ip'] if device['ip'] else (term.alert + "Error: No IP found" + term.normal)
+        print("%s%-25.25s %s%-24s %s%-18s %s%-17s %s%-5s" %
+            (term.dim, device['name'], term.cyan, device['gwId'], term.subbold, ips, term.red, device['key'], term.yellow, device['version']))
+        if device['ip']:
+            by_ip[device['ip']] = device
 
     # Find out if we should poll all devices
-    answer = input(subbold + '\nPoll local devices? ' +
-                   normal + '(Y/n): ')
+    answer = 'y' #input(subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
         print("")
-        print("%sPolling %s local devices from last snapshot..." % (normal, len(devicesx)))
+        print("%sPolling %s local devices from last snapshot..." % (term.normal, len(devicesx)))
+        result = devices(verbose=False, scantime=0, color=color, poll=True, byID=True, discover=False, snapshot=by_ip)
+
         for i in devicesx:
-            item = {}
-            name = i['name']
-            ip = ver = 0
-            if "ip" in i:
-                ip = i['ip']
-            if "ver" in i:
-                ver = i['ver']
-            item['name'] = name
-            item['ip'] = ip
-            item['ver'] = ver
-            item['id'] = i['id']
-            item['key'] = i['key']
-            if ip == 0:
-                print("    %s[%s] - %s%s - %sError: No IP found%s" %
-                      (subbold, name, dim, ip, alert, normal))
+            gwId = _get_gwid( i )
+            if not gwId or gwId not in result:
+                item = _build_item( i, None )
+                _display_status( item, None, term )
             else:
-                try:
-                    d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    d.set_version(float(ver))
-                    data = d.status()
-                    if 'dps' in data:
-                        item['dps'] = data
-                        state = alertdim + "Off" + dim
-                        try:
-                            if '1' in data['dps'] or '20' in data['dps']:
-                                if '1' in data['dps']:
-                                    if data['dps']['1'] is True:
-                                        state = bold + "On" + dim
-                                if '20' in data['dps']:
-                                    if data['dps']['20'] is True:
-                                        state = bold + "On" + dim
-                                print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                    (subbold, name, dim, ip, state, data['dps']))
-                            else:
-                                print("    %s[%s] - %s%s - DPS: %r" %
-                                    (subbold, name, dim, ip, data['dps']))
-                        except:
-                            print("    %s[%s] - %s%s - %sNo Response" %
-                                  (subbold, name, dim, ip, alert))
-                    else:
-                        print("    %s[%s] - %s%s - %sNo Response" %
-                              (subbold, name, dim, ip, alert))
-                except:
-                    print("    %s[%s] - %s%s - %sNo Response" %
-                          (subbold, name, dim, ip, alert))
+                item = _build_item( i, result[gwId] )
+                if 'dps' in result[gwId] and 'dps' in result[gwId]['dps'] and result[gwId]['dps']['dps']:
+                    _display_status( item, result[gwId]['dps']['dps'], term )
+                else:
+                    _display_status( item, None, term )
+
         # for loop
     # if poll
-    print("%s\nDone.\n" % dim)
+    print("%s\nDone.\n" % term.dim)
     return
 
 
@@ -1189,11 +1226,13 @@ def alldevices(color=True, retries=None):
         color = True or False, print output in color [Default: True]
     """
     # Terminal formatting
-    (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
+    termcolors = tinytuya.termcolor(color)
+    term = TermColors( *termcolors )
 
     print(
         "\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"
-        % (bold, normal, dim, tinytuya.__version__)
+        % (term.bold, term.normal, term.dim, tinytuya.__version__)
     )
     # Check to see if we have additional Device info
     try:
@@ -1201,100 +1240,52 @@ def alldevices(color=True, retries=None):
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-            # If no maxretry value set, base it on number of devices
-            if retries is None:
-                retries = len(tuyadevices) + tinytuya.MAXCOUNT
     except:
-        print("%s ERROR: Missing %s file\n" % (alert, DEVICEFILE))
+        print("%s ERROR: Missing %s file\n" % (term.alert, DEVICEFILE))
         return
 
-    print("%sLoaded %s - %d devices:" % (dim, DEVICEFILE, len(tuyadevices)))
+    print("%sLoaded %s - %d devices:" % (term.dim, DEVICEFILE, len(tuyadevices)))
 
     # Display device list
-    print("\n\n" + bold + "Device Listing\n" + dim)
+    print("\n\n" + term.bold + "Device Listing\n" + term.dim)
     output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4)
     print(output)
 
     # Find out if we should poll all devices
-    answer = input(subbold + '\nPoll local devices? ' +
-                   normal + '(Y/n): ')
+    answer = 'y' #input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
-        # Set retries based on number of devices if undefined
-        if retries is None:
-            retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
-
+        by_id = [x['id'] for x in tuyadevices]
         # Scan network for devices and provide polling data
-        print(normal + "\nScanning local network for Tuya devices (retry %d times)..." % retries)
-        allx = devices(False, retries)
-        print("    %s%s local devices discovered%s" %
-              (dim, len(allx), normal))
+        print(term.normal + "\nScanning local network for Tuya devices...")
+        result = devices(verbose=False, poll=True, byID=True, forceids=by_id, show_timer=True)
+        print("    %s%s local devices discovered%s" % (term.dim, len(result), term.normal))
         print("")
-
-        def getIP(d, gwid):
-            for ip in d:
-                if 'gwId' in d[ip]:
-                    if gwid == d[ip]['gwId']:
-                        return (ip, d[ip]['version'])
-            return (0, 0)
 
         polling = []
         print("Polling local devices...")
         # devices = sorted(data["devices"], key=lambda x: x['name'])
-        for i in sorted(tuyadevices, key=lambda x: x['name']):
-            item = {}
-            name = i['name']
-            (ip, ver) = getIP(allx, i['id'])
-            item['name'] = name
-            item['ip'] = ip
-            item['ver'] = ver
-            item['id'] = i['id']
-            item['key'] = i['key']
-            if "mac" in i:
-                item['mac'] = i['mac']
-            if ip == 0:
-                print("    %s[%s] - %s%s - %sError: No IP found%s" %
-                      (subbold, name, dim, ip, alert, normal))
+        for idx in sorted(tuyadevices, key=lambda x: x['name']):
+            gwId = _get_gwid( idx )
+            if gwId and gwId in result:
+                item = _build_item( idx, result[gwId] )
+                if 'dps' in result[gwId] and 'dps' in result[gwId]['dps']:
+                    _display_status( item, result[gwId]['dps']['dps'], term )
+                else:
+                    _display_status( item, None, term )
             else:
-                try:
-                    d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    d.set_version(float(ver))
-                    data = d.status()
-                    if 'dps' in data:
-                        item['dps'] = data
-                        state = alertdim + "Off" + dim
-                        try:
-                            if '1' in data['dps'] or '20' in data['dps']:
-                                if '1' in data['dps']:
-                                    if data['dps']['1'] is True:
-                                        state = bold + "On" + dim
-                                if '20' in data['dps']:
-                                    if data['dps']['20'] is True:
-                                        state = bold + "On" + dim
-                                print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                    (subbold, name, dim, ip, state, data['dps']))
-                            else:
-                                print("    %s[%s] - %s%s - DPS: %r" %
-                                    (subbold, name, dim, ip, data['dps']))
-                        except:
-                            print("    %s[%s] - %s%s - %sNo Response" %
-                                  (subbold, name, dim, ip, alert))
-                    else:
-                        print("    %s[%s] - %s%s - %sNo Response" %
-                              (subbold, name, dim, ip, alert))
-                except:
-                    print("    %s[%s] - %s%s - %sNo Response" %
-                          (subbold, name, dim, ip, alert))
+                item = _build_item( idx, None )
+                _display_status( item, None, term )
             polling.append(item)
         # for loop
 
         # Save polling data snapsot
         current = {'timestamp' : time.time(), 'devices' : polling}
         output = json.dumps(current, indent=4)
-        print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
+        print(term.bold + "\n>> " + term.normal + "Saving device snapshot data to " + SNAPSHOTFILE)
         with open(SNAPSHOTFILE, "w") as outfile:
             outfile.write(output)
 
-    print("%s\nDone.\n" % dim)
+    print("%s\nDone.\n" % term.dim)
     return
 
 
@@ -1314,35 +1305,27 @@ def snapshotjson():
         return
 
     devicesx = sorted(data["devices"], key=lambda x: x['name'])
+    by_ip = {}
+    for idx in devicesx:
+        if 'ip' in idx and idx['ip']:
+            device = _build_item( idx, None )
+            by_ip[idx['ip']] = device
 
-    for i in devicesx:
-        item = {}
-        name = i['name']
-        ip = ver = 0
-        if "ip" in i:
-            ip = i['ip']
-        if "ver" in i:
-            ver = i['ver']
-        item['name'] = name
-        item['ip'] = ip
-        item['ver'] = ver
-        item['id'] = i['id']
-        item['key'] = i['key']
-        if "mac" in i:
-            item['mac'] = i['mac']
-        if ip == 0:
-            item['error'] = "No IP"
+    resp = devices(verbose=False, scantime=0, poll=True, byID=True, discover=False, snapshot=by_ip)
+
+    for idx in devicesx:
+        gwId = _get_gwid( idx )
+
+        if gwId and gwId in resp:
+            item = _build_item( idx, resp[gwId] )
         else:
-            try:
-                d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                d.set_version(float(ver))
-                data = d.status()
-                if 'dps' in data:
-                    item['dps'] = data
-                else:
-                    item['error'] = "No Response"
-            except:
-                item['error'] = "No Response"
+            item = _build_item( idx, None )
+        if not item['ip']:
+            item['error'] = "No IP"
+        elif gwId not in resp or 'dps' not in resp[gwId] or 'dps' not in resp[gwId]['dps'] or not resp[gwId]['dps']['dps']:
+            item['error'] = "No Response"
+        else:
+            item['dps'] = resp[gwId]['dps']['dps']
         polling.append(item)
     # for loop
     current = {'timestamp' : time.time(), 'devices' : polling}
