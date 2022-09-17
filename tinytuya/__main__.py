@@ -24,10 +24,13 @@ state = 0
 color = True
 retriesprovided = False
 force = False
+force_list = []
+last_force = False
 
 for i in sys.argv:
     if i==sys.argv[0]:
         continue
+    this_force = False
     if i.lower() == "wizard":
         state = 1
     elif i.lower() == "scan":
@@ -36,18 +39,27 @@ for i in sys.argv:
         color = False
     elif i.lower() == "-force":
         force = True
+        this_force = True
     elif i.lower() == "snapshot":
         state = 2
     elif i.lower() == "devices":
         state = 3
     elif i.lower() == "json":
         state = 4
+    elif last_force and len(i) > 6:
+        this_force = True
+        force_list.append( i )
     else:
         try:
             retries = int(i)
             retriesprovided = True
         except:
             state = 10
+
+    last_force = this_force
+
+if force and len(force_list) > 0:
+    force = force_list
 
 # State 0 = Run Network Scan
 if state == 0:
@@ -70,7 +82,7 @@ if state == 2:
 # State 3 = Scan All Devices
 if state == 3:
     if retriesprovided:
-        scanner.alldevices(color=color, retries=retries)
+        scanner.alldevices(color=color, scantime=retries)
     else:
         scanner.alldevices(color=color)
 
@@ -82,16 +94,16 @@ if state == 4:
 if state == 10:
     print("TinyTuya [%s]\n" % (tinytuya.version))
     print("Usage:\n")
-    print("    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]")
+    print("    python -m tinytuya <command> [<max_retry>] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
     print("")
     print("      wizard         Launch Setup Wizard to get Tuya Local KEYs.")
     print("      scan           Scan local network for Tuya devices.")
     print("      devices        Scan all devices listed in devices.json file.")
     print("      snapshot       Scan devices listed in snapshot.json file.")
     print("      json           Scan devices listed in snapshot.json file [JSON].")
-    print("      <max_retry>    Maximum number of retries to find Tuya devices [Default=15]")
+    print("      <max_time>     Maximum time to find Tuya devices [Default=%s]" % tinytuya.SCANTIME)
     print("      -nocolor       Disable color text output.")
-    print("      -force         Force network scan for device IP addresses.")
+    print("      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.")
     print("      -h             Show usage.")
     print("")
 
