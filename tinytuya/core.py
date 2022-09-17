@@ -338,7 +338,7 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
         log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
         raise DecodeError('Not enough data to unpack payload')
 
-    retcode = 0 if no_retcode else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])
+    retcode = 0 if no_retcode else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])[0]
     # the retcode is technically part of the payload, but strip it as we do not want it here
     payload = data[header_len+retcode_len:header_len+header.length]
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
