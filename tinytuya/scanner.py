@@ -96,10 +96,11 @@ def getmyIP():
     s.close()
     return str(r)
 
-def getmyIPs():
+def getmyIPs( term, ask ):
     ips = {}
     interfaces = netifaces.interfaces()
     try:
+        # skip the loopback interface
         interfaces.remove('lo')
     except:
         pass
@@ -109,8 +110,17 @@ def getmyIPs():
         family_addresses = addresses.get(netifaces.AF_INET)
         if not family_addresses:
             continue
+
         for address in family_addresses:
             k = str(ipaddress.IPv4Interface(address['addr']+'/'+address['netmask']).network)
+            if k[:4] == '127.':
+                # skip the loopback interface
+                continue
+            if ask:
+                answer = input( '%sScan network %s from interface %s?%s (Y/n): ' % (term.bold, k, str(interface), term.normal) )
+                if answer[0:1].lower() == 'n':
+                    continue
+                print(term.dim + 'Adding Network', k, 'to the force-scan list')
             ips[k] = True
     return ips.keys()
 
@@ -937,7 +947,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     #debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67'] #,'172.20.10.102', '172.20.10.1']
     #debug_ips = ['172.20.10.107']
-    debug_ips = [] #['172.24.5.112']
+    debug_ips = ["10.0.1.36"] #['172.24.5.112']
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
@@ -993,7 +1003,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
                       '           (Requires: pip install netifaces)\n' + term.dim)
             else:
-                networks = getmyIPs()
+                networks = getmyIPs( term, verbose )
 
             if len(networks) == 0:
                 try:
