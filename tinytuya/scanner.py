@@ -367,7 +367,7 @@ class ForceScannedDevice(DeviceDetect):
         elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE:
             if not forced:
                 # actual timeout, connect failed
-                if self.retries == 0:
+                if self.retries < 2:
                     self.retries += 1
                     self.connect()
                 else:
@@ -1002,10 +1002,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 print(term.alert +
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
                       '           (Requires: pip install netifaces)\n' + term.dim)
-            else:
-                networks = getmyIPs( term, verbose )
-
-            if len(networks) == 0:
                 try:
                     ip = getmyIP()+'/24'
                     networks.append( ip )
@@ -1016,6 +1012,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         print(term.alert +
                               'ERROR: Unable to get your IP address and network automatically.'
                               '       (using %s)' % DEFAULT_NETWORK + term.normal)
+            else:
+                networks = getmyIPs( term, verbose )
+                if not networks:
+                    print(term.alert + 'No networks to force-scan, exiting.' + term.normal)
+                    return
         else:
             for ip in forcescan:
                 networks.append( ip )
