@@ -936,8 +936,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         )
 
     #debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67'] #,'172.20.10.102', '172.20.10.1']
-    debug_ips = ['172.20.10.107']
-    #debug_ips = [] #['172.24.5.112']
+    #debug_ips = ['172.20.10.107']
+    debug_ips = [] #['172.24.5.112']
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
@@ -1063,8 +1063,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     if dev.debug:
                         print('Resetting device scan end time due to debug ip', dev.ip, device_end_time, dev.timeo)
                     device_end_time = dev.timeo + 1.0
-                    if len(devices_with_timers) < 64:
-                        devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
+                    #if len(devices_with_timers) < 64:
+                    #    devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
 
             if not dev.sock:
                 continue
