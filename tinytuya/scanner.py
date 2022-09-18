@@ -353,25 +353,29 @@ class ForceScannedDevice(DeviceDetect):
             self.remove = True
             self.err_found = True
             if self.debug:
-                print('ForceScannedDevice: Debug sock', self.ip, 'timed out!')
+                print('ForceScannedDevice: Debug sock', self.ip, 'connect timed out!')
                 print(dict(self))
         elif self.step == FSCAN_INITIAL_CONNECT:
+            if self.debug:
+                print('ForceScannedDevice: Debug sock', self.ip, 'socket send failed,', 'no data received' if forced else 'receive timed out')
             if self.retries < 2:
                 self.retries += 1
-                if self.debug:
-                    print('ForceScannedDevice: Debug sock', self.ip, 'socket send failed')
                 self.connect()
             else:
                 if self.debug:
                     print('ForceScannedDevice: Debug sock closed thrice:', self.ip)
                 if self.deviceinfo['dev_type'] == 'default':
                     # could be a device22, try 2 more times
+                    if self.debug:
+                        print('ForceScannedDevice: Retrying as v3.3 Device22')
                     self.retries = 1
                     self.deviceinfo['dev_type'] = 'device22'
                     self.step = FSCAN_NOT_STARTED
                     self.connect()
                     return
                 # closed thrice, probably a v3.4 device
+                if self.debug:
+                    print('ForceScannedDevice: Retrying as v3.4')
                 self.retries = 0
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
@@ -406,12 +410,19 @@ class ForceScannedDevice(DeviceDetect):
             _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
             self.displayed = True
             self.remove = True
-        elif self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
+        elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
             if not self.brute_force_v3x_data():
                 # passively wait for async status updates
                 self.timeo = time.time() + 5.0
                 self.passive = True
+        elif self.step == FSCAN_FINAL_POLL:
+            self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
+            _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message )
+            self.displayed = True
+            self.remove = True
         else:
+            if self.debug:
+                print('ForceScannedDevice: Debug sock', self.ip, 'timeout on unhandled step', self.step)
             self.remove = True
             _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
             self.displayed = True
@@ -439,7 +450,7 @@ class ForceScannedDevice(DeviceDetect):
 
         # connection succeeded!
         #self.timeo = time.time() + self.options['data_timeout']
-        self.timeo = time.time() + 1.0
+        self.timeo = time.time() + 1.5
         self.found = True
 
         if len(self.send_queue) > 0:
@@ -607,6 +618,8 @@ class ForceScannedDevice(DeviceDetect):
 
                 if finished:
                     self.close()
+                else:
+                    self.timeo = time.time() + 2.0
                 return
             
     def brute_force_v3x_data( self ):
@@ -647,6 +660,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.device.local_key = self.device.real_local_key = matched
                 self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
                 self.step = FSCAN_FINAL_POLL
+                self.timeo = time.time() + 2.0
                 key.used = True
                 return True
 
