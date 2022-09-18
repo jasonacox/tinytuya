@@ -26,6 +26,7 @@ retriesprovided = False
 force = False
 force_list = []
 last_force = False
+broadcast_listen = True
 
 for i in sys.argv:
     if i==sys.argv[0]:
@@ -40,6 +41,8 @@ for i in sys.argv:
     elif i.lower() == "-force":
         force = True
         this_force = True
+    elif i.lower() == "-no-broadcasts":
+        broadcast_listen = False
     elif i.lower() == "snapshot":
         state = 2
     elif i.lower() == "devices":
@@ -64,9 +67,9 @@ if force and len(force_list) > 0:
 # State 0 = Run Network Scan
 if state == 0:
     if retriesprovided:
-        scanner.scan(scantime=retries, color=color, forcescan=force)
+        scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen)
     else:
-        scanner.scan(color=color, forcescan=force)
+        scanner.scan(color=color, forcescan=force, discover=broadcast_listen)
 
 # State 1 = Run Setup Wizard
 if state == 1:
@@ -104,6 +107,7 @@ if state == 10:
     print("      <max_time>     Maximum time to find Tuya devices [Default=%s]" % tinytuya.SCANTIME)
     print("      -nocolor       Disable color text output.")
     print("      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.")
+    print("      -no-broadcasts Ignore broadcast packets when force scanning.")
     print("      -h             Show usage.")
     print("")
 
