@@ -368,6 +368,7 @@ class ForceScannedDevice(DeviceDetect):
                     # could be a device22, try 2 more times
                     self.retries = 1
                     self.deviceinfo['dev_type'] = 'device22'
+                    self.step = FSCAN_NOT_STARTED
                     self.connect()
                     return
                 # closed thrice, probably a v3.4 device
@@ -469,11 +470,21 @@ class ForceScannedDevice(DeviceDetect):
             else:
                 msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.DP_QUERY, b'') )
             self.sock.sendall( msg )
+        elif self.step == FSCAN_INITIAL_CONNECT:
+            # this is a connect retry
+            dummy_payload = bytes(bytearray.fromhex('deadbeef112233445566778899aabbccddeeffb00bface112233feedbabe74f0'))
+            if self.deviceinfo['dev_type'] == 'device22':
+                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.CONTROL_NEW, dummy_payload) )
+            else:
+                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.DP_QUERY, dummy_payload) )
+            self.sock.sendall( msg )
         #elif self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE:
         #    pass
         elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE:
             # try to brute-force the key
             self.v34_negotiate_sess_key_start()
+        else:
+            print('ForceScannedDevice: Unhandled step in write()?!?!', self.ip, 'step', self.step)
 
     def read_data( self ):
         try:
@@ -546,6 +557,8 @@ class ForceScannedDevice(DeviceDetect):
                     if 'error' in payload.decode('utf8'):
                         # clear-text response, device is v3.1
                         self.ver_found = True
+                        self.device.set_version(3.1)
+                        self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.1
                         # there is no good way of brute-forcing this one, so listen passively in hopes of receiving a message containing the gwId
                         self.step = FSCAN_v31_PASSIVE_LISTEN
                         self.passive = True
@@ -865,7 +878,7 @@ def _print_device_info( result, note, term, extra_message=None ):
         suffix = term.dim + ", MAC = " + mac + ""
         if result['name'] == "":
             dname = gwId
-            devicename = "Unknown v%s%s Device%s" % (term.normal, version, term.dim)
+            devicename = "%sUnknown v%s%s Device%s" % (term.normal+term.dim, term.normal, version, term.dim)
         else:
             devicename = term.normal + result['name'] + term.dim
         print(
@@ -976,7 +989,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     #debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67'] #,'172.20.10.102', '172.20.10.1']
     #debug_ips = ['172.20.10.107']
-    debug_ips = ["10.0.1.36"] #['172.24.5.112']
+    debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
