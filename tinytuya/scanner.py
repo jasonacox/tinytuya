@@ -119,9 +119,12 @@ def getmyIPs( term, ask ):
                 # skip the loopback interface
                 continue
             if ask:
-                answer = input( '%sScan network %s from interface %s?%s (Y/n): ' % (term.bold, k, str(interface), term.normal) )
-                if answer[0:1].lower() == 'n':
-                    continue
+                if ask is not 2:
+                    answer = input( '%sScan network %s from interface %s?%s ([Y]es/[n]o/[a]ll yes): ' % (term.bold, k, str(interface), term.normal) )
+                    if answer[0:1].lower() == 'a':
+                        ask = 2
+                    elif answer[0:1].lower() == 'n':
+                        continue
                 print(term.dim + 'Adding Network', k, 'to the force-scan list')
             ips[k] = True
     return ips.keys()
@@ -172,7 +175,7 @@ class DeviceDetect(object):
 
         if not self.deviceinfo['version']:
             self.deviceinfo['version']  = 3.1
-        if not self.deviceinfo['dev_type']:
+        if ('dev_type' not in self.deviceinfo) or (not self.deviceinfo['dev_type']):
             self.deviceinfo['dev_type'] = 'default'
         #if not self.deviceinfo['gwId']:
         #    self.deviceinfo['gwId'] = ''
@@ -361,12 +364,14 @@ class ForceScannedDevice(DeviceDetect):
             else:
                 if self.debug:
                     print('ForceScannedDevice: Debug sock closed thrice:', self.ip)
-                # closed twice, probably a v3.4 device!
-                self.retries = 0
                 if self.deviceinfo['dev_type'] == 'default':
+                    # could be a device22, try 2 more times
+                    self.retries = 1
                     self.deviceinfo['dev_type'] = 'device22'
                     self.connect()
                     return
+                # closed thrice, probably a v3.4 device
+                self.retries = 0
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
                 self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.4
