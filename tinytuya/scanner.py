@@ -451,9 +451,6 @@ class ForceScannedDevice(DeviceDetect):
 
         self.write = False
         self.read = True
-        #mac = get_mac_address(ip=self.ip,network_request=False) if SCANLIBS else None
-        mac = ''
-        if not self.deviceinfo['mac']: self.deviceinfo['mac'] = mac
         log.debug("Force-Scan Found Device %s", self.ip)
         #if self.options['verbose'] and self.step == 0:
         if self.debug and self.step == 0:
@@ -673,6 +670,8 @@ class ForceScannedDevice(DeviceDetect):
             if dev['key'] == self.deviceinfo['key']:
                 self.deviceinfo['name'] = dev['name']
                 self.deviceinfo['id'] = self.deviceinfo['gwId'] = dev['id']
+                if 'mac' in dev and dev['mac'] and ('mac' not in self.deviceinfo or not self.deviceinfo['mac']):
+                    self.deviceinfo['mac'] = dev['mac']
                 self.device.id = dev['id']
                 self.key_found = True
                 return
@@ -686,10 +685,6 @@ class PollDevice(DeviceDetect):
 
     def close(self):
         super(PollDevice, self).close()
-        mac = get_mac_address(ip=self.ip,network_request=False) if SCANLIBS else None
-        if mac:
-            self.deviceinfo['mac'] = mac
-
         if self.options['verbose']:
             _print_device_info( self.deviceinfo, 'Valid Broadcast', self.options['termcolors'], self.message )
 
@@ -1176,6 +1171,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         try:
             if need_sleep > 0:
                 time.sleep( need_sleep )
+
             if len(write_socks) > 0:
                 rd, wr, _ = select.select( read_socks, write_socks, [], 0 )
             else:
@@ -1225,7 +1221,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 result["name"] = dname
                 result["key"] = dkey
                 result["mac"] = mac
-                #print( 'adding:', result)
+
+                if not mac and SCANLIBS:
+                    mac = result["mac"] = get_mac_address(ip=ip)
 
                 broadcasted_devices[ip] = PollDevice( ip, result, options, ip in debug_ips )
                 do_poll = False
@@ -1251,6 +1249,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
                 for dev in devicelist:
                     if dev.ip == ip:
+                        if verbose:
+                            print('Aborting force-scan for device', ip, 'due to received broadcast')
                         dev.abort()
                         break
 
@@ -1296,6 +1296,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     if verbose:
         print( 'Scanned in', time.time() - start_time )
         #print( len(response_list), response_list )
+
+    for ip in broadcasted_devices:
+        if ip in scanned_devices:
+            del scanned_devices[ip]
 
     found_count = len(broadcasted_devices)+len(scanned_devices)
 
