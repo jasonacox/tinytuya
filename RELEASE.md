@@ -3,10 +3,22 @@
 ## v1.7.0 - Tuya Protocol v3.4 Device Support - Unreleased
 
 * Add support for v3.4 protocol Tuya devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/179
+* API change with `_send_receive()` - now takes care of the packing and encrypting so it can re-encode whenever the socket is closed and reopened, and _get_socket() now takes care of negotiating the session key (v3.4)
 * Optimize detect_available_dps() by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/176
 * Update ThermostatDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/174
 * Add Pronto/NEC/Samsung IR code conversion functions to IRRemoteControlDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/173
 * Added DoorbellDevice by @JonesMeUp in https://github.com/jasonacox/tinytuya/issues/162 
+* Added ability to set version on constructor for more intuitive use:
+
+```python
+d = tinytuya.OutletDevice(
+    dev_id='xxxxxxxxxxxxxxxxxxxxxxxx',
+    address='x.x.x.x',
+    local_key='xxxxxxxxxxxxxxxx',
+    version=3.4)
+
+print(d.status())
+```
 
 ## v1.6.6 - Updated Payload Dictionary and Command List
 
