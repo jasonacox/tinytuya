@@ -1,7 +1,8 @@
 # RELEASE NOTES
 
-## v1.7.0 - Tuya Protocol v3.4 Device Support - Unreleased
+## v1.7.0 - Tuya Protocol v3.4 Device Support
 
+* PyPI 1.7.0
 * Add support for v3.4 protocol Tuya devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/179
 * API change with `_send_receive()` - now takes care of the packing and encrypting so it can re-encode whenever the socket is closed and reopened, and _get_socket() now takes care of negotiating the session key (v3.4)
 * Optimize detect_available_dps() by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/176
