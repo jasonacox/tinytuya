@@ -11,11 +11,11 @@
  Classes
   * AESCipher - Cryptography Helpers
   * XenonDevice(object) - Base Tuya Objects and Functions
-  * Device(dev_id, address, local_key="", dev_type="default") - Tuya Class for Devices
+  * Device(dev_id, address, local_key="", dev_type="default", version="3.1") - Tuya Class for Devices
 
  Functions
     json = status()                    # returns json payload
-    set_version(version)               # 3.1 [default] or 3.3
+    set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
@@ -44,6 +44,8 @@
     The origin of this python module (now abandoned)
   * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
+  * Tuya Protocol 3.4 Support by uzlonewolf 
+    Enhancement to TuyaMessage logic for multi-payload messages and Tuya Protocol 3.4 support
 
 """
 

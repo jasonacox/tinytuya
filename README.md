@@ -11,11 +11,11 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module.
+This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module and currently support Tuya Protocols 3.1, 3.2, 3.3 and 3.4.
 
 [Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API.  This allows us to directly control the devices without using the cloud. This python module provides a way to poll status and issue commands to these devices.
 
-Starting with v1.3.0, TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
+TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
@@ -110,8 +110,16 @@ After importing tinytuya, you create a device handle for the device you want to 
 ```python
     import tinytuya
 
+    # Connect to Device - pytuya Method
     d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
     d.set_version(3.3)
+
+    # And a Alternative Method for TinyTuya v1.7.0+
+    # d = tinytuya.OutletDevice(
+    #       dev_id='DEVICE_ID_HERE',
+    #       address='IP_ADDRESS_HERE',
+    #       local_key='LOCAL_KEY_HERE', 
+    #       version=3.4)
 
     # Get Status
     data = d.status() 
@@ -119,6 +127,9 @@ After importing tinytuya, you create a device handle for the device you want to 
 
     # Turn On
     d.turn_on()
+
+    # Turn Off
+    d.turn_off()
 ```
 
 ### TinyTuya Module Classes and Functions 
@@ -769,7 +780,7 @@ For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/dis
     The origin of this python module (now abandoned). Thanks to nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
   * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio. 
     Updated pytuya to support devices with Device IDs of 22 characters
-  * Thanks to @uzlonewolf for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules and making enhancements to TuyaMessage logic for multi-payload messages.
+  * Thanks to [@uzlonewolf](https://github.com/uzlonewolf) for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules, making enhancements to TuyaMessage logic for multi-payload messages and adding Tuya Protocol 3.4 support to TinyTuya.
 
 ## Related Projects
 
