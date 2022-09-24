@@ -2,12 +2,11 @@
 
 ## Supported Versions
 
-Bug fixes and patches will be applied to versions 1.2.x and above.
+Bug fixes and patches will be applied to versions 1.0 and above.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.2.x + | :white_check_mark: |
-| 1.1.x   | :x:                |
+| 1.0 +   | :white_check_mark: |
 | < 1.0   | :x:                |
 
 ## Reporting a Vulnerability
