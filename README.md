@@ -315,36 +315,36 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
 You can set up a persistent connection to a device and then monitor the state changes with a continual loop. This is helpful for troubleshooting and discovering DPS values.
 
 ```python
-import tinytuya
+    import tinytuya
 
-d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
-d.set_version(3.3)
-d.set_socketPersistent(True)
+    d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
+    d.set_version(3.3)
+    d.set_socketPersistent(True)
 
-print(" > Send Request for Status < ")
-payload = d.generate_payload(tinytuya.DP_QUERY)
-d.send(payload)
-
-print(" > Begin Monitor Loop <")
-while(True):
-    # See if any data is available
-    data = d.receive()
-    print('Received Payload: %r' % data)
-
-    # Send keyalive heartbeat
-    print(" > Send Heartbeat Ping < ")
-    payload = d.generate_payload(tinytuya.HEART_BEAT)
+    print(" > Send Request for Status < ")
+    payload = d.generate_payload(tinytuya.DP_QUERY)
     d.send(payload)
 
-    # NOTE If you are not seeing updates, you can force them - uncomment:
-    # print(" > Send Request for Status < ")
-    # payload = d.generate_payload(tinytuya.DP_QUERY)
-    # d.send(payload)
+    print(" > Begin Monitor Loop <")
+    while(True):
+        # See if any data is available
+        data = d.receive()
+        print('Received Payload: %r' % data)
 
-    # NOTE Some smart plugs require an UPDATEDPS command to update power data
-    # print(" > Send DPS Update Request < ")
-    # payload = d.generate_payload(tinytuya.UPDATEDPS)
-    # d.send(payload)    
+        # Send keyalive heartbeat
+        print(" > Send Heartbeat Ping < ")
+        payload = d.generate_payload(tinytuya.HEART_BEAT)
+        d.send(payload)
+
+        # NOTE If you are not seeing updates, you can force them - uncomment:
+        # print(" > Send Request for Status < ")
+        # payload = d.generate_payload(tinytuya.DP_QUERY)
+        # d.send(payload)
+
+        # NOTE Some smart plugs require an UPDATEDPS command to update power data
+        # print(" > Send DPS Update Request < ")
+        # payload = d.generate_payload(tinytuya.UPDATEDPS)
+        # d.send(payload)    
 ```
 
 ### Tuya Cloud Access
@@ -352,44 +352,44 @@ while(True):
 You can poll and manage Tuya devices using the `Cloud` class and functions.
 
 ```python
-import tinytuya
+    import tinytuya
 
-# Connect to Tuya Cloud
-# c = tinytuya.Cloud()  # uses tinytuya.json 
-c = tinytuya.Cloud(
-        apiRegion="us", 
-        apiKey="xxxxxxxxxxxxxxxxxxxx", 
-        apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
-        apiDeviceID="xxxxxxxxxxxxxxxxxxID")
+    # Connect to Tuya Cloud
+    # c = tinytuya.Cloud()  # uses tinytuya.json 
+    c = tinytuya.Cloud(
+            apiRegion="us", 
+            apiKey="xxxxxxxxxxxxxxxxxxxx", 
+            apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
+            apiDeviceID="xxxxxxxxxxxxxxxxxxID")
 
-# Display list of devices
-devices = c.getdevices()
-print("Device List: %r" % devices)
+    # Display list of devices
+    devices = c.getdevices()
+    print("Device List: %r" % devices)
 
-# Select a Device ID to Test
-id = "xxxxxxxxxxxxxxxxxxID"
+    # Select a Device ID to Test
+    id = "xxxxxxxxxxxxxxxxxxID"
 
-# Display Properties of Device
-result = c.getproperties(id)
-print("Properties of device:\n", result)
+    # Display Properties of Device
+    result = c.getproperties(id)
+    print("Properties of device:\n", result)
 
-# Display Status of Device
-result = c.getstatus(id)
-print("Status of device:\n", result)
+    # Display Status of Device
+    result = c.getstatus(id)
+    print("Status of device:\n", result)
 
-# Send Command - Turn on switch
-commands = {
-	'commands': [{
-		'code': 'switch_1',
-		'value': True
-	}, {
-		'code': 'countdown_1',
-		'value': 0
-	}]
-}
-print("Sending command...")
-result = c.sendcommand(id,commands)
-print("Results\n:", result)
+    # Send Command - Turn on switch
+    commands = {
+	    'commands': [{
+		    'code': 'switch_1',
+		    'value': True
+	    }, {
+		    'code': 'countdown_1',
+		    'value': 0
+	    }]
+    }
+    print("Sending command...")
+    result = c.sendcommand(id,commands)
+    print("Results\n:", result)
 ```
 
 ### Encryption notes
@@ -623,17 +623,17 @@ Note: Some 3.3 energy management plugs use the DPS values of the 3.1 plug above.
 |201|IR Commands (set only)|JSON*|n/a|n/a|
 
   ```python
-  # The IR Commands JSON has the following format:
-  command = {
-      "control": "send_ir",
-      "head": "",
-      "key1": "[[TO_BE_REPLACED]]",
-      "type": 0,
-      "delay": 300
-  }
-  # Sending the IR command:
-  payload = d.generate_payload(tinytuya.CONTROL, {"201": json.dumps(command)})
-  d.send(payload)
+      # The IR Commands JSON has the following format:
+      command = {
+          "control": "send_ir",
+          "head": "",
+          "key1": "[[TO_BE_REPLACED]]",
+          "type": 0,
+          "delay": 300
+      }
+      # Sending the IR command:
+      payload = d.generate_payload(tinytuya.CONTROL, {"201": json.dumps(command)})
+      d.send(payload)
   ```
 
 The `key1` attribute is a base64 string that contains the IR signal. You can extract it using this procedure:
