@@ -20,13 +20,13 @@ TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
 ```python
-    # Example Usage of TinyTuya
-    import tinytuya
+# Example Usage of TinyTuya
+import tinytuya
 
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
-    data = d.status() 
-    print('Device status: %r' % data)
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
+data = d.status() 
+print('Device status: %r' % data)
 ```
 
 NOTE: Devices need to be **activated** by Smart Life App.
@@ -36,8 +36,8 @@ NOTE: Devices need to be **activated** by Smart Life App.
 TinyTuya supports python versions 2.7 and 3.x (recommended).
 
 ```bash
-  # Install TinyTuya
-  python -m pip install tinytuya
+# Install TinyTuya
+python -m pip install tinytuya
 ```
 
 Pip will attempt to install `pycryptodome`, `requests` and `colorama` if not already installed.
@@ -108,28 +108,28 @@ Notes:
 After importing tinytuya, you create a device handle for the device you want to read or control.  Here is an example for a Tuya smart switch or plug:
 
 ```python
-    import tinytuya
+import tinytuya
 
-    # Connect to Device - pytuya Method
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
+# Connect to Device - pytuya Method
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
 
-    # And a Alternative Method for TinyTuya v1.7.0+
-    # d = tinytuya.OutletDevice(
-    #       dev_id='DEVICE_ID_HERE',
-    #       address='IP_ADDRESS_HERE',
-    #       local_key='LOCAL_KEY_HERE', 
-    #       version=3.4)
+# And a Alternative Method for TinyTuya v1.7.0+
+# d = tinytuya.OutletDevice(
+#       dev_id='DEVICE_ID_HERE',
+#       address='IP_ADDRESS_HERE',
+#       local_key='LOCAL_KEY_HERE', 
+#       version=3.4)
 
-    # Get Status
-    data = d.status() 
-    print('set_status() result %r' % data)
+# Get Status
+data = d.status() 
+print('set_status() result %r' % data)
 
-    # Turn On
-    d.turn_on()
+# Turn On
+d.turn_on()
 
-    # Turn Off
-    d.turn_off()
+# Turn Off
+d.turn_off()
 ```
 
 ### TinyTuya Module Classes and Functions 
@@ -246,68 +246,68 @@ The "Err" number will be one of these:
 See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts.
 
 ```python
-    import tinytuya
+import tinytuya
 
-    """
-    OUTLET Device
-    """
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
-    data = d.status()  
+"""
+OUTLET Device
+"""
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
+data = d.status()  
 
-    # Show status and state of first controlled switch on device
-    print('Dictionary %r' % data)
-    print('State (bool, true is ON) %r' % data['dps']['1'])  
+# Show status and state of first controlled switch on device
+print('Dictionary %r' % data)
+print('State (bool, true is ON) %r' % data['dps']['1'])  
 
-    # Toggle switch state
-    switch_state = data['dps']['1']
-    data = d.set_status(not switch_state)  # This requires a valid key
-    if data:
-        print('set_status() result %r' % data)
+# Toggle switch state
+switch_state = data['dps']['1']
+data = d.set_status(not switch_state)  # This requires a valid key
+if data:
+    print('set_status() result %r' % data)
 
-    # On a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
-    data = d.set_status(False, 4)
-    if data:
-        print('set_status() result %r' % data)
-        print('set_status() extra %r' % data[20:-8])
+# On a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
+data = d.set_status(False, 4)
+if data:
+    print('set_status() result %r' % data)
+    print('set_status() extra %r' % data[20:-8])
 
-    """
-    RGB Bulb Device
-    """
-    import time
+"""
+RGB Bulb Device
+"""
+import time
 
-    d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)  # IMPORTANT to set this regardless of version
-    d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
-    data = d.status()
+d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)  # IMPORTANT to set this regardless of version
+d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
+data = d.status()
 
-    # Show status of first controlled switch on device
-    print('Dictionary %r' % data)
+# Show status of first controlled switch on device
+print('Dictionary %r' % data)
 
-    # Set to RED Color - set_colour(r, g, b):
-    d.set_colour(255,0,0)  
+# Set to RED Color - set_colour(r, g, b):
+d.set_colour(255,0,0)  
 
-    # Cycle through the Rainbow
-    rainbow = {"red": [255, 0, 0], "orange": [255, 127, 0], "yellow": [255, 200, 0],
-              "green": [0, 255, 0], "blue": [0, 0, 255], "indigo": [46, 43, 95],
-              "violet": [139, 0, 255]}
-    for color in rainbow:
-        [r, g, b] = rainbow[color]
-        d.set_colour(r, g, b, nowait=True)  # nowait = Go fast don't wait for response
-        time.sleep(0.25)
+# Cycle through the Rainbow
+rainbow = {"red": [255, 0, 0], "orange": [255, 127, 0], "yellow": [255, 200, 0],
+          "green": [0, 255, 0], "blue": [0, 0, 255], "indigo": [46, 43, 95],
+          "violet": [139, 0, 255]}
+for color in rainbow:
+    [r, g, b] = rainbow[color]
+    d.set_colour(r, g, b, nowait=True)  # nowait = Go fast don't wait for response
+    time.sleep(0.25)
 
-    # Brightness: Type A devices range = 25-255 and Type B = 10-1000
-    d.set_brightness(1000)
+# Brightness: Type A devices range = 25-255 and Type B = 10-1000
+d.set_brightness(1000)
 
-    # Set to White - set_white(brightness, colourtemp):
-    #    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
-    d.set_white(1000,10)
+# Set to White - set_white(brightness, colourtemp):
+#    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
+d.set_white(1000,10)
 
-    # Set Bulb to Scene Mode
-    d.set_mode('scene')
+# Set Bulb to Scene Mode
+d.set_mode('scene')
 
-    # Scene Example: Set Color Rotation Scene
-    d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+# Scene Example: Set Color Rotation Scene
+d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
 
 ```
 ### Example Device Monitor
@@ -315,36 +315,36 @@ See the sample python script [test.py](test.py) for an OutletDevice example or l
 You can set up a persistent connection to a device and then monitor the state changes with a continual loop. This is helpful for troubleshooting and discovering DPS values.
 
 ```python
-    import tinytuya
+import tinytuya
 
-    d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
-    d.set_version(3.3)
-    d.set_socketPersistent(True)
+d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
+d.set_version(3.3)
+d.set_socketPersistent(True)
 
-    print(" > Send Request for Status < ")
-    payload = d.generate_payload(tinytuya.DP_QUERY)
+print(" > Send Request for Status < ")
+payload = d.generate_payload(tinytuya.DP_QUERY)
+d.send(payload)
+
+print(" > Begin Monitor Loop <")
+while(True):
+    # See if any data is available
+    data = d.receive()
+    print('Received Payload: %r' % data)
+
+    # Send keyalive heartbeat
+    print(" > Send Heartbeat Ping < ")
+    payload = d.generate_payload(tinytuya.HEART_BEAT)
     d.send(payload)
 
-    print(" > Begin Monitor Loop <")
-    while(True):
-        # See if any data is available
-        data = d.receive()
-        print('Received Payload: %r' % data)
+    # NOTE If you are not seeing updates, you can force them - uncomment:
+    # print(" > Send Request for Status < ")
+    # payload = d.generate_payload(tinytuya.DP_QUERY)
+    # d.send(payload)
 
-        # Send keyalive heartbeat
-        print(" > Send Heartbeat Ping < ")
-        payload = d.generate_payload(tinytuya.HEART_BEAT)
-        d.send(payload)
-
-        # NOTE If you are not seeing updates, you can force them - uncomment:
-        # print(" > Send Request for Status < ")
-        # payload = d.generate_payload(tinytuya.DP_QUERY)
-        # d.send(payload)
-
-        # NOTE Some smart plugs require an UPDATEDPS command to update power data
-        # print(" > Send DPS Update Request < ")
-        # payload = d.generate_payload(tinytuya.UPDATEDPS)
-        # d.send(payload)    
+    # NOTE Some smart plugs require an UPDATEDPS command to update power data
+    # print(" > Send DPS Update Request < ")
+    # payload = d.generate_payload(tinytuya.UPDATEDPS)
+    # d.send(payload)    
 ```
 
 ### Tuya Cloud Access
@@ -352,44 +352,41 @@ You can set up a persistent connection to a device and then monitor the state ch
 You can poll and manage Tuya devices using the `Cloud` class and functions.
 
 ```python
-    import tinytuya
+import tinytuya
 
-    # Connect to Tuya Cloud
-    # c = tinytuya.Cloud()  # uses tinytuya.json 
-    c = tinytuya.Cloud(
-            apiRegion="us", 
-            apiKey="xxxxxxxxxxxxxxxxxxxx", 
-            apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
-            apiDeviceID="xxxxxxxxxxxxxxxxxxID")
+# Connect to Tuya Cloud
+# c = tinytuya.Cloud()  # uses tinytuya.json 
+c = tinytuya.Cloud(
+        apiRegion="us", 
+        apiKey="xxxxxxxxxxxxxxxxxxxx", 
+        apiSecret="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 
+        apiDeviceID="xxxxxxxxxxxxxxxxxxID")
 
-    # Display list of devices
-    devices = c.getdevices()
-    print("Device List: %r" % devices)
+# Display list of devices
+devices = c.getdevices()
+print("Device List: %r" % devices)
 
-    # Select a Device ID to Test
-    id = "xxxxxxxxxxxxxxxxxxID"
+# Select a Device ID to Test
+id = "xxxxxxxxxxxxxxxxxxID"
 
-    # Display Properties of Device
-    result = c.getproperties(id)
-    print("Properties of device:\n", result)
+# Display Properties of Device
+result = c.getproperties(id)
+print("Properties of device:\n", result)
 
-    # Display Status of Device
-    result = c.getstatus(id)
-    print("Status of device:\n", result)
+# Display Status of Device
+result = c.getstatus(id)
+print("Status of device:\n", result)
 
-    # Send Command - Turn on switch
-    commands = {
-	    'commands': [{
-		    'code': 'switch_1',
-		    'value': True
-	    }, {
-		    'code': 'countdown_1',
-		    'value': 0
-	    }]
-    }
-    print("Sending command...")
-    result = c.sendcommand(id,commands)
-    print("Results\n:", result)
+# Send Command - Turn on switch
+commands = {
+    "commands": [
+        {"code": "switch_1", "value": True},
+        {"code": "countdown_1", "value": 0},
+    ]
+}
+print("Sending command...")
+result = c.sendcommand(id,commands)
+print("Results\n:", result)
 ```
 
 ### Encryption notes
@@ -403,17 +400,17 @@ These devices uses AES encryption which is not available in the Python standard 
 ### Command Line
 
 ```
-    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
+python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
 
-      command = scan        Scan local network for Tuya devices.
-      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
-      command = devices     Scan all devices listed in devices.json file.
-      command = snapshot    Scan devices listed in snapshot.json file.
-      command = json        Scan devices listed in snapshot.json file [JSON].
-      max_retry             Maximum number of retries to find Tuya devices [Default=15]
-      -nocolor              Disable color text output.
-      -force                Force network scan for device IP addresses.
-      -h                    Show usage.
+  command = scan        Scan local network for Tuya devices.
+  command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
+  command = devices     Scan all devices listed in devices.json file.
+  command = snapshot    Scan devices listed in snapshot.json file.
+  command = json        Scan devices listed in snapshot.json file [JSON].
+  max_retry             Maximum number of retries to find Tuya devices [Default=15]
+  -nocolor              Disable color text output.
+  -force                Force network scan for device IP addresses.
+  -h                    Show usage.
 ```
 
 ### Scan Tool 
@@ -459,11 +456,11 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 * Devices running protocol version 3.1 (e.g. below Firmware 1.0.5) do not require a device *Local_Key* to read the status. Both 3.1 and 3.3 devices will require a device *Local_Key* to control the device.
 * Some devices with 22 character IDs will require additional setting to poll correctly - here is an example:
   ```python
-    a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
-    a.set_version(3.3)
-    a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
-    data =  a.status()
-    print(data)
+  a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
+  a.set_version(3.3)
+  a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
+  data =  a.status()
+  print(data)
   ```
 * Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
   ```
@@ -623,17 +620,17 @@ Note: Some 3.3 energy management plugs use the DPS values of the 3.1 plug above.
 |201|IR Commands (set only)|JSON*|n/a|n/a|
 
   ```python
-      # The IR Commands JSON has the following format:
-      command = {
-          "control": "send_ir",
-          "head": "",
-          "key1": "[[TO_BE_REPLACED]]",
-          "type": 0,
-          "delay": 300
-      }
-      # Sending the IR command:
-      payload = d.generate_payload(tinytuya.CONTROL, {"201": json.dumps(command)})
-      d.send(payload)
+  # The IR Commands JSON has the following format:
+  command = {
+      "control": "send_ir",
+      "head": "",
+      "key1": "[[TO_BE_REPLACED]]",
+      "type": 0,
+      "delay": 300,
+  }
+  # Sending the IR command:
+  payload = d.generate_payload(tinytuya.CONTROL, {"201": json.dumps(command)})
+  d.send(payload)
   ```
 
 The `key1` attribute is a base64 string that contains the IR signal. You can extract it using this procedure:
