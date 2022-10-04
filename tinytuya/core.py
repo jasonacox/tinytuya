@@ -427,7 +427,7 @@ def find_device(dev_id=None, address=None):
 
     deadline = time.time() + SCANTIME
     selecttime = SCANTIME
-    ret = (None, None)
+    ret = (None, None, None)
 
     while (ret[0] is None) and (selecttime > 0):
         rd, _, _ = select.select( [client, clients], [], [], selecttime )
