@@ -59,6 +59,7 @@ import hmac
 import json
 import logging
 import socket
+import select
 import struct
 import sys
 import time
@@ -100,6 +101,7 @@ else:
 
 # Globals Network Settings
 MAXCOUNT = 15       # How many tries before stopping
+SCANTIME = 18       # How many seconds to wait before stopping device discovery
 UDPPORT = 6666      # Tuya 3.1 UDP Port
 UDPPORTS = 6667     # Tuya 3.3 encrypted UDP Port
 TCPPORT = 6668      # Tuya TCP Local Port
@@ -1096,25 +1098,18 @@ class XenonDevice(object):
         clients.bind(("", UDPPORTS))
         clients.setblocking(False)
 
-        count = 0
-        counts = 0
-        maxretry = 180
+        deadline = time.time() + SCANTIME
+        selecttime = SCANTIME
         ret = (None, None)
 
-        while maxretry:
-            maxretry -= 1
-            time.sleep(0.1)
-            while True:
-                data = addr = None
+        while (ret[0] is None) and (selecttime > 0):
+            rd, _, _ = select.select( [client, clients], [], [], selecttime )
+            for sock in rd:
                 try:
-                    data, addr = client.recvfrom(4048)
+                    data, addr = sock.recvfrom(4048)
                 except:
                     # Timeout
-                    try:
-                        data, addr = clients.recvfrom(4048)
-                    except:
-                        # Timeout
-                        break
+                    continue
                 ip = addr[0]
                 gwId = version = ""
                 result = data
@@ -1129,20 +1124,22 @@ class XenonDevice(object):
                     ip = result["ip"]
                     gwId = result["gwId"]
                     version = result["version"]
+                    log.debug( 'find() received broadcast from %r: %r', ip, result )
                 except:
                     result = {"ip": ip}
+                    log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
 
                 # Check to see if we are only looking for one device
                 if gwId == did:
                     # We found it!
                     ret = (ip, version)
-                    maxretry = False
                     break
+            selecttime = deadline - time.time()
 
         # while
         clients.close()
         client.close()
-        log.debug(ret)
+        log.debug( 'find() is returning: %r', ret )
         return ret
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
