@@ -114,7 +114,7 @@ class BulbDevice(Device):
     has_colourtemp = False
     has_colour = False
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=None):
+    def __init__(self, dev_id, address=None, local_key="", dev_type="default", version=None):
         super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     @staticmethod

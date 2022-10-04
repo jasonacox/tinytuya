@@ -60,7 +60,7 @@ class SocketDevice(Device):
     DPS_POWER = '19'
     DPS_VOLTAGE = '20'
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
+    def __init__(self, dev_id, address=None, local_key="", dev_type="default", version=3.1):
         super(SocketDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def get_energy_consumption(self):
