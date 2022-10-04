@@ -474,6 +474,32 @@ def find_device(dev_id=None, address=None):
     log.debug( 'find() is returning: %r', ret )
     return ret
 
+def device_info( dev_id ):
+    """Searches the devices.json file for devices with ID = dev_id
+
+    Parameters:
+        dev_id = The specific Device ID you are looking for
+
+    Response:
+        {dict} containing the the device info
+    """
+    devinfo = None
+    try:
+        # Load defaults
+        with open(DEVICEFILE, 'r') as f:
+            tuyadevices = json.load(f)
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
+            for	dev in tuyadevices:
+                if 'id' in dev and dev['id'] == dev_id:
+                    log.debug("Device %r found in %s", dev_id, DEVICEFILE)
+                    devinfo = dev
+                    break
+    except:
+        # No DEVICEFILE
+        pass
+
+    return devinfo
+
 # Tuya Device Dictionary - Command and Payload Overrides
 #
 # 'default' devices require the 0a command for the DP_QUERY request
@@ -528,7 +554,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address, local_key="", dev_type="default", connection_timeout=5, version=3.1
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1
     ):
         """
         Represents a Tuya device.
@@ -544,8 +570,6 @@ class XenonDevice(object):
 
         self.id = dev_id
         self.address = address
-        self.local_key = local_key.encode("latin1")
-        self.real_local_key = self.local_key
         self.connection_timeout = connection_timeout
         self.retry = True
         self.dev_type = dev_type
@@ -555,12 +579,21 @@ class XenonDevice(object):
         self.socketPersistent = False
         self.socketNODELAY = True
         self.socketRetryLimit = 5
-        self.cipher = AESCipher(self.local_key)
         self.dps_to_request = {}
         self.seqno = 1
         self.sendWait = 0.01
         self.dps_cache = {}
-        if address is None or address == "Auto" or address == "0.0.0.0":
+
+        if not local_key:
+            local_key = ""
+            devinfo = device_info( dev_id )
+            if devinfo and 'key' in devinfo and devinfo['key']:
+                local_key = devinfo['key']
+        self.local_key = local_key.encode("latin1")
+        self.real_local_key = self.local_key
+        self.cipher = AESCipher(self.local_key)
+
+        if (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
             (addr, ver, did) = find_device(dev_id)
             if addr is None:
