@@ -10,8 +10,8 @@
 
  Classes
   * AESCipher - Cryptography Helpers
-  * XenonDevice(object) - Base Tuya Objects and Functions
-  * Device(dev_id, address, local_key="", dev_type="default", version="3.1") - Tuya Class for Devices
+  * XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False) - Base Tuya Objects and Functions
+  * Device(XenonDevice) - Tuya Class for Devices
 
  Functions
     json = status()                    # returns json payload
@@ -403,10 +403,11 @@ def error_json(number=None, payload=None):
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
 def find_device(dev_id=None, address=None):
-    """Scans network for Tuya devices with ID = dev_id
+    """Scans network for Tuya devices with either ID = dev_id or IP = address
 
     Parameters:
-        dev_id = The specific Device ID you are looking for (returns only IP and Version)
+        dev_id = The specific Device ID you are looking for
+        address = The IP address you are tring to find the Device ID for
 
     Response:
         (ip, version, dev_id)
@@ -481,7 +482,7 @@ def device_info( dev_id ):
         dev_id = The specific Device ID you are looking for
 
     Response:
-        {dict} containing the the device info
+        {dict} containing the the device info, or None if not found
     """
     devinfo = None
     try:
@@ -554,7 +555,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False
     ):
         """
         Represents a Tuya device.
@@ -576,7 +577,7 @@ class XenonDevice(object):
         self.disabledetect = False  # if True do not detect device22
         self.port = TCPPORT  # default - do not expect caller to pass in
         self.socket = None
-        self.socketPersistent = False
+        self.socketPersistent = False if not persist else True
         self.socketNODELAY = True
         self.socketRetryLimit = 5
         self.dps_to_request = {}
@@ -1181,6 +1182,16 @@ class XenonDevice(object):
 
     @staticmethod
     def find(did):
+        """
+        Mainly here for backwards compatibility.
+        Calling tinytuya.find_device() directly is recommended.
+
+        Parameters:
+            did = The specific Device ID you are looking for (returns only IP and Version)
+
+        Response:
+            (ip, version)
+        """
         (ip, ver, dev_id) = find_device(dev_id=did)
         return (ip, ver)
 
@@ -1264,8 +1275,8 @@ class XenonDevice(object):
 
 
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
-        super(Device, self).__init__(dev_id, address, local_key, dev_type, version=version)
+    def __init__(*args, **kwargs):
+        super(Device, args[0]).__init__(*args[1:], **kwargs)
 
     def status(self):
         """Return device status."""
