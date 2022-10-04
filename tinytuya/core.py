@@ -402,18 +402,18 @@ def error_json(number=None, payload=None):
 
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
-def find(did=None):
-    """Scans network for Tuya devices with ID = did
+def find_device(dev_id=None, address=None):
+    """Scans network for Tuya devices with ID = dev_id
 
     Parameters:
-        did = The specific Device ID you are looking for (returns only IP and Version)
+        dev_id = The specific Device ID you are looking for (returns only IP and Version)
 
     Response:
-        (ip, version)
+        (ip, version, dev_id)
     """
-    if did is None:
-        return (None, None)
-    log.debug("Listening for device %s on the network", did)
+    if dev_id is None and address is None:
+        return (None, None, None)
+    log.debug("Listening for device %s on the network", dev_id)
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -457,10 +457,15 @@ def find(did=None):
                 log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
 
             # Check to see if we are only looking for one device
-            if gwId == did:
-                # We found it!
-                ret = (ip, version)
+            if dev_id and gwId == dev_id:
+                # We found it by dev_id!
+                ret = (ip, version, gwId)
                 break
+            elif address and address == ip:
+                # We found it by ip!
+                ret = (ip, version, gwId)
+                break
+
         selecttime = deadline - time.time()
 
     # while
@@ -557,7 +562,7 @@ class XenonDevice(object):
         self.dps_cache = {}
         if address is None or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
-            (addr, ver) = self.find(dev_id)
+            (addr, ver, did) = find_device(dev_id)
             if addr is None:
                 log.debug("Unable to find device on network (specify IP address)")
                 raise Exception("Unable to find device on network (specify IP address)")
@@ -1143,7 +1148,8 @@ class XenonDevice(object):
 
     @staticmethod
     def find(did):
-        return find(did)
+        (ip, ver, dev_id) = find_device(dev_id=did)
+        return (ip, ver)
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """
