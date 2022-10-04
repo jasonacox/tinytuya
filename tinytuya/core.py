@@ -402,6 +402,72 @@ def error_json(number=None, payload=None):
 
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
+def find(did=None):
+    """Scans network for Tuya devices with ID = did
+
+    Parameters:
+        did = The specific Device ID you are looking for (returns only IP and Version)
+
+    Response:
+        (ip, version)
+    """
+    if did is None:
+        return (None, None)
+    log.debug("Listening for device %s on the network", did)
+    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    client.bind(("", UDPPORT))
+    client.setblocking(False)
+    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    clients.bind(("", UDPPORTS))
+    clients.setblocking(False)
+
+    deadline = time.time() + SCANTIME
+    selecttime = SCANTIME
+    ret = (None, None)
+
+    while (ret[0] is None) and (selecttime > 0):
+        rd, _, _ = select.select( [client, clients], [], [], selecttime )
+        for sock in rd:
+            try:
+                data, addr = sock.recvfrom(4048)
+            except:
+                # Timeout
+                continue
+            ip = addr[0]
+            gwId = version = ""
+            result = data
+            try:
+                result = data[20:-8]
+                try:
+                    result = decrypt_udp(result)
+                except:
+                    result = result.decode()
+
+                result = json.loads(result)
+                ip = result["ip"]
+                gwId = result["gwId"]
+                version = result["version"]
+                log.debug( 'find() received broadcast from %r: %r', ip, result )
+            except:
+                result = {"ip": ip}
+                log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
+
+            # Check to see if we are only looking for one device
+            if gwId == did:
+                # We found it!
+                ret = (ip, version)
+                break
+        selecttime = deadline - time.time()
+
+    # while
+    clients.close()
+    client.close()
+    log.debug( 'find() is returning: %r', ret )
+    return ret
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
@@ -1075,72 +1141,9 @@ class XenonDevice(object):
     def close(self):
         self.__del__()
 
-    def find(self, did=None):
-        """Scans network for Tuya devices with ID = did
-
-        Parameters:
-            did = The specific Device ID you are looking for (returns only IP and Version)
-
-        Response:
-            (ip, version)
-        """
-        if did is None:
-            return (None, None)
-        log.debug("Listening for device %s on the network", did)
-        # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
-        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        client.bind(("", UDPPORT))
-        client.setblocking(False)
-        # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
-        clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        clients.bind(("", UDPPORTS))
-        clients.setblocking(False)
-
-        deadline = time.time() + SCANTIME
-        selecttime = SCANTIME
-        ret = (None, None)
-
-        while (ret[0] is None) and (selecttime > 0):
-            rd, _, _ = select.select( [client, clients], [], [], selecttime )
-            for sock in rd:
-                try:
-                    data, addr = sock.recvfrom(4048)
-                except:
-                    # Timeout
-                    continue
-                ip = addr[0]
-                gwId = version = ""
-                result = data
-                try:
-                    result = data[20:-8]
-                    try:
-                        result = decrypt_udp(result)
-                    except:
-                        result = result.decode()
-
-                    result = json.loads(result)
-                    ip = result["ip"]
-                    gwId = result["gwId"]
-                    version = result["version"]
-                    log.debug( 'find() received broadcast from %r: %r', ip, result )
-                except:
-                    result = {"ip": ip}
-                    log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
-
-                # Check to see if we are only looking for one device
-                if gwId == did:
-                    # We found it!
-                    ret = (ip, version)
-                    break
-            selecttime = deadline - time.time()
-
-        # while
-        clients.close()
-        client.close()
-        log.debug( 'find() is returning: %r', ret )
-        return ret
+    @staticmethod
+    def find(did):
+        return find(did)
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """
