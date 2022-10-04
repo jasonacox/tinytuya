@@ -4,6 +4,11 @@
 
 * Rework device finding for auto-IP detection, and unpack_message() retcode fix by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/186
 * Standardize indentation for code snippets in the README. by @TheOnlyWayUp in https://github.com/jasonacox/tinytuya/pull/184
+* Get local key from devices.json if not provided by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/187
+
+```python
+d = tinytuya.OutletDevice( '0123456789abcdef0123' )
+```
 
 ## v1.7.0 - Tuya Protocol v3.4 Device Support
 
