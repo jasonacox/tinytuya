@@ -115,6 +115,8 @@ DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
 
+DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip')
+
 # Tuya Command Types
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
 AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
