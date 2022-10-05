@@ -7,13 +7,17 @@
  For more information see https://github.com/jasonacox/tinytuya
 
   Local Control Classes
-    OutletDevice(dev_id, address, local_key=None, dev_type='default')
-    CoverDevice(dev_id, address, local_key=None, dev_type='default')
-    BulbDevice(dev_id, address, local_key=None, dev_type='default')
+    OutletDevice(dev_id, address=None, local_key=None, dev_type='default', connection_timeout=5, version=3.1, persist=False)
+    CoverDevice(...)
+    BulbDevice(...)
+    Device(...)
         dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99
-        local_key (str, optional): The encryption key. Defaults to None.
-        dev_type (str): Device type for payload options (see below)
+        address (str, optional): Device Network IP Address e.g. 10.0.1.99, or None to try and find the device
+        local_key (str, optional): The encryption key. Defaults to None. If None, key will be looked up in DEVICEFILE if available
+        dev_type (str, optional): Device type for payload options (see below)
+        connection_timeout (float, optional): The default socket connect and data timeout
+        version (float, optional): The API version to use. Defaults to 3.1
+        persist (bool, optional): Make a persistant connection to the device
     Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
   Functions

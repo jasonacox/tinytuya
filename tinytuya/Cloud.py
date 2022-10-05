@@ -243,30 +243,46 @@ class Cloud(object):
         uri = 'users/%s/devices' % uid
         json_data = self._tuyaplatform(uri)
 
-        # Use Device ID to get MAC addresses
-        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
-        json_mac_data = self._tuyaplatform(uri)
-
         if verbose:
             return json_data
         else:
             # Filter to only Name, ID and Key
-            tuyadevices = []
-            for i in json_data['result']:
-                item = {}
-                item['name'] = i['name'].strip()
-                item['id'] = i['id']
-                item['key'] = i['local_key']
-                if 'mac' in i:
-                    item['mac'] = i['mac']
-                else:
-                    try:
-                        item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-                    except:
-                        pass
-                tuyadevices.append(item)
-                
-            return tuyadevices
+            return self.filter_devices( json_data['result'], json_mac_data )
+
+    def filter_devices( self, devs, ip_list=None ):
+        # Use Device ID to get MAC addresses
+        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in devs))
+        json_mac_data = self._tuyaplatform(uri)
+
+        tuyadevices = []
+        icon_host = 'https://images.' + self.urlhost.split( '.', 1 )[1] + '/'
+
+        for i in devs:
+            item = {}
+            item['name'] = i['name'].strip()
+            item['id'] = i['id']
+            item['key'] = i['local_key']
+            if 'mac' in i:
+                item['mac'] = i['mac']
+            else:
+                try:
+                    item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "")
+                except:
+                    pass
+
+            if ip_list and 'mac' in item and item['mac'] in ip_list:
+                item['ip'] = ip_list[item['mac']]
+
+            for k in DEVICEFILE_SAVE_VALUES:
+                if k in i:
+                    if k == 'icon':
+                        item[k] = icon_host + i[k]
+                    else:
+                        item[k] = i[k]
+
+            tuyadevices.append(item)
+
+        return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
         if deviceid is None:

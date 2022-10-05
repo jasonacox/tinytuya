@@ -7,7 +7,8 @@
  For more information see https://github.com/Felix-Pi
 
  Local Control Classes
-    SocketDevice(dev_id, address, local_key=None, dev_type='default', version=3.3)
+    SocketDevice(...)
+        See OutletDevice() for constructor arguments
 
  Functions
     SocketDevice:
@@ -47,21 +48,12 @@ from ..core import Device
 class SocketDevice(Device):
     """
     Represents a Tuya based Socket
-
-    Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
-        version (float, optional): Tuya Device Version (look at Device.set_version)
     """
 
     DPS_STATE = '1'
     DPS_CURRENT = '18'
     DPS_POWER = '19'
     DPS_VOLTAGE = '20'
-
-    def __init__(self, dev_id, address=None, local_key="", dev_type="default", version=3.1):
-        super(SocketDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def get_energy_consumption(self):
         data = self.status()
