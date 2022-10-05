@@ -247,7 +247,7 @@ class Cloud(object):
             return json_data
         else:
             # Filter to only Name, ID and Key
-            return self.filter_devices( json_data['result'], json_mac_data )
+            return self.filter_devices( json_data['result'] )
 
     def filter_devices( self, devs, ip_list=None ):
         # Use Device ID to get MAC addresses
