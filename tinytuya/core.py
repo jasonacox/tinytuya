@@ -412,7 +412,7 @@ def find_device(dev_id=None, address=None):
         address = The IP address you are tring to find the Device ID for
 
     Response:
-        (ip, version, dev_id)
+        (ip, version, {broadcast data})
     """
     if dev_id is None and address is None:
         return (None, None, None)
@@ -462,11 +462,11 @@ def find_device(dev_id=None, address=None):
             # Check to see if we are only looking for one device
             if dev_id and gwId == dev_id:
                 # We found it by dev_id!
-                ret = (ip, version, gwId)
+                ret = (ip, version, result)
                 break
             elif address and address == ip:
                 # We found it by ip!
-                ret = (ip, version, gwId)
+                ret = (ip, version, result)
                 break
 
         selecttime = deadline - time.time()
@@ -598,7 +598,7 @@ class XenonDevice(object):
 
         if (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
-            (addr, ver, did) = find_device(dev_id)
+            (addr, ver, bcast_data) = find_device(dev_id)
             if addr is None:
                 log.debug("Unable to find device on network (specify IP address)")
                 raise Exception("Unable to find device on network (specify IP address)")
@@ -1194,7 +1194,7 @@ class XenonDevice(object):
         Response:
             (ip, version)
         """
-        (ip, ver, dev_id) = find_device(dev_id=did)
+        (ip, ver, bcast_data) = find_device(dev_id=did)
         return (ip, ver)
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
