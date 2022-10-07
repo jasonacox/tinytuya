@@ -1,8 +1,9 @@
 # RELEASE NOTES
 
-## v1.7.1 - TBD (Unreleased)
+## v1.7.1 - Auto-IP Detection Enhancement
 
-* Add Climate device module for portable air conditioners by @fr3dz10 in https://github.com/jasonacox/tinytuya/pull/189
+* PyPI 1.7.1
+* Add Climate device module and simple example for portable air conditioners by @fr3dz10 in https://github.com/jasonacox/tinytuya/pull/189 and https://github.com/jasonacox/tinytuya/pull/192
 * Constructor and documentation updates by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/188
 * Get local key from devices.json if not provided by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/187
 * Rework device finding for auto-IP detection, and unpack_message() retcode fix by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/186
