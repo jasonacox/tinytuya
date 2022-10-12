@@ -625,7 +625,8 @@ class XenonDevice(object):
 
     def __repr__(self):
         # FIXME can do better than this
-        return "%r" % ((self.id, self.address),)
+        return ("%s( %r, address=%r, local_key=%r, dev_type=%r, connection_timeout=%r, version=%r, persist=%r )" %
+                (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent))
 
     def _get_socket(self, renew):
         if renew and self.socket is not None:
