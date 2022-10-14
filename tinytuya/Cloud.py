@@ -220,10 +220,18 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri)
 
         if not response_dict['success']:
+            if 'code' not in response_dict:
+                response_dict['code'] = -1
+            if 'msg' not in response_dict:
+                response_dict['msg'] = 'Unknown Error'
             log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-            return None
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: Code %r: %r" % (response_dict['code'], response_dict['msg'])
+            )
+
         uid = response_dict['result']['uid']
         return uid
 
@@ -239,6 +247,9 @@ class Cloud(object):
                 ERR_CLOUD,
                 "Unable to get device list"
             )
+        elif isinstance( uid, dict):
+            return uid
+
         # Use UID to get list of all Devices for User
         uri = 'users/%s/devices' % uid
         json_data = self._tuyaplatform(uri)

@@ -412,7 +412,7 @@ def find_device(dev_id=None, address=None):
         address = The IP address you are tring to find the Device ID for
 
     Response:
-        (ip, version, {broadcast data})
+        {'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}
     """
     if dev_id is None and address is None:
         return (None, None, None)
@@ -430,9 +430,9 @@ def find_device(dev_id=None, address=None):
 
     deadline = time.time() + SCANTIME
     selecttime = SCANTIME
-    ret = (None, None, None)
+    ret = None
 
-    while (ret[0] is None) and (selecttime > 0):
+    while (ret is None) and (selecttime > 0):
         rd, _, _ = select.select( [client, clients], [], [], selecttime )
         for sock in rd:
             try:
@@ -454,19 +454,21 @@ def find_device(dev_id=None, address=None):
                 ip = result["ip"]
                 gwId = result["gwId"]
                 version = result["version"]
+                product_id = '' if 'productKey' not in result else result['productKey']
                 log.debug( 'find() received broadcast from %r: %r', ip, result )
             except:
                 result = {"ip": ip}
                 log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
+                continue
 
             # Check to see if we are only looking for one device
             if dev_id and gwId == dev_id:
                 # We found it by dev_id!
-                ret = (ip, version, result)
+                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
                 break
             elif address and address == ip:
                 # We found it by ip!
-                ret = (ip, version, result)
+                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
                 break
 
         selecttime = deadline - time.time()
@@ -474,6 +476,8 @@ def find_device(dev_id=None, address=None):
     # while
     clients.close()
     client.close()
+    if ret is None:
+        ret = {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
     log.debug( 'find() is returning: %r', ret )
     return ret
 
@@ -598,12 +602,12 @@ class XenonDevice(object):
 
         if (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
-            (addr, ver, bcast_data) = find_device(dev_id)
-            if addr is None:
+            bcast_data = find_device(dev_id)
+            if bcast_data['ip'] is None:
                 log.debug("Unable to find device on network (specify IP address)")
                 raise Exception("Unable to find device on network (specify IP address)")
-            self.address = addr
-            self.set_version(float(ver))
+            self.address = bcast_data['ip']
+            self.set_version(float(bcast_data['version']))
             time.sleep(0.1)
         elif version:
             self.set_version(float(version))
@@ -621,7 +625,8 @@ class XenonDevice(object):
 
     def __repr__(self):
         # FIXME can do better than this
-        return "%r" % ((self.id, self.address),)
+        return ("%s( %r, address=%r, local_key=%r, dev_type=%r, connection_timeout=%r, version=%r, persist=%r )" %
+                (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent))
 
     def _get_socket(self, renew):
         if renew and self.socket is not None:
@@ -1194,8 +1199,8 @@ class XenonDevice(object):
         Response:
             (ip, version)
         """
-        (ip, ver, bcast_data) = find_device(dev_id=did)
-        return (ip, ver)
+        bcast_data = find_device(dev_id=did)
+        return (bcast_data['ip'], bcast_data['version'])
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """

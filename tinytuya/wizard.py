@@ -171,11 +171,19 @@ def wizard(color=True, retries=None, forcescan=False):
 
     # on auth error, cloud.token is a dict and will cause getdevices() to implode
     if isinstance( cloud.token, dict):
-        print('\n\n' + bold + 'Error from Tuya server: ' + dim + cloud.token['Payload'])
+        err = cloud.token['Payload'] if 'Payload' in cloud.token else 'Unknown Error'
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+        print('Check API Key and Secret')
         return
 
     # Get UID from sample Device ID
     json_data = cloud.getdevices( True )
+
+    if 'result' not in json_data:
+        err = json_data['Payload'] if 'Payload' in json_data else 'Unknown Error'
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+        print('Check DeviceID and Region')
+        return
 
     if forcescan:
         # Force Scan - Get list of all local ip addresses
