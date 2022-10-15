@@ -562,13 +562,14 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, dev_cid = None
     ):
         """
         Represents a Tuya device.
 
         Args:
             dev_id (str): The device id.
+            dev_cid (str: Optional sub device id. Default to None.
             address (str): The network address.
             local_key (str, optional): The encryption key. Defaults to None.
 
@@ -577,6 +578,7 @@ class XenonDevice(object):
         """
 
         self.id = dev_id
+        self.cid = dev_cid
         self.address = address
         self.connection_timeout = connection_timeout
         self.retry = True
@@ -1259,6 +1261,8 @@ class XenonDevice(object):
                 json_data["uid"] = uid
             else:
                 json_data["uid"] = self.id
+        if self.cid is not None:
+            json_data["cid"] = self.cid
         if "t" in json_data:
             if json_data['t'] == "int":
                 json_data["t"] = int(time.time())
