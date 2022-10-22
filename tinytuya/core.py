@@ -19,6 +19,7 @@
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
+    set_socketRetryDelay(integer)      # retry delay [default 5]
     set_socketTimeout(timeout)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)        # add data points (DPS) to request
     add_dps_to_request(index)          # add data point (DPS) index set to None
@@ -586,6 +587,7 @@ class XenonDevice(object):
         self.socketPersistent = False if not persist else True
         self.socketNODELAY = True
         self.socketRetryLimit = 5
+        self.socketRetryDelay = 5
         self.dps_to_request = {}
         self.seqno = 1
         self.sendWait = 0.01
@@ -666,7 +668,7 @@ class XenonDevice(object):
                     self.socket.close()
                     self.socket = None
                 if retries < self.socketRetryLimit:
-                    time.sleep(5)
+                    time.sleep(self.socketRetryDelay)
             # unable to get connection
             return False
         # existing socket active
@@ -1169,6 +1171,9 @@ class XenonDevice(object):
 
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
+
+    def set_socketRetryDelay(self, delay):
+        self.socketRetryDelay = delay
 
     def set_socketTimeout(self, s):
         self.connection_timeout = s
