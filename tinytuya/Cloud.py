@@ -254,7 +254,7 @@ class Cloud(object):
         uri = 'users/%s/devices' % uid
         json_data = self._tuyaplatform(uri)
 
-        if verbose:
+        if verbose or 'result' not in json_data:
             return json_data
         else:
             # Filter to only Name, ID and Key
