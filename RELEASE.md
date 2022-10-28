@@ -1,9 +1,17 @@
 # RELEASE NOTES
 
-## v1.7.1 - TBD (Unreleased)
+## v1.7.1 - Auto-IP Detection Enhancement
 
+* PyPI 1.7.1
+* Add Climate device module and simple example for portable air conditioners by @fr3dz10 in https://github.com/jasonacox/tinytuya/pull/189 and https://github.com/jasonacox/tinytuya/pull/192
+* Constructor and documentation updates by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/188
+* Get local key from devices.json if not provided by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/187
 * Rework device finding for auto-IP detection, and unpack_message() retcode fix by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/186
-* Standardize indentation for code snippets in the README. by @TheOnlyWayUp in https://github.com/jasonacox/tinytuya/pull/184
+* Standardize indentation for code snippets in the README by @TheOnlyWayUp in https://github.com/jasonacox/tinytuya/pull/184
+
+```python
+d = tinytuya.OutletDevice( '0123456789abcdef0123' )
+```
 
 ## v1.7.0 - Tuya Protocol v3.4 Device Support
 

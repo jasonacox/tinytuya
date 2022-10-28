@@ -79,6 +79,25 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
         d.send(payload)
     ```
 
+### ClimateDevice
+
+* ClimateDevice - A community-contributed Python module to add support for Tuya WiFi portable air conditioners
+* Author: [Frédéric Chardon](https://github.com/fr3dz10)
+
+    ```python
+    # Example usage of community contributed device modules
+    # turn on cooling for up to 2 hours if room temperature is too high
+    from tinytuya.Contrib import ClimateDevice
+
+    d = ClimateDevice('tuya_id', '1.2.3.4', 'local_key')
+
+    if d.get_room_temperature() > 22:
+        d.set_operating_mode("cold")
+        d.set_target_temperature(20)
+        d.turn_on()
+        d.set_timer(2)
+    ```
+
 ## Submit Your Device
 
 * We welcome new device modules!
