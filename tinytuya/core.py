@@ -620,10 +620,13 @@ class XenonDevice(object):
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
-        if self.socket is not None:
-            # self.socket.shutdown(socket.SHUT_RDWR)
-            self.socket.close()
-            self.socket = None
+        try:
+            if self.socket:
+                # self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+                self.socket = None
+        except:
+            pass
 
     def __repr__(self):
         # FIXME can do better than this
@@ -1287,8 +1290,8 @@ class XenonDevice(object):
 
 
 class Device(XenonDevice):
-    def __init__(*args, **kwargs):
-        super(Device, args[0]).__init__(*args[1:], **kwargs)
+    #def __init__(self, *args, **kwargs):
+    #    super(Device, self).__init__(*args, **kwargs)
 
     def status(self):
         """Return device status."""
