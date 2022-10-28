@@ -4,7 +4,9 @@ from tinytuya.core import Device
  Python module to interface with Tuya Portable Air Conditioner devices
 
  Local Control Classes
-    ClimateDevice(dev_id, ...)
+    ClimateDevice(..., version=3.3)
+        This class uses a default version of 3.3
+        See OutletDevice() for the other constructor arguments
 
  Functions
     ClimateDevice:
