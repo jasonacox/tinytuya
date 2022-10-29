@@ -256,6 +256,11 @@ class Cloud(object):
 
         if verbose:
             return json_data
+        elif not json_data or 'result' not in json_data:
+            return error_json(
+                ERR_CLOUD,
+                "Unable to get device list"
+            )
         else:
             # Filter to only Name, ID and Key
             return self.filter_devices( json_data['result'] )

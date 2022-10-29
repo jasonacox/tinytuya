@@ -4,7 +4,9 @@ from tinytuya.core import Device
  Python module to interface with Tuya Portable Air Conditioner devices
 
  Local Control Classes
-    ClimateDevice(dev_id, address, local_key=None, dev_type='default', version=3.3)
+    ClimateDevice(..., version=3.3)
+        This class uses a default version of 3.3
+        See OutletDevice() for the other constructor arguments
 
  Functions
     ClimateDevice:
@@ -50,12 +52,6 @@ from tinytuya.core import Device
 class ClimateDevice(Device):
     """
     Represents a Tuya based Air Conditioner
-
-    Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
-        version (float, optional): Tuya Device Version (look at Device.set_version)
     """
 
     DPS_POWER = "1"
@@ -69,10 +65,11 @@ class ClimateDevice(Device):
     DPS_SWING = "30"
     DPS_STATE = "101"
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.3):
-        super(ClimateDevice, self).__init__(
-            dev_id, address, local_key, dev_type, version=version
-        )
+    def __init__(self, *args, **kwargs):
+        # set the default version to 3.3 as there are no 3.1 devices
+        if 'version' not in kwargs or not kwargs['version']:
+            kwargs['version'] = 3.3
+        super(ClimateDevice, self).__init__(*args, **kwargs)
 
     def status_json(self):
         """Wrapper around status() that replace DPS indices with human readable labels."""

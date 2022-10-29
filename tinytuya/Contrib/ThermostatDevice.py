@@ -258,14 +258,14 @@ class ThermostatDevice(Device):
         '130': { 'name': 'weather_forcast' }
         }
 
-    def __init__(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         # set the default version to 3.3 as there are no 3.1 devices
         if 'version' not in kwargs or not kwargs['version']:
             kwargs['version'] = 3.3
         # set persistant so we can receive sensor broadcasts
         if 'persist' not in kwargs:
             kwargs['persist'] = True
-        super(ThermostatDevice, args[0]).__init__(*args[1:], **kwargs)
+        super(ThermostatDevice, self).__init__(*args, **kwargs)
 
         self.high_resolution = None
         self.schedule = None

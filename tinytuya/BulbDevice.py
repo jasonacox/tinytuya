@@ -105,11 +105,11 @@ class BulbDevice(Device):
     has_colourtemp = False
     has_colour = False
 
-    def __init__(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         # set the default version to None so we do not immediately connect and call status()
         if 'version' not in kwargs or not kwargs['version']:
             kwargs['version'] = None
-        super(BulbDevice, args[0]).__init__(*args[1:], **kwargs)
+        super(BulbDevice, self).__init__(*args, **kwargs)
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):
