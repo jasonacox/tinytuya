@@ -9,9 +9,12 @@ import tinytuya
 from tinytuya import Contrib
 
 print("TinyTuya (Contrib Import Test) [%s]\n" % tinytuya.__version__)
-print("   Contrib Devices Loaded: ")
 
+print("   Contrib Devices Loaded: ")
 for i in Contrib.DeviceTypes:
     print("      * %s" % i)
+
+print("   Test ThermostatDevice init(): ")
+d = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
 
 exit()

@@ -1,5 +1,13 @@
 # RELEASE NOTES
 
+## v1.7.2 - Fix Contrib Devices Bug
+
+* PyPI 1.7.2
+* Restore reference to 'self' in __init__() functions by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/207
+* Misc updates to find_device(), wizard, and repr(device) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/196
+* Added socketRetryDelay as parameter instead of fixed value = 5. by @erathaowl in https://github.com/jasonacox/tinytuya/pull/199
+
+
 ## v1.7.1 - Auto-IP Detection Enhancement
 
 * PyPI 1.7.1
