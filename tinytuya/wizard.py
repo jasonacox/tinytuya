@@ -69,100 +69,6 @@ def getmyIP():
     s.close()
     return r
 
-def tuyaPlatform(apiRegion, apiKey, apiSecret, uri, token=None, new_sign_algorithm=True, body=None, headers=None, version="1.0"):
-    """Tuya IoT Platform Data Access
-
-    Parameters:
-        * region     Tuya API Server Region: us, eu, cn, in, us-e, eu-w
-        * apiKey     Tuya Platform Developer ID
-        * apiSecret  Tuya Platform Developer secret
-        * uri        Tuya Platform URI for this call
-        * token      Tuya OAuth Token
-
-    Playload Construction - Header Data:
-        Parameter 	  Type    Required	Description
-        client_id	  String     Yes	client_id
-        signature     String     Yes	HMAC-SHA256 Signature (see below)
-        sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
-        t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
-        lang	      String	 No	    Language. It is zh by default in China and en in other areas.
-        access_token  String     *      Required for service management calls
-
-    Signature Details:
-        * OAuth Token Request: signature = HMAC-SHA256(KEY + t, SECRET).toUpperCase()
-        * Service Management: signature = HMAC-SHA256(KEY + access_token + t, SECRET).toUpperCase()
-
-    URIs:
-        * Get Token = https://openapi.tuyaus.com/v1.0/token?grant_type=1
-        * Get UserID = https://openapi.tuyaus.com/v1.0/devices/{DeviceID}
-        * Get Devices = https://openapi.tuyaus.com/v1.0/users/{UserID}/devices
-        * Get Device info = https://openapi.tuyaus.com/v1.0/devices/factory-infos
-
-    REFERENCE: https://images.tuyacn.com/smart/docs/python_iot_code_sample.py
-
-    """
-    # Set hostname based on apiRegion
-    apiRegion = apiRegion.lower()
-    urlhost = "openapi.tuyacn.com"          # China Data Center
-    if apiRegion == "us":
-        urlhost = "openapi.tuyaus.com"      # Western America Data Center
-    if apiRegion == "us-e":
-        urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-    if apiRegion == "eu":
-        urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-    if apiRegion == "eu-w":
-        urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-    if apiRegion == "in":
-        urlhost = "openapi.tuyain.com"      # India Datacenter
-
-    # Build URL
-    url = "https://%s/v%s/%s" % (urlhost, version, uri)
-
-    # Build Header
-    now = int(time.time()*1000)
-    headers = dict(list(headers.items()) + [('Signature-Headers', ":".join(headers.keys()))]) if headers else {}
-    if token is None:
-        payload = apiKey + str(now)
-        headers['secret'] = apiSecret
-    else:
-        payload = apiKey + token + str(now)
-
-    # If running the post 6-30-2021 signing algorithm update the payload to include it's data
-    if new_sign_algorithm:
-        payload += ('GET\n' +                                                                # HTTPMethod
-                    hashlib.sha256(bytes((body or "").encode('utf-8'))).hexdigest() + '\n' + # Content-SHA256
-                    ''.join(['%s:%s\n'%(key, headers[key])                                   # Headers
-                             for key in headers.get("Signature-Headers", "").split(":")
-                             if key in headers]) + '\n' +
-                    '/' + url.split('//', 1)[-1].split('/', 1)[-1])
-    # Sign Payload
-    signature = hmac.new(
-        apiSecret.encode('utf-8'),
-        msg=payload.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).hexdigest().upper()
-
-    # Create Header Data
-    headers['client_id'] = apiKey
-    headers['sign'] = signature
-    headers['t'] = str(now)
-    headers['sign_method'] = 'HMAC-SHA256'
-
-    if token is not None:
-        headers['access_token'] = token
-
-    # Get Token
-    response = requests.get(url, headers=headers)
-    try:
-        response_dict = json.loads(response.content.decode())
-    except:
-        try:
-            response_dict = json.loads(response.content)
-        except:
-            print("Failed to get valid JSON response")
-
-    return response_dict
-
 def wizard(color=True, retries=None, forcescan=False):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
@@ -261,33 +167,23 @@ def wizard(color=True, retries=None, forcescan=False):
     DEVICEID = config['apiDeviceID']
     REGION = config['apiRegion']        # us, eu, cn, in
 
-    # Get Oauth Token from tuyaPlatform
-    uri = 'token?grant_type=1'
-    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri)
+    cloud = tinytuya.Cloud( **config )
 
-    if not response_dict['success']:
-        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+    # on auth error, cloud.token is a dict and will cause getdevices() to implode
+    if isinstance( cloud.token, dict):
+        err = cloud.token['Payload'] if 'Payload' in cloud.token else 'Unknown Error'
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+        print('Check API Key and Secret')
         return
-
-    token = response_dict['result']['access_token']
 
     # Get UID from sample Device ID
-    uri = 'devices/%s' % DEVICEID
-    response_dict = tuyaPlatform(REGION, KEY, SECRET, uri, token)
+    json_data = cloud.getdevices( True )
 
-    if not response_dict['success']:
-        print('\n\n' + bold + 'Error from Tuya server: ' + dim + response_dict['msg'])
+    if 'result' not in json_data:
+        err = json_data['Payload'] if 'Payload' in json_data else 'Unknown Error'
+        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+        print('Check DeviceID and Region')
         return
-
-    uid = response_dict['result']['uid']
-
-    # Use UID to get list of all Devices for User
-    uri = 'users/%s/devices' % uid
-    json_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
-
-    # Use Device ID to get MAC addresses
-    uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
-    json_mac_data = tuyaPlatform(REGION, KEY, SECRET, uri, token)
 
     if forcescan:
         # Force Scan - Get list of all local ip addresses
@@ -318,7 +214,7 @@ def wizard(color=True, retries=None, forcescan=False):
                     # TODO: Verify Tuya Device
                     ip = "%s" % addr
                     mac = get_mac_address(ip=ip)
-                    ip_list[ip] = mac
+                    ip_list[mac] = ip
                     print(" Found Device [%s]" % mac)
                 a_socket.close()
 
@@ -329,19 +225,7 @@ def wizard(color=True, retries=None, forcescan=False):
             forcescan = False
 
     # Filter to only Name, ID and Key, IP and mac-address
-    tuyadevices = []
-    for i in json_data['result']:
-        item = {}
-        item['name'] = i['name'].strip()
-        item['id'] = i['id']
-        item['key'] = i['local_key']
-        try:
-            item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-            if forcescan:
-                item['ip'] = ip_list[item['mac']]
-        except:
-            pass
-        tuyadevices.append(item)
+    tuyadevices = cloud.filter_devices( json_data['result'], ip_list )
 
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)

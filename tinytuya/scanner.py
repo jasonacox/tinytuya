@@ -217,13 +217,12 @@ class DeviceDetect(object):
             # getpeername() blows up with "OSError: [Errno 107] Transport endpoint is
             # not connected" if the connection was refused
             addr = self.sock.getpeername()[0]
-        except:
+        except Exception as e:
             addr = None
             if self.debug:
-                print('Debug sock', self.ip, 'failed!')
+                traceback.print_exception(e,e,None)
+                print('Debug sock', self.ip, 'connection failed!')
                 print(self.sock)
-                print(traceback.format_exc())
-
         # connection failed
         if not addr:
             # sometimes the devices accept the connection, but then immediately close it
@@ -232,23 +231,28 @@ class DeviceDetect(object):
                 # this should throw either ConnectionResetError or ConnectionRefusedError
                 r = self.sock.recv( 5000 )
                 if self.debug:
-                    print('recv:', r)
+                    print('Debug sock', self.ip, 'closed but received data?? Received:', r)
             # ugh, ConnectionResetError and ConnectionRefusedError are not available on python 2.7
             #except ConnectionResetError:
             except OSError as e:
                 if self.initial_connect_retries and e.errno == errno.ECONNRESET:
-                    self.initial_connect_retries -= 1
                     # connected, but then closed
+                    self.initial_connect_retries -= 1
+                    if self.debug:
+                        print('Debug sock', self.ip, 'connection made but then closed, retrying')
                     return False
+                elif e.errno == errno.ECONNRESET:
+                    if self.debug:
+                        print('Debug sock', self.ip, 'connection made but then closed and retry limit exceeded, giving up')
                 else:
                     if self.debug:
-                        print('failed 1', self.ip, e.errno, errno.ECONNRESET)
-                        print(traceback.format_exc())
+                        traceback.print_exception(e,e,None)
+                        print('Debug sock', self.ip, 'connection refused, not retrying')
                     return None
             except:
                 if self.debug:
-                    print('failed 2', self.ip)
-                    print(traceback.format_exc())
+                    print('Debug sock', self.ip, 'unhandled connection exception!')
+                    traceback.print_exc()
                 self.close()
                 return None
             # we should never get here
@@ -354,7 +358,6 @@ class ForceScannedDevice(DeviceDetect):
             self.err_found = True
             if self.debug:
                 print('ForceScannedDevice: Debug sock', self.ip, 'connect timed out!')
-                print(dict(self))
         elif self.step == FSCAN_INITIAL_CONNECT:
             if self.debug:
                 print('ForceScannedDevice: Debug sock', self.ip, 'socket send failed,', 'no data received' if forced else 'receive timed out')
@@ -488,7 +491,12 @@ class ForceScannedDevice(DeviceDetect):
                 msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.CONTROL_NEW, dummy_payload) )
             else:
                 msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.DP_QUERY, dummy_payload) )
-            self.sock.sendall( msg )
+            try:
+                self.sock.sendall( msg )
+            except:
+                self.send_queue.append( msg )
+                self.write = True
+                self.read = False
         #elif self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE:
         #    pass
         elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE:
@@ -888,15 +896,16 @@ def _print_device_info( result, note, term, extra_message=None ):
         devicename = result["name"]
         dkey = result["key"]
         mac = result["mac"]
+        devicetype = result['dev_type'] if 'dev_type' in result else '??'
 
         suffix = term.dim + ", MAC = " + mac + ""
-        if result['name'] == "":
+        if not result['name']:
             dname = gwId
-            devicename = "%sUnknown v%s%s Device%s" % (term.normal+term.dim, term.normal, version, term.dim)
+            devicename = "%sUnknown v%s Device%s" % (term.alert, version, term.normal+term.dim) # (term.normal+term.dim, term.normal, version, term.dim)
         else:
             devicename = term.normal + result['name'] + term.dim
         print(
-            "%s   Product ID = %s  [%s]:\n    %sAddress = %s,  %sDevice ID = %s, %sLocal Key = %s,  %sVersion = %s%s"
+            "%s   Product ID = %s  [%s]:\n    %sAddress = %s,  %sDevice ID = %s (%d), %sLocal Key = %s, %sVersion = %s, %sType = %s%s"
             % (
                 devicename,
                 productKey,
@@ -905,10 +914,13 @@ def _print_device_info( result, note, term, extra_message=None ):
                 ip,
                 term.cyan,
                 gwId,
+                len(gwId),
                 term.red,
                 dkey,
                 term.yellow,
                 version,
+                term.cyan,
+                devicetype,
                 suffix
             )
         )
@@ -1001,9 +1013,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             % (term.subbold, UDPPORT, UDPPORTS, scantime, term.normal)
         )
 
-    #debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67'] #,'172.20.10.102', '172.20.10.1']
+    debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67','172.20.10.102', '172.20.10.1']
     #debug_ips = ['172.20.10.107']
-    debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
+    #debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
@@ -1030,6 +1042,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     timeout_time = time.time() + 5
     current_ip = None
     need_sleep = 0.1
+    user_break_count = 0
     options = {
         'connect_timeout': connect_timeout,
         'data_timeout': connect_timeout,
@@ -1127,11 +1140,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     dev.timeout()
 
                 if (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
-                    if dev.debug:
+                    if False and dev.debug:
                         print('Resetting device scan end time due to debug ip', dev.ip, device_end_time, dev.timeo)
+                        if len(devices_with_timers) < 64:
+                            devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
                     device_end_time = dev.timeo + 1.0
-                    #if len(devices_with_timers) < 64:
-                    #    devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
 
             if not dev.sock:
                 continue
@@ -1155,47 +1168,47 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             spinnerx = (spinnerx + 1) % 4
             sys.stdout.flush()
 
-        if ip_scan_running:
-            # half-speed the spinner while force-scanning
-            need_sleep = 0.2
-            # time out any sockets which have not yet connected
-            # no need to run this every single time through the loop
-            if len(write_socks) < max_parallel:
-                want = max_parallel - len(write_socks)
-                # only open 10 at most during each pass through select()
-                if want > 10: want = 10
-                for i in range(want):
-                    current_ip = next( scan_ips, None )
-                    # all done!
-                    if current_ip is None:
-                        ip_scan_running = False
-                        device_end_time = time.time() + connect_timeout + 1.0
-                        need_sleep = 0.1
-                        break
-                    else:
-                        if current_ip in broadcasted_devices:
-                            pass
-                        elif current_ip in snapshot and snapshot[current_ip]['version'] and snapshot[current_ip]['gwId']:
-                            ip = current_ip
-                            broadcasted_devices[ip] = PollDevice( ip, snapshot[current_ip], options, ip in debug_ips )
-                            broadcasted_devices[ip].connect()
-                            devicelist.append( broadcasted_devices[ip] )
-                            check_end_time = time.time() + connect_timeout
-                            if check_end_time > device_end_time: device_end_time = check_end_time
-                        else:
-                            if current_ip in snapshot:
-                                dev = ForceScannedDevice( current_ip, snapshot[current_ip], options, current_ip in debug_ips )
-                            else:
-                                dev = ForceScannedDevice( current_ip, None, options, current_ip in debug_ips )
-                            devicelist.append(dev)
-                            write_socks.append(dev.sock)
-                            all_socks[dev.sock] = dev
-
-                        # we slept here so adjust the loop sleep time accordingly
-                        time.sleep(0.02)
-                        need_sleep -= 0.02
-
         try:
+            if ip_scan_running:
+                # half-speed the spinner while force-scanning
+                need_sleep = 0.2
+                # time out any sockets which have not yet connected
+                # no need to run this every single time through the loop
+                if len(write_socks) < max_parallel:
+                    want = max_parallel - len(write_socks)
+                    # only open 10 at most during each pass through select()
+                    if want > 10: want = 10
+                    for i in range(want):
+                        current_ip = next( scan_ips, None )
+                        # all done!
+                        if current_ip is None:
+                            ip_scan_running = False
+                            device_end_time = time.time() + connect_timeout + 1.0
+                            need_sleep = 0.1
+                            break
+                        else:
+                            if current_ip in broadcasted_devices:
+                                pass
+                            elif current_ip in snapshot and snapshot[current_ip]['version'] and snapshot[current_ip]['gwId']:
+                                ip = current_ip
+                                broadcasted_devices[ip] = PollDevice( ip, snapshot[current_ip], options, ip in debug_ips )
+                                broadcasted_devices[ip].connect()
+                                devicelist.append( broadcasted_devices[ip] )
+                                check_end_time = time.time() + connect_timeout
+                                if check_end_time > device_end_time: device_end_time = check_end_time
+                            else:
+                                if current_ip in snapshot:
+                                    dev = ForceScannedDevice( current_ip, snapshot[current_ip], options, current_ip in debug_ips )
+                                else:
+                                    dev = ForceScannedDevice( current_ip, None, options, current_ip in debug_ips )
+                                devicelist.append(dev)
+                                write_socks.append(dev.sock)
+                                all_socks[dev.sock] = dev
+
+                            # we slept here so adjust the loop sleep time accordingly
+                            time.sleep(0.02)
+                            need_sleep -= 0.02
+
             if need_sleep > 0:
                 time.sleep( need_sleep )
 
@@ -1205,9 +1218,19 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 rd, _, _ = select.select( read_socks, [], [], 0 )
                 wr = []
         except KeyboardInterrupt as err:
-            log.debug("Keyboard Interrupt - Exiting")
+            log.debug('Keyboard Interrupt')
             if verbose: print("\n**User Break**")
-            sys.exit()
+            user_break_count += 1
+
+            if user_break_count == 1:
+                ip_scan_running = False
+                scan_end_time = 0
+            elif user_break_count == 2:
+                break
+            else:
+                log.debug('Keyboard Interrupt - Exiting')
+                if verbose: print("\n**User Break** - Exiting")
+                sys.exit()
 
         # these sockets are now writable (just connected) or failed
         for sock in wr:
@@ -1217,7 +1240,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         for sock in rd:
             # this sock is not a UDP listener
             if sock is not client and sock is not clients:
-                all_socks[sock].read_data()
+                # may not exist if user-interrupted
+                if sock in all_socks:
+                    all_socks[sock].read_data()
                 continue
 
             # if we are here then it is from a UDP listener
@@ -1249,8 +1274,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 result["key"] = dkey
                 result["mac"] = mac
 
+                if verbose:
+                    print(term.alertdim + 'New Broadcast', ip, mac, result, term.normal)
+
                 if not mac and SCANLIBS:
-                    mac = result["mac"] = get_mac_address(ip=ip)
+                    a = time.time()
+                    mac = get_mac_address(ip=ip, network_request=False)
+                    b = time.time()
+                    if verbose:
+                        print('Discovered MAC', mac, 'in', (b-a))
+                    if mac and mac != '00:00:00:00:00:00':
+                        result["mac"] = mac
 
                 broadcasted_devices[ip] = PollDevice( ip, result, options, ip in debug_ips )
                 do_poll = False
@@ -1324,9 +1358,36 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         print( 'Scanned in', time.time() - start_time )
         #print( len(response_list), response_list )
 
+    ver_count = { '3.1': 0, '3.2': 0, '3.3': 0, '3.4': 0 }
+    unknown_dev_count = 0
+    no_key_count = 0
+
     for ip in broadcasted_devices:
         if ip in scanned_devices:
             del scanned_devices[ip]
+        ver_str = str(broadcasted_devices[ip].deviceinfo['version'])
+        if ver_str not in ver_count:
+            ver_count[ver_str] = 1
+        else:
+            ver_count[ver_str] += 1
+
+        if not broadcasted_devices[ip].deviceinfo['name']:
+            unknown_dev_count += 1
+        elif not broadcasted_devices[ip].deviceinfo['key']:
+            no_key_count += 1
+
+    for ip in scanned_devices:
+        ver_str = str(broadcasted_devices[ip].deviceinfo['version'])
+        if ver_str not in ver_count:
+            ver_count[ver_str] = 1
+        else:
+            ver_count[ver_str] += 1
+
+        if not scanned_devices[ip].deviceinfo['name']:
+            unknown_dev_count += 1
+        elif not scanned_devices[ip].deviceinfo['key']:
+            no_key_count += 1
+
 
     found_count = len(broadcasted_devices)+len(scanned_devices)
 
@@ -1348,6 +1409,18 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             print( 'Force-Scanned:', len(scanned_devices), ' - Matched GWID:', gwid_found,'Matched Key:', key_found, 'Unmatched:', unmatched )
             if err_found or invalid:
                 print( 'Force-Scan Errors: Connection Errors:', err_found, 'Version Detect Failed:', invalid )
+
+        ver_found = ''
+        for i in sorted(ver_count.keys()):
+            if ver_count[i]:
+                ver_found += ', %s: %s' % (i, ver_count[i])
+        print( 'Versions:', ver_found[2:] )
+
+        if unknown_dev_count:
+            print( '%sUnknown Devices: %s%s' % (term.alert, unknown_dev_count, term.normal) )
+
+        if no_key_count:
+            print( '%sMissing Local Key: %s%s' % (term.alert, no_key_count, term.normal) )
 
         if wantips:
             print('%s%sDid not find %s devices by ip: %r%s' % (term.alert, term.yellow, len(wantips), wantips, term.normal))

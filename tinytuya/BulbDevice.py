@@ -7,11 +7,8 @@
  For more information see https://github.com/jasonacox/tinytuya
 
  Local Control Classes
-    BulbDevice(dev_id, address, local_key=None, dev_type='default')
-        dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99
-        local_key (str, optional): The encryption key. Defaults to None.
-        dev_type (str): Device type for payload options (see below)
+    BulbDevice(...)
+        See OutletDevice() for constructor arguments
 
  Functions
     BulbDevice
@@ -68,12 +65,6 @@ class BulbDevice(Device):
         Type A - Uses DPS index 1-5
         Type B - Uses DPS index 20-27 (no index 1)
         Type C - Same as Type A except that it is using DPS 2 for brightness, which ranges from 0-1000.  These are the Feit branded dimmers found at Costco.
-
-    Init Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
-
     """
 
     # Two types of Bulbs - TypeA uses DPS 1-5, TypeB uses DPS 20-24
@@ -114,8 +105,11 @@ class BulbDevice(Device):
     has_colourtemp = False
     has_colour = False
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=None):
-        super(BulbDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
+    def __init__(self, *args, **kwargs):
+        # set the default version to None so we do not immediately connect and call status()
+        if 'version' not in kwargs or not kwargs['version']:
+            kwargs['version'] = None
+        super(BulbDevice, self).__init__(*args, **kwargs)
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):

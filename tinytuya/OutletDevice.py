@@ -7,7 +7,14 @@
  For more information see https://github.com/jasonacox/tinytuya
 
  Local Control Classes
-    OutletDevice(dev_id, address, local_key=None, dev_type='default')
+    OutletDevice(dev_id, address=None, local_key=None, dev_type='default', connection_timeout=5, version=3.1, persist=False
+        dev_id (str): Device ID e.g. 01234567891234567890
+        address (str, optional): Device Network IP Address e.g. 10.0.1.99, or None to try and find the device
+        local_key (str, optional): The encryption key. Defaults to None. If None, key will be looked up in DEVICEFILE if available
+        dev_type (str, optional): Device type for payload options (see below)
+        connection_timeout (float, optional): The default socket connect and data timeout
+        version (float, optional): The API version to use. Defaults to 3.1
+        persist (bool, optional): Make a persistant connection to the device
 
  Functions
     OutletDevice:
@@ -43,15 +50,7 @@ from .core import Device
 class OutletDevice(Device):
     """
     Represents a Tuya based Smart Plug or Switch.
-
-    Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
     """
-
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
-        super(OutletDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def set_dimmer(self, percentage=None, value=None, dps_id=3, nowait=False):
         """Set dimmer value

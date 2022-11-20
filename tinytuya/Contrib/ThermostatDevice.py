@@ -8,8 +8,9 @@
  Module Author: uzlonewolf (https://github.com/uzlonewolf)
 
  Local Control Classes
-    ThermostatDevice(dev_id, address, local_key=None, dev_type='default', persist=True)
-        This class automatically sets the version to 3.3 and enables persistance so we can catch temperature updates
+    ThermostatDevice(..., version=3.3, persist=True)
+        This class uses a default version of 3.3 and enables persistance so we can catch temperature updates
+        See OutletDevice() for the other constructor arguments
 
  Additional Classes
     ThermostatSensorList(dps, parent_device)
@@ -219,11 +220,6 @@ from ..core import Device, log, HEART_BEAT, DP_QUERY, CONTROL
 class ThermostatDevice(Device):
     """
     Represents a Tuya based 24v Thermostat.
-
-    Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
     """
 
     sensor_dps = ('122', '125', '126', '127', '128')
@@ -262,11 +258,14 @@ class ThermostatDevice(Device):
         '130': { 'name': 'weather_forcast' }
         }
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True, version=3.3):
-        super(ThermostatDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
+    def __init__(self, *args, **kwargs):
+        # set the default version to 3.3 as there are no 3.1 devices
+        if 'version' not in kwargs or not kwargs['version']:
+            kwargs['version'] = 3.3
         # set persistant so we can receive sensor broadcasts
-        if persist:
-            self.set_socketPersistent(True)
+        if 'persist' not in kwargs:
+            kwargs['persist'] = True
+        super(ThermostatDevice, self).__init__(*args, **kwargs)
 
         self.high_resolution = None
         self.schedule = None

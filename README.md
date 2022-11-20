@@ -11,22 +11,22 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module.
+This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module and currently support Tuya Protocols 3.1, 3.2, 3.3 and 3.4.
 
 [Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API.  This allows us to directly control the devices without using the cloud. This python module provides a way to poll status and issue commands to these devices.
 
-Starting with v1.3.0, TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
+TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
 ```python
-    # Example Usage of TinyTuya
-    import tinytuya
+# Example Usage of TinyTuya
+import tinytuya
 
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
-    data = d.status() 
-    print('Device status: %r' % data)
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
+data = d.status() 
+print('Device status: %r' % data)
 ```
 
 NOTE: Devices need to be **activated** by Smart Life App.
@@ -36,8 +36,8 @@ NOTE: Devices need to be **activated** by Smart Life App.
 TinyTuya supports python versions 2.7 and 3.x (recommended).
 
 ```bash
-  # Install TinyTuya
-  python -m pip install tinytuya
+# Install TinyTuya
+python -m pip install tinytuya
 ```
 
 Pip will attempt to install `pycryptodome`, `requests` and `colorama` if not already installed.
@@ -108,17 +108,28 @@ Notes:
 After importing tinytuya, you create a device handle for the device you want to read or control.  Here is an example for a Tuya smart switch or plug:
 
 ```python
-    import tinytuya
+import tinytuya
 
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
+# Connect to Device - pytuya Method
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
 
-    # Get Status
-    data = d.status() 
-    print('set_status() result %r' % data)
+# And a Alternative Method for TinyTuya v1.7.0+
+# d = tinytuya.OutletDevice(
+#       dev_id='DEVICE_ID_HERE',
+#       address='IP_ADDRESS_HERE',
+#       local_key='LOCAL_KEY_HERE', 
+#       version=3.4)
 
-    # Turn On
-    d.turn_on()
+# Get Status
+data = d.status() 
+print('set_status() result %r' % data)
+
+# Turn On
+d.turn_on()
+
+# Turn Off
+d.turn_off()
 ```
 
 ### TinyTuya Module Classes and Functions 
@@ -235,68 +246,68 @@ The "Err" number will be one of these:
 See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts.
 
 ```python
-    import tinytuya
+import tinytuya
 
-    """
-    OUTLET Device
-    """
-    d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)
-    data = d.status()  
+"""
+OUTLET Device
+"""
+d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)
+data = d.status()  
 
-    # Show status and state of first controlled switch on device
-    print('Dictionary %r' % data)
-    print('State (bool, true is ON) %r' % data['dps']['1'])  
+# Show status and state of first controlled switch on device
+print('Dictionary %r' % data)
+print('State (bool, true is ON) %r' % data['dps']['1'])  
 
-    # Toggle switch state
-    switch_state = data['dps']['1']
-    data = d.set_status(not switch_state)  # This requires a valid key
-    if data:
-        print('set_status() result %r' % data)
+# Toggle switch state
+switch_state = data['dps']['1']
+data = d.set_status(not switch_state)  # This requires a valid key
+if data:
+    print('set_status() result %r' % data)
 
-    # On a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
-    data = d.set_status(False, 4)
-    if data:
-        print('set_status() result %r' % data)
-        print('set_status() extra %r' % data[20:-8])
+# On a switch that has 4 controllable ports, turn the fourth OFF (1 is the first)
+data = d.set_status(False, 4)
+if data:
+    print('set_status() result %r' % data)
+    print('set_status() extra %r' % data[20:-8])
 
-    """
-    RGB Bulb Device
-    """
-    import time
+"""
+RGB Bulb Device
+"""
+import time
 
-    d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-    d.set_version(3.3)  # IMPORTANT to set this regardless of version
-    d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
-    data = d.status()
+d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+d.set_version(3.3)  # IMPORTANT to set this regardless of version
+d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
+data = d.status()
 
-    # Show status of first controlled switch on device
-    print('Dictionary %r' % data)
+# Show status of first controlled switch on device
+print('Dictionary %r' % data)
 
-    # Set to RED Color - set_colour(r, g, b):
-    d.set_colour(255,0,0)  
+# Set to RED Color - set_colour(r, g, b):
+d.set_colour(255,0,0)  
 
-    # Cycle through the Rainbow
-    rainbow = {"red": [255, 0, 0], "orange": [255, 127, 0], "yellow": [255, 200, 0],
-              "green": [0, 255, 0], "blue": [0, 0, 255], "indigo": [46, 43, 95],
-              "violet": [139, 0, 255]}
-    for color in rainbow:
-        [r, g, b] = rainbow[color]
-        d.set_colour(r, g, b, nowait=True)  # nowait = Go fast don't wait for response
-        time.sleep(0.25)
+# Cycle through the Rainbow
+rainbow = {"red": [255, 0, 0], "orange": [255, 127, 0], "yellow": [255, 200, 0],
+          "green": [0, 255, 0], "blue": [0, 0, 255], "indigo": [46, 43, 95],
+          "violet": [139, 0, 255]}
+for color in rainbow:
+    [r, g, b] = rainbow[color]
+    d.set_colour(r, g, b, nowait=True)  # nowait = Go fast don't wait for response
+    time.sleep(0.25)
 
-    # Brightness: Type A devices range = 25-255 and Type B = 10-1000
-    d.set_brightness(1000)
+# Brightness: Type A devices range = 25-255 and Type B = 10-1000
+d.set_brightness(1000)
 
-    # Set to White - set_white(brightness, colourtemp):
-    #    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
-    d.set_white(1000,10)
+# Set to White - set_white(brightness, colourtemp):
+#    colourtemp: Type A devices range = 0-255 and Type B = 0-1000
+d.set_white(1000,10)
 
-    # Set Bulb to Scene Mode
-    d.set_mode('scene')
+# Set Bulb to Scene Mode
+d.set_mode('scene')
 
-    # Scene Example: Set Color Rotation Scene
-    d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+# Scene Example: Set Color Rotation Scene
+d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
 
 ```
 ### Example Device Monitor
@@ -368,13 +379,10 @@ print("Status of device:\n", result)
 
 # Send Command - Turn on switch
 commands = {
-	'commands': [{
-		'code': 'switch_1',
-		'value': True
-	}, {
-		'code': 'countdown_1',
-		'value': 0
-	}]
+    "commands": [
+        {"code": "switch_1", "value": True},
+        {"code": "countdown_1", "value": 0},
+    ]
 }
 print("Sending command...")
 result = c.sendcommand(id,commands)
@@ -392,17 +400,17 @@ These devices uses AES encryption which is not available in the Python standard 
 ### Command Line
 
 ```
-    python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
+python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
 
-      command = scan        Scan local network for Tuya devices.
-      command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
-      command = devices     Scan all devices listed in devices.json file.
-      command = snapshot    Scan devices listed in snapshot.json file.
-      command = json        Scan devices listed in snapshot.json file [JSON].
-      max_retry             Maximum number of retries to find Tuya devices [Default=15]
-      -nocolor              Disable color text output.
-      -force                Force network scan for device IP addresses.
-      -h                    Show usage.
+  command = scan        Scan local network for Tuya devices.
+  command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
+  command = devices     Scan all devices listed in devices.json file.
+  command = snapshot    Scan devices listed in snapshot.json file.
+  command = json        Scan devices listed in snapshot.json file [JSON].
+  max_retry             Maximum number of retries to find Tuya devices [Default=15]
+  -nocolor              Disable color text output.
+  -force                Force network scan for device IP addresses.
+  -h                    Show usage.
 ```
 
 ### Scan Tool 
@@ -448,11 +456,11 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 * Devices running protocol version 3.1 (e.g. below Firmware 1.0.5) do not require a device *Local_Key* to read the status. Both 3.1 and 3.3 devices will require a device *Local_Key* to control the device.
 * Some devices with 22 character IDs will require additional setting to poll correctly - here is an example:
   ```python
-    a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
-    a.set_version(3.3)
-    a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
-    data =  a.status()
-    print(data)
+  a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
+  a.set_version(3.3)
+  a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
+  data =  a.status()
+  print(data)
   ```
 * Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
   ```
@@ -618,7 +626,7 @@ Note: Some 3.3 energy management plugs use the DPS values of the 3.1 plug above.
       "head": "",
       "key1": "[[TO_BE_REPLACED]]",
       "type": 0,
-      "delay": 300
+      "delay": 300,
   }
   # Sending the IR command:
   payload = d.generate_payload(tinytuya.CONTROL, {"201": json.dumps(command)})
@@ -769,7 +777,7 @@ For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/dis
     The origin of this python module (now abandoned). Thanks to nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
   * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio. 
     Updated pytuya to support devices with Device IDs of 22 characters
-  * Thanks to @uzlonewolf for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules and making enhancements to TuyaMessage logic for multi-payload messages.
+  * Thanks to [@uzlonewolf](https://github.com/uzlonewolf) for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules, making enhancements to TuyaMessage logic for multi-payload messages and adding Tuya Protocol 3.4 support to TinyTuya.
 
 ## Related Projects
 

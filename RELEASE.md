@@ -1,12 +1,46 @@
 # RELEASE NOTES
 
-## v1.7.0 - Tuya Protocol v3.4 Device Support - Unreleased
+## v1.7.2 - Fix Contrib Devices Bug
 
+* PyPI 1.7.2
+* Restore reference to 'self' in __init__() functions by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/207
+* Misc updates to find_device(), wizard, and repr(device) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/196
+* Added socketRetryDelay as parameter instead of fixed value = 5. by @erathaowl in https://github.com/jasonacox/tinytuya/pull/199
+
+
+## v1.7.1 - Auto-IP Detection Enhancement
+
+* PyPI 1.7.1
+* Add Climate device module and simple example for portable air conditioners by @fr3dz10 in https://github.com/jasonacox/tinytuya/pull/189 and https://github.com/jasonacox/tinytuya/pull/192
+* Constructor and documentation updates by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/188
+* Get local key from devices.json if not provided by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/187
+* Rework device finding for auto-IP detection, and unpack_message() retcode fix by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/186
+* Standardize indentation for code snippets in the README by @TheOnlyWayUp in https://github.com/jasonacox/tinytuya/pull/184
+
+```python
+d = tinytuya.OutletDevice( '0123456789abcdef0123' )
+```
+
+## v1.7.0 - Tuya Protocol v3.4 Device Support
+
+* PyPI 1.7.0
 * Add support for v3.4 protocol Tuya devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/179
+* API change with `_send_receive()` - now takes care of the packing and encrypting so it can re-encode whenever the socket is closed and reopened, and _get_socket() now takes care of negotiating the session key (v3.4)
 * Optimize detect_available_dps() by @pawel-szopinski in https://github.com/jasonacox/tinytuya/pull/176
 * Update ThermostatDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/174
 * Add Pronto/NEC/Samsung IR code conversion functions to IRRemoteControlDevice by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/173
 * Added DoorbellDevice by @JonesMeUp in https://github.com/jasonacox/tinytuya/issues/162 
+* Added ability to set version on constructor for more intuitive use:
+
+```python
+d = tinytuya.OutletDevice(
+    dev_id='xxxxxxxxxxxxxxxxxxxxxxxx',
+    address='x.x.x.x',
+    local_key='xxxxxxxxxxxxxxxx',
+    version=3.4)
+
+print(d.status())
+```
 
 ## v1.6.6 - Updated Payload Dictionary and Command List
 

@@ -220,10 +220,18 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri)
 
         if not response_dict['success']:
+            if 'code' not in response_dict:
+                response_dict['code'] = -1
+            if 'msg' not in response_dict:
+                response_dict['msg'] = 'Unknown Error'
             log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
-            return None
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: Code %r: %r" % (response_dict['code'], response_dict['msg'])
+            )
+
         uid = response_dict['result']['uid']
         return uid
 
@@ -239,34 +247,58 @@ class Cloud(object):
                 ERR_CLOUD,
                 "Unable to get device list"
             )
+        elif isinstance( uid, dict):
+            return uid
+
         # Use UID to get list of all Devices for User
         uri = 'users/%s/devices' % uid
         json_data = self._tuyaplatform(uri)
 
-        # Use Device ID to get MAC addresses
-        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in json_data['result']))
-        json_mac_data = self._tuyaplatform(uri)
-
         if verbose:
             return json_data
+        elif not json_data or 'result' not in json_data:
+            return error_json(
+                ERR_CLOUD,
+                "Unable to get device list"
+            )
         else:
             # Filter to only Name, ID and Key
-            tuyadevices = []
-            for i in json_data['result']:
-                item = {}
-                item['name'] = i['name'].strip()
-                item['id'] = i['id']
-                item['key'] = i['local_key']
-                if 'mac' in i:
-                    item['mac'] = i['mac']
-                else:
-                    try:
-                        item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "N/A")
-                    except:
-                        pass
-                tuyadevices.append(item)
-                
-            return tuyadevices
+            return self.filter_devices( json_data['result'] )
+
+    def filter_devices( self, devs, ip_list=None ):
+        # Use Device ID to get MAC addresses
+        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in devs))
+        json_mac_data = self._tuyaplatform(uri)
+
+        tuyadevices = []
+        icon_host = 'https://images.' + self.urlhost.split( '.', 1 )[1] + '/'
+
+        for i in devs:
+            item = {}
+            item['name'] = i['name'].strip()
+            item['id'] = i['id']
+            item['key'] = i['local_key']
+            if 'mac' in i:
+                item['mac'] = i['mac']
+            else:
+                try:
+                    item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "")
+                except:
+                    pass
+
+            if ip_list and 'mac' in item and item['mac'] in ip_list:
+                item['ip'] = ip_list[item['mac']]
+
+            for k in DEVICEFILE_SAVE_VALUES:
+                if k in i:
+                    if k == 'icon':
+                        item[k] = icon_host + i[k]
+                    else:
+                        item[k] = i[k]
+
+            tuyadevices.append(item)
+
+        return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
         if deviceid is None:

@@ -16,7 +16,8 @@ Offline Device
     offline to preserve the battery.
 
  Local Control Classes
-    DoorbellDevice(dev_id, address, local_key=None, dev_type='default')
+    DoorbellDevice(...)
+        See OutletDevice() for constructor arguments
 
  Functions
     DoorbellDevice:
@@ -31,11 +32,6 @@ from ..core import Device
 class DoorbellDevice(Device):
     """
     Represents a Tuya based Video-Doorbell.
-
-    Args:
-        dev_id (str): The device id.
-        address (str): The network address.
-        local_key (str, optional): The encryption key. Defaults to None.
     """
     DPS_2_STATE = {
         "101": "basic_indicator",     # Boolean                                                (status indicator)
@@ -80,9 +76,6 @@ class DoorbellDevice(Device):
         "168": "motion_area_switch",  # Boolean
         "169": "motion_area",         # String ["maxlen":255]
     }
-
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
-        super(DoorbellDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
 
     def set_basic_indicator(self, val=True, nowait=False):
         """ Set the basic incicator """

@@ -8,8 +8,9 @@
  Module Author: Alexey 'Cluster' Avdyukhin (https://github.com/clusterm)
 
  Local Control Classes
-    IRRemoteControlDevice(dev_id, address, local_key=None, dev_type='default', persist=True)
-        This class automatically sets the version to 3.3
+    IRRemoteControlDevice(..., version=3.3)
+        This class uses a default version of 3.3
+        See OutletDevice() for the other constructor arguments
 
     Functions:
         ir = IRRemoteControlDevice(...)
@@ -95,8 +96,11 @@ class IRRemoteControlDevice(Device):
     NSDP_HEAD = "head"             # Actually used but not documented
     NSDP_KEY1 = "key1"             # Actually used but not documented
 
-    def __init__(self, dev_id, address, local_key="", dev_type="default", persist=True, version=3.3):
-        super(IRRemoteControlDevice, self).__init__(dev_id, address, local_key, dev_type, version=version)
+    def __init__(self, *args, **kwargs):
+        # set the default version to 3.3 as there are no 3.1 devices
+        if 'version' not in kwargs or not kwargs['version']:
+            kwargs['version'] = 3.3
+        super(IRRemoteControlDevice, self).__init__(*args, **kwargs)
 
     def receive_button( self, timeout ):
         log.debug("Receiving button")

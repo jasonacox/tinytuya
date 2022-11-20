@@ -10,15 +10,16 @@
 
  Classes
   * AESCipher - Cryptography Helpers
-  * XenonDevice(object) - Base Tuya Objects and Functions
-  * Device(dev_id, address, local_key="", dev_type="default") - Tuya Class for Devices
+  * XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False) - Base Tuya Objects and Functions
+  * Device(XenonDevice) - Tuya Class for Devices
 
  Functions
     json = status()                    # returns json payload
-    set_version(version)               # 3.1 [default] or 3.3
+    set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
     set_socketRetryLimit(integer)      # retry count limit [default 5]
+    set_socketRetryDelay(integer)      # retry delay [default 5]
     set_socketTimeout(timeout)         # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)        # add data points (DPS) to request
     add_dps_to_request(index)          # add data point (DPS) index set to None
@@ -44,6 +45,8 @@
     The origin of this python module (now abandoned)
   * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
+  * Tuya Protocol 3.4 Support by uzlonewolf 
+    Enhancement to TuyaMessage logic for multi-payload messages and Tuya Protocol 3.4 support
 
 """
 
@@ -57,6 +60,7 @@ import hmac
 import json
 import logging
 import socket
+import select
 import struct
 import sys
 import time
@@ -79,7 +83,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 7, 0)
+version_tuple = (1, 7, 2)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -98,7 +102,7 @@ else:
 
 # Globals Network Settings
 MAXCOUNT = 15       # How many tries before stopping
-SCANTIME = 18       # How many seconds to wait before stopping
+SCANTIME = 18       # How many seconds to wait before stopping device discovery
 UDPPORT = 6666      # Tuya 3.1 UDP Port
 UDPPORTS = 6667     # Tuya 3.3 encrypted UDP Port
 TCPPORT = 6668      # Tuya TCP Local Port
@@ -111,6 +115,8 @@ CONFIGFILE = 'tinytuya.json'
 DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
+
+DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip')
 
 # Tuya Command Types
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
@@ -399,6 +405,108 @@ def error_json(number=None, payload=None):
 
     return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
+def find_device(dev_id=None, address=None):
+    """Scans network for Tuya devices with either ID = dev_id or IP = address
+
+    Parameters:
+        dev_id = The specific Device ID you are looking for
+        address = The IP address you are tring to find the Device ID for
+
+    Response:
+        {'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}
+    """
+    if dev_id is None and address is None:
+        return (None, None, None)
+    log.debug("Listening for device %s on the network", dev_id)
+    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    client.bind(("", UDPPORT))
+    client.setblocking(False)
+    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
+    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    clients.bind(("", UDPPORTS))
+    clients.setblocking(False)
+
+    deadline = time.time() + SCANTIME
+    selecttime = SCANTIME
+    ret = None
+
+    while (ret is None) and (selecttime > 0):
+        rd, _, _ = select.select( [client, clients], [], [], selecttime )
+        for sock in rd:
+            try:
+                data, addr = sock.recvfrom(4048)
+            except:
+                # Timeout
+                continue
+            ip = addr[0]
+            gwId = version = ""
+            result = data
+            try:
+                result = data[20:-8]
+                try:
+                    result = decrypt_udp(result)
+                except:
+                    result = result.decode()
+
+                result = json.loads(result)
+                ip = result["ip"]
+                gwId = result["gwId"]
+                version = result["version"]
+                product_id = '' if 'productKey' not in result else result['productKey']
+                log.debug( 'find() received broadcast from %r: %r', ip, result )
+            except:
+                result = {"ip": ip}
+                log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
+                continue
+
+            # Check to see if we are only looking for one device
+            if dev_id and gwId == dev_id:
+                # We found it by dev_id!
+                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
+                break
+            elif address and address == ip:
+                # We found it by ip!
+                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
+                break
+
+        selecttime = deadline - time.time()
+
+    # while
+    clients.close()
+    client.close()
+    if ret is None:
+        ret = {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
+    log.debug( 'find() is returning: %r', ret )
+    return ret
+
+def device_info( dev_id ):
+    """Searches the devices.json file for devices with ID = dev_id
+
+    Parameters:
+        dev_id = The specific Device ID you are looking for
+
+    Response:
+        {dict} containing the the device info, or None if not found
+    """
+    devinfo = None
+    try:
+        # Load defaults
+        with open(DEVICEFILE, 'r') as f:
+            tuyadevices = json.load(f)
+            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
+            for	dev in tuyadevices:
+                if 'id' in dev and dev['id'] == dev_id:
+                    log.debug("Device %r found in %s", dev_id, DEVICEFILE)
+                    devinfo = dev
+                    break
+    except:
+        # No DEVICEFILE
+        pass
+
+    return devinfo
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
@@ -454,7 +562,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address, local_key="", dev_type="default", connection_timeout=5, version=3.1
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False
     ):
         """
         Represents a Tuya device.
@@ -470,30 +578,38 @@ class XenonDevice(object):
 
         self.id = dev_id
         self.address = address
-        self.local_key = local_key.encode("latin1")
-        self.real_local_key = self.local_key
         self.connection_timeout = connection_timeout
         self.retry = True
         self.dev_type = dev_type
         self.disabledetect = False  # if True do not detect device22
         self.port = TCPPORT  # default - do not expect caller to pass in
         self.socket = None
-        self.socketPersistent = False
+        self.socketPersistent = False if not persist else True
         self.socketNODELAY = True
         self.socketRetryLimit = 5
-        self.cipher = AESCipher(self.local_key)
+        self.socketRetryDelay = 5
         self.dps_to_request = {}
         self.seqno = 1
         self.sendWait = 0.01
         self.dps_cache = {}
-        if address is None or address == "Auto" or address == "0.0.0.0":
+
+        if not local_key:
+            local_key = ""
+            devinfo = device_info( dev_id )
+            if devinfo and 'key' in devinfo and devinfo['key']:
+                local_key = devinfo['key']
+        self.local_key = local_key.encode("latin1")
+        self.real_local_key = self.local_key
+        self.cipher = AESCipher(self.local_key)
+
+        if (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
-            (addr, ver) = self.find(dev_id)
-            if addr is None:
+            bcast_data = find_device(dev_id)
+            if bcast_data['ip'] is None:
                 log.debug("Unable to find device on network (specify IP address)")
                 raise Exception("Unable to find device on network (specify IP address)")
-            self.address = addr
-            self.set_version(float(ver))
+            self.address = bcast_data['ip']
+            self.set_version(float(bcast_data['version']))
             time.sleep(0.1)
         elif version:
             self.set_version(float(version))
@@ -504,14 +620,18 @@ class XenonDevice(object):
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
-        if self.socket is not None:
-            # self.socket.shutdown(socket.SHUT_RDWR)
-            self.socket.close()
-            self.socket = None
+        try:
+            if self.socket:
+                # self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+                self.socket = None
+        except:
+            pass
 
     def __repr__(self):
         # FIXME can do better than this
-        return "%r" % ((self.id, self.address),)
+        return ("%s( %r, address=%r, local_key=%r, dev_type=%r, connection_timeout=%r, version=%r, persist=%r )" %
+                (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent))
 
     def _get_socket(self, renew):
         if renew and self.socket is not None:
@@ -551,7 +671,7 @@ class XenonDevice(object):
                     self.socket.close()
                     self.socket = None
                 if retries < self.socketRetryLimit:
-                    time.sleep(5)
+                    time.sleep(self.socketRetryDelay)
             # unable to get connection
             return False
         # existing socket active
@@ -1055,6 +1175,9 @@ class XenonDevice(object):
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit
 
+    def set_socketRetryDelay(self, delay):
+        self.socketRetryDelay = delay
+
     def set_socketTimeout(self, s):
         self.connection_timeout = s
         if self.socket:
@@ -1072,8 +1195,11 @@ class XenonDevice(object):
     def close(self):
         self.__del__()
 
-    def find(self, did=None):
-        """Scans network for Tuya devices with ID = did
+    @staticmethod
+    def find(did):
+        """
+        Mainly here for backwards compatibility.
+        Calling tinytuya.find_device() directly is recommended.
 
         Parameters:
             did = The specific Device ID you are looking for (returns only IP and Version)
@@ -1081,68 +1207,8 @@ class XenonDevice(object):
         Response:
             (ip, version)
         """
-        if did is None:
-            return (None, None)
-        log.debug("Listening for device %s on the network", did)
-        # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
-        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        client.bind(("", UDPPORT))
-        client.setblocking(False)
-        # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
-        clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        clients.bind(("", UDPPORTS))
-        clients.setblocking(False)
-
-        count = 0
-        counts = 0
-        maxretry = 180
-        ret = (None, None)
-
-        while maxretry:
-            maxretry -= 1
-            time.sleep(0.1)
-            while True:
-                data = addr = None
-                try:
-                    data, addr = client.recvfrom(4048)
-                except:
-                    # Timeout
-                    try:
-                        data, addr = clients.recvfrom(4048)
-                    except:
-                        # Timeout
-                        break
-                ip = addr[0]
-                gwId = version = ""
-                result = data
-                try:
-                    result = data[20:-8]
-                    try:
-                        result = decrypt_udp(result)
-                    except:
-                        result = result.decode()
-
-                    result = json.loads(result)
-                    ip = result["ip"]
-                    gwId = result["gwId"]
-                    version = result["version"]
-                except:
-                    result = {"ip": ip}
-
-                # Check to see if we are only looking for one device
-                if gwId == did:
-                    # We found it!
-                    ret = (ip, version)
-                    maxretry = False
-                    break
-
-        # while
-        clients.close()
-        client.close()
-        log.debug(ret)
-        return ret
+        bcast_data = find_device(dev_id=did)
+        return (bcast_data['ip'], bcast_data['version'])
 
     def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
         """
@@ -1224,8 +1290,8 @@ class XenonDevice(object):
 
 
 class Device(XenonDevice):
-    def __init__(self, dev_id, address, local_key="", dev_type="default", version=3.1):
-        super(Device, self).__init__(dev_id, address, local_key, dev_type, version=version)
+    #def __init__(self, *args, **kwargs):
+    #    super(Device, self).__init__(*args, **kwargs)
 
     def status(self):
         """Return device status."""
