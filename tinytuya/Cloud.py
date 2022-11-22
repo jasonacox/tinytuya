@@ -250,7 +250,7 @@ class Cloud(object):
 
     def _getuid(self, deviceid=None):
         # Get user ID (UID) for deviceid
-        if self.error:
+        if not self.token:
             return self.error
         if deviceid is None:
             return error_json(
@@ -286,6 +286,8 @@ class Cloud(object):
           post:   Optional.  POST body data.  Will be fed into json.dumps() before posting.
           query:  Optional.  A dict containing query string key/value pairs.
         """
+        if not self.token:
+            return self.error
         if action is None:
             action = 'POST' if post else 'GET'
         return self._tuyaplatform(url, action=action, post=post, ver=None, query=query)
@@ -356,6 +358,8 @@ class Cloud(object):
         return tuyadevices
 
     def _getdevice(self, param='status', deviceid=None):
+        if not self.token:
+            return self.error
         if deviceid is None:
             return error_json(
                 ERR_PARAMS,
@@ -392,6 +396,8 @@ class Cloud(object):
         """
         Get the specifications including DPS IDs of the device.
         """
+        if not self.token:
+            return self.error
         if deviceid is None:
             return error_json(
                 ERR_PARAMS,
@@ -410,6 +416,8 @@ class Cloud(object):
         """
         Send a command to the device
         """
+        if not self.token:
+            return self.error
         if deviceid is None or commands is None:
             return error_json(
                 ERR_PARAMS,
@@ -428,6 +436,8 @@ class Cloud(object):
         """
         Get the device Cloud connect status. 
         """
+        if not self.token:
+            return self.error
         if deviceid is None:
             return error_json(
                 ERR_PARAMS,
