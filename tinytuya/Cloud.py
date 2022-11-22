@@ -252,7 +252,7 @@ class Cloud(object):
         # Get user ID (UID) for deviceid
         if not self.token:
             return self.error
-        if deviceid is None:
+        if not deviceid:
             return error_json(
                 ERR_PARAMS,
                 "_getuid() requires deviceID parameter"
@@ -281,7 +281,7 @@ class Cloud(object):
         Make a generic cloud request and return the results.
 
         Args:
-          url:    Required.  The URL to fetch.
+          url:    Required.  The URL to fetch, i.e. "/v1.0/devices/0011223344556677/logs"
           action: Optional.  GET, POST, DELETE, or PUT.  Defaults to GET, unless POST data is supplied.
           post:   Optional.  POST body data.  Will be fed into json.dumps() before posting.
           query:  Optional.  A dict containing query string key/value pairs.
@@ -360,7 +360,7 @@ class Cloud(object):
     def _getdevice(self, param='status', deviceid=None):
         if not self.token:
             return self.error
-        if deviceid is None:
+        if not deviceid:
             return error_json(
                 ERR_PARAMS,
                 "Missing DeviceID Parameter"
@@ -398,7 +398,7 @@ class Cloud(object):
         """
         if not self.token:
             return self.error
-        if deviceid is None:
+        if not deviceid:
             return error_json(
                 ERR_PARAMS,
                 "Missing DeviceID Parameter"
@@ -418,10 +418,10 @@ class Cloud(object):
         """
         if not self.token:
             return self.error
-        if deviceid is None or commands is None:
+        if (not deviceid) or (not commands):
             return error_json(
                 ERR_PARAMS,
-                "Missing DeviceID and Command Parameters"
+                "Missing DeviceID and/or Command Parameters"
             )
         uri = 'iot-03/devices/%s/commands' % (deviceid)
         response_dict = self._tuyaplatform(uri,action='POST',post=commands)
@@ -438,7 +438,7 @@ class Cloud(object):
         """
         if not self.token:
             return self.error
-        if deviceid is None:
+        if not deviceid:
             return error_json(
                 ERR_PARAMS,
                 "Missing DeviceID Parameter"
@@ -452,7 +452,7 @@ class Cloud(object):
             )
         return(response_dict["result"]["online"])
 
-    def getdevicelog(self, devid, start=None, end=None, evtype=None, size=100, params={}):
+    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=100, params={}):
         """
         Get the logs for a device.
 
@@ -471,6 +471,11 @@ class Cloud(object):
         Returns:
           Response from server
         """
+        if not deviceid:
+            return error_json(
+                ERR_PARAMS,
+                "Missing DeviceID Parameter"
+            )
         if not end:
             end = int(time.mktime(time.gmtime()))
         if not start:
@@ -493,4 +498,4 @@ class Cloud(object):
         if 'query_type' not in params:
             params['query_type'] = 1
 
-        return self.cloudrequest( '/v1.0/devices/%s/logs' % devid, query=params)
+        return self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
