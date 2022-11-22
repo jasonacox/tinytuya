@@ -169,9 +169,9 @@ def wizard(color=True, retries=None, forcescan=False):
 
     cloud = tinytuya.Cloud( **config )
 
-    # on auth error, cloud.token is a dict and will cause getdevices() to implode
-    if isinstance( cloud.token, dict):
-        err = cloud.token['Payload'] if 'Payload' in cloud.token else 'Unknown Error'
+    # on auth error getdevices() will implode
+    if cloud.error:
+        err = cloud.error['Payload'] if 'Payload' in cloud.error else 'Unknown Error'
         print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
         print('Check API Key and Secret')
         return
