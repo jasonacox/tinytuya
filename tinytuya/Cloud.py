@@ -498,4 +498,4 @@ class Cloud(object):
         if 'query_type' not in params:
             params['query_type'] = 1
 
-        return self.cloudrequest( '/v1.0/devices/%s/logs' % devid, query=params)
+        return self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
