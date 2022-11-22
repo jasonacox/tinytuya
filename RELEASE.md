@@ -1,5 +1,21 @@
 # RELEASE NOTES
 
+## v1.8.0 - Expanded Cloud Functions
+
+* PyPI 1.8.0
+* Add AtorchTemperatureController by @Poil in https://github.com/jasonacox/tinytuya/pull/213
+* Add new Cloud functions to fetch device logs from TuyaCloud (`getdevicelog(id)`), make generic cloud request with custom URL and params (`cloudrequest(url, ...)`) and fetch connection status (`getconnectstatus(id)`) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/219
+* Update README for new Cloud functions, and tighter deviceid error checking by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/220
+
+```python
+import tinytuya
+import json
+
+c = tinytuya.Cloud()
+r = c.getdevicelog( '00112233445566778899' )
+print( json.dumps(r, indent=2) )
+```
+
 ## v1.7.2 - Fix Contrib Devices Bug
 
 * PyPI 1.7.2
