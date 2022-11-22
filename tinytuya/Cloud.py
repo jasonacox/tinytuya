@@ -90,12 +90,12 @@ class Cloud(object):
                     self.apiSecret = config['apiSecret']
                     self.apiDeviceID = config['apiDeviceID']
             except:
-                #self.error = error_json(
-                #    ERR_CLOUDKEY,
-                #    "Tuya Cloud Key and Secret required",
-                #)
-                #return
-                raise ValueError('Tuya Cloud Key and Secret required')
+                self.error = error_json(
+                    ERR_CLOUDKEY,
+                    "Tuya Cloud Key and Secret required",
+                )
+                #return self.error
+                raise TypeError('Tuya Cloud Key and Secret required')
 
         self.setregion(apiRegion)
         # Attempt to connect to cloud and get token
@@ -220,6 +220,7 @@ class Cloud(object):
 
         try:
             response_dict = json.loads(response.content.decode())
+            self.error = None
         except:
             try:
                 response_dict = json.loads(response.content)
