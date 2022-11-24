@@ -8,7 +8,7 @@ on:
 jobs:
   tests:
     name: "Python ${{ matrix.python-version }}"
-    runs-on: "ubuntu-latest"
+    runs-on: "ubuntu-20.04"
     env:
       USING_COVERAGE: '3.6,3.8'
 
