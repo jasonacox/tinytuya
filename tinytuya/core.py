@@ -552,6 +552,11 @@ payload_dict = {
             "command": {"protocol":5, "t": "int", "data": ""}
             },
         DP_QUERY: { "command_override": DP_QUERY_NEW },
+    },
+    "zigbee": {
+        CONTROL: {
+            "command": {"t": ""},
+        },
     }
 }
 
@@ -625,6 +630,9 @@ class XenonDevice(object):
             # make sure we call our set_version() and not a subclass since some of
             # them (such as BulbDevice) make connections when called
             XenonDevice.set_version(self, 3.1)
+
+        if cid and self.dev_type == 'default':
+            self.dev_type = 'zigbee'
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
