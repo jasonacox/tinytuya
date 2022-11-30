@@ -116,7 +116,7 @@ DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
 
-DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip')
+DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id')
 
 # Tuya Command Types
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
@@ -552,6 +552,11 @@ payload_dict = {
             "command": {"protocol":5, "t": "int", "data": ""}
             },
         DP_QUERY: { "command_override": DP_QUERY_NEW },
+    },
+    "zigbee": {
+        CONTROL: {
+            "command": {"t": ""},
+        },
     }
 }
 
@@ -562,14 +567,14 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, dev_cid = None
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, parent=None
     ):
         """
         Represents a Tuya device.
 
         Args:
             dev_id (str): The device id.
-            dev_cid (str: Optional sub device id. Default to None.
+            cid (str: Optional sub device id. Default to None.
             address (str): The network address.
             local_key (str, optional): The encryption key. Defaults to None.
 
@@ -578,7 +583,7 @@ class XenonDevice(object):
         """
 
         self.id = dev_id
-        self.cid = dev_cid
+        self.cid = cid
         self.address = address
         self.connection_timeout = connection_timeout
         self.retry = True
@@ -594,6 +599,9 @@ class XenonDevice(object):
         self.seqno = 1
         self.sendWait = 0.01
         self.dps_cache = {}
+        self.parent = parent
+        self.children = {}
+        self.received_wrong_cid_queue = []
 
         if not local_key:
             local_key = ""
@@ -604,7 +612,10 @@ class XenonDevice(object):
         self.real_local_key = self.local_key
         self.cipher = AESCipher(self.local_key)
 
-        if (not address) or address == "Auto" or address == "0.0.0.0":
+        if self.parent:
+            XenonDevice.set_version(self, self.parent.version)
+            self.parent._register_child(self)
+        elif (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
             bcast_data = find_device(dev_id)
             if bcast_data['ip'] is None:
@@ -620,6 +631,9 @@ class XenonDevice(object):
             # them (such as BulbDevice) make connections when called
             XenonDevice.set_version(self, 3.1)
 
+        if cid and self.dev_type == 'default':
+            self.dev_type = 'zigbee'
+
     def __del__(self):
         # In case we have a lingering socket connection, close it
         try:
@@ -632,8 +646,12 @@ class XenonDevice(object):
 
     def __repr__(self):
         # FIXME can do better than this
-        return ("%s( %r, address=%r, local_key=%r, dev_type=%r, connection_timeout=%r, version=%r, persist=%r )" %
-                (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent))
+        if self.parent:
+            parent = self.parent.id
+        else:
+            parent = None
+        return ("%s( %r, address=%r, local_key=%r, dev_type=%r, connection_timeout=%r, version=%r, persist=%r, cid=%r, parent=%r, children=%r )" %
+                (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent, self.cid, parent, self.children))
 
     def _get_socket(self, renew):
         if renew and self.socket is not None:
@@ -704,6 +722,9 @@ class XenonDevice(object):
         return data
 
     def _receive(self):
+        # make sure to use the parent's self.seqno and session key
+        if self.parent:
+            return self.parent._receive()
         # message consists of header + retcode + data + footer
         header_len = struct.calcsize(MESSAGE_HEADER_FMT)
         retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
@@ -737,7 +758,10 @@ class XenonDevice(object):
         return unpack_message(data, header=header, hmac_key=hmac_key)
 
     # similar to _send_receive() but never retries sending and does not decode the response
-    def _send_receive_quick(self, payload, recv_retries):
+    def _send_receive_quick(self, payload, recv_retries, from_child=None):
+        if self.parent:
+            return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
+
         log.debug("sending payload quick")
         if not self._get_socket(False):
             return None
@@ -761,7 +785,7 @@ class XenonDevice(object):
                 log.debug("received null payload (%r), fetch new one - %s retries remaining", msg, recv_retries)
         return None
 
-    def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True):
+    def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
         """
         Send single buffer `payload` and receive a single buffer.
 
@@ -770,6 +794,23 @@ class XenonDevice(object):
             minresponse(int): Minimum response size expected (default=28 bytes)
             getresponse(bool): If True, wait for and return response.
         """
+        if self.parent:
+            return self.parent._send_receive(payload, minresponse, getresponse, decode_response, from_child=self)
+
+        if (not payload) and getresponse and self.received_wrong_cid_queue:
+            if (not self.children) or (not from_child):
+                r = self.received_wrong_cid_queue[0]
+                self.received_wrong_cid_queue = self.received_wrong_cid_queue[1:]
+                return r
+            found_rq = False
+            for rq in self.received_wrong_cid_queue:
+                if rq[0] == from_child:
+                    found_rq = rq
+                    break
+            if found_rq:
+                self.received_wrong_cid_queue.remove(found_rq)
+                return found_rq[1]
+
         success = False
         partial_success = False
         retries = 0
@@ -879,16 +920,17 @@ class XenonDevice(object):
             # except
         # while
 
-        # legacy/default mode avoids persisting socket across commands
-        self._check_socket_close()
-
         # could be None or have a null payload
         if not decode_response:
+            # legacy/default mode avoids persisting socket across commands
+            self._check_socket_close()
             return msg
 
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
             log.debug("raw unpacked message = %r", msg)
+            # legacy/default mode avoids persisting socket across commands
+            self._check_socket_close()
             return None
 
         # option - decode Message with hard coded offsets
@@ -916,7 +958,38 @@ class XenonDevice(object):
             )
             result = error_json(ERR_DEVTYPE)
 
-        return result
+        found_child = False
+        if self.children:
+            found_cid = want_cid = None
+            if result and 'cid' in result:
+                found_cid = result['cid']
+                for c in self.children:
+                    if self.children[c].cid == result['cid']:
+                        want_cid = self.children[c].cid
+                        result['device'] = found_child = self.children[c]
+                        break
+
+            if from_child and from_child is not True and from_child != found_child:
+                # async update from different CID, try again
+                log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, want_cid )
+                if self.socketPersistent:
+                    # if persistent, save response until the next receive() call
+                    # otherwise, trash it
+                    if found_child:
+                        result = found_child._process_response(result)
+                    else:
+                        result = self._process_response(result)
+                    self.received_wrong_cid_queue.append( (found_child, result) )
+                # do not pass from_child this time to make sure we do not get stuck in a loop
+                return self._send_receive( None, minresponse, True, decode_response, from_child=True)
+
+        # legacy/default mode avoids persisting socket across commands
+        self._check_socket_close()
+
+        if found_child:
+            return found_child._process_response(result)
+
+        return self._process_response(result)
 
     def _decode_payload(self, payload):
         log.debug("decode payload=%r", payload)
@@ -995,6 +1068,12 @@ class XenonDevice(object):
 
         return json_payload
 
+    def _process_response(self, response):
+        """
+        Override this function in a sub-class if you want to do some processing on the received data
+        """
+        return response
+
     def _negotiate_session_key(self):
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
@@ -1051,6 +1130,9 @@ class XenonDevice(object):
 
     # adds protocol header (if needed) and encrypts
     def _encode_message( self, msg ):
+        # make sure to use the parent's self.seqno and session key
+        if self.parent:
+            return self.parent._encode_message( msg )
         hmac_key = None
         payload = msg.payload
         self.cipher = AESCipher(self.local_key)
@@ -1094,6 +1176,13 @@ class XenonDevice(object):
         buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
+
+    def _register_child(self, child):
+        if child.id in self.children and child != self.children[child.id]:
+            log.debug('Replacing existing child %r!', child.id)
+        self.children[child.id] = child
+        # disable device22 detection as gateways return "json obj data unvalid" when the gateway is polled without a cid
+        self.disabledetect = True
 
     def receive(self):
         """
@@ -1246,9 +1335,14 @@ class XenonDevice(object):
             # complain about missing attribs, so just include them all unless otherwise specified
             json_data = {"gwId": "", "devId": "", "uid": "", "t": ""}
 
-        if "gwId" in json_data:
+        # make sure we don't modify payload_dict
+        json_data = json_data.copy()
+
+        if "gwId" in json_data or self.parent:
             if gwId is not None:
                 json_data["gwId"] = gwId
+            elif self.parent:
+                json_data["gwId"] = self.parent.id
             else:
                 json_data["gwId"] = self.id
         if "devId" in json_data:
@@ -1261,7 +1355,7 @@ class XenonDevice(object):
                 json_data["uid"] = uid
             else:
                 json_data["uid"] = self.id
-        if self.cid is not None:
+        if self.cid:
             json_data["cid"] = self.cid
         if "t" in json_data:
             if json_data['t'] == "int":

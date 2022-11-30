@@ -227,6 +227,17 @@ def wizard(color=True, retries=None, forcescan=False):
     # Filter to only Name, ID and Key, IP and mac-address
     tuyadevices = cloud.filter_devices( json_data['result'], ip_list )
 
+    for dev in tuyadevices:
+        if 'sub' in dev and dev['sub'] and 'key' in dev:
+            found = False
+            for parent in tuyadevices:
+                # the local key seems to be the only way of identifying the parent device
+                if 'key' in parent and 'id' in parent and dev['key'] == parent['key']:
+                    found = parent
+                    break
+            if found:
+                dev['parent'] = found['id']
+
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
     output = json.dumps(tuyadevices, indent=4)  # sort_keys=True)

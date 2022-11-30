@@ -431,14 +431,12 @@ class ThermostatDevice(Device):
         return self.send(payload)
 
     def status(self):
-        data = super(ThermostatDevice, self).status()
-        return self._inspect_data( data )
+        return super(ThermostatDevice, self).status()
 
     def receive(self):
-        data = self._send_receive(None)
-        return self._inspect_data( data )
+        return self._send_receive(None)
 
-    def _inspect_data( self, data ):
+    def _process_response( self, data ):
         if not data:
             return data
 
