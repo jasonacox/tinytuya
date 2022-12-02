@@ -21,6 +21,8 @@
         sendcommand(deviceid, commands)
         getconnectstatus(deviceid)
         getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
+          -> when start or end are negative, they are the number of days before "right now"
+             i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
 """
 
 from .core import *
@@ -78,6 +80,7 @@ class Cloud(object):
         self.token = None
         self.error = None
         self.new_sign_algorithm = new_sign_algorithm
+        self.server_time_offset = 0
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -244,6 +247,12 @@ class Cloud(object):
                 "Cloud _gettoken() failed: %r" % response_dict['msg'],
             )
             return self.error
+
+        if 't' in response_dict:
+            # round it to 2 minutes to try and factor out any processing delays
+            self.server_time_offset = round( ((response_dict['t'] / 1000.0) - time.time()) / 120 )
+            self.server_time_offset *= 120
+            log.warning(self.server_time_offset)
 
         self.token = response_dict['result']['access_token']
         return self.token
@@ -476,10 +485,24 @@ class Cloud(object):
                 ERR_PARAMS,
                 "Missing DeviceID Parameter"
             )
+
+        # server expects times as unixtime * 1000
         if not end:
-            end = int(time.mktime(time.gmtime()))
+            end = int((time.time() + self.server_time_offset) * 1000)
+        elif end < 0:
+            end = int(((time.time() + self.server_time_offset) + (end * 86400) ) * 1000)
+        else:
+            end = Cloud.format_timestamp( end )
         if not start:
-            start = end - 86400
+            start = end - (86400*1000)
+        elif start < 0:
+            start = int(((time.time() + self.server_time_offset) + (start * 86400) ) * 1000)
+        else:
+            start = Cloud.format_timestamp( start )
+        if start > end:
+            tmp = start
+            start = end
+            end = tmp
         if not evtype:
             # get them all by default
             # 1 = device online, 7 = DP report
@@ -499,3 +522,15 @@ class Cloud(object):
             params['query_type'] = 1
 
         return self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
+
+    @staticmethod
+    def format_timestamp( ts ):
+        # converts a 10-digit unix timestamp to the 13-digit stamp the servers expect
+        if type(ts) != int:
+            if len(str(int(ts))) == 10:
+                ts = int( ts * 1000 )
+            else:
+                ts = int( ts )
+        elif len(str(ts)) == 10:
+            ts *= 1000
+        return ts

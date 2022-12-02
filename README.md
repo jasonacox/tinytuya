@@ -392,13 +392,15 @@ result = c.sendcommand(id,commands)
 print("Results\n:", result)
 ```
 
-Up to one week of device logs can also be pulled from the Cloud.  By default getdevicelog() will pull 1 day of logs or 100 log entries, whichever comes first.
+Up to one week of device logs can also be pulled from the Cloud.  By default getdevicelog() will pull 1 day of logs or 100 log entries, whichever comes first.  The returned timestamps are unixtime*1000, and event_id 7 (data report) will probably be the most useful.
 
 ```python
 import tinytuya
 import json
 
 c = tinytuya.Cloud()
+#r = c.getdevicelog( '00112233445566778899', start=-1, end=0, size=100 )
+#r = c.getdevicelog( '00112233445566778899', start=1669990000, end=1669990300, size=20 )
 r = c.getdevicelog( '00112233445566778899' )
 print( json.dumps(r, indent=2) )
 ```
