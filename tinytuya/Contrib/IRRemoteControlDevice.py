@@ -16,6 +16,8 @@
     Functions:
         ir = IRRemoteControlDevice(..., control_type=None)
             -> will immediately connect to the device to try and detect the control type if control_type is not provided
+               control_type=1 for older devices using DPS 201/202
+               control_type=2 for newer devices using DPS 1-13
 
         ir.detect_control_type()
             -> polls device status to try and detect the control type
