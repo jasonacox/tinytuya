@@ -166,19 +166,45 @@ class IRRemoteControlDevice(Device):
 
         super(IRRemoteControlDevice, self).__init__(*args, **kwargs)
 
+        self.disabledetect = True
         self.control_type = control_type
         if not self.control_type:
             self.detect_control_type()
 
     def detect_control_type( self ):
+        # This is more difficult than it seems.  Neither device responds to status() after
+        #   a reboot until after a command is sent.  201 devices do not respond to study_end
+        #   if they are already in that mode.
+        old_timeout = self.connection_timeout
+        old_persist = self.socketPersistent
+        self.set_socketTimeout( 1 )
+        self.set_socketPersistent( True )
+        self.control_type = 1
+        self.study_end()
+        self.control_type = 2
+        self.study_end()
+        self.control_type = 0
         status = self.status()
-        if status and 'dps' in status:
-            # original devices using DPS 201/202
-            if self.DP_SEND_IR in status['dps']:
-                self.control_type = 1
-            # newer devices using DPS 1-13
-            elif self.DP_MODE in status['dps']:
-                self.control_type = 2
+        while status:
+            if status and 'dps' in status:
+                # original devices using DPS 201/202
+                if self.DP_SEND_IR in status['dps']:
+                    log.debug( 'Detected control type 1' )
+                    self.control_type = 1
+                    break
+                # newer devices using DPS 1-13
+                elif self.DP_MODE in status['dps']:
+                    log.debug( 'Detected control type 2' )
+                    self.control_type = 2
+                    break
+            status = self._send_receive(None)
+        if not self.control_type:
+            log.warning( 'Detect control type failed! control_type= must be set manually' )
+        elif status:
+            # try and make sure no data is waiting to be read
+            status = self._send_receive(None)
+        self.set_socketTimeout( old_timeout )
+        self.set_socketPersistent( old_persist )
 
     def send_command( self, mode, data={} ):
         if mode == 'send':

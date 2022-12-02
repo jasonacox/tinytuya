@@ -95,8 +95,7 @@ if headkey:
 
 
 # create the device.  this will connect to it to try and determine which DPS it uses
-#ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc', persist=True )
-ir = Contrib.IRRemoteControlDevice("8357021598cdac0aff74", address='172.20.10.150', local_key='3ba3a31d71dd9ee8', version=3.3, persist=True)
+ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc', persist=True )
 
 
 print( 'Turning the Samsung tv on with pulses' )
