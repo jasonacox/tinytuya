@@ -1489,13 +1489,27 @@ class Device(XenonDevice):
 
         return data
 
+    def set_multiple_values(self, data, nowait=False):
+        """
+        Set multiple indexes at the same time
+
+        Args:
+            data(dict): array of index/value pairs to set
+            nowait(bool): True to send without waiting for response.
+        """
+        out = {}
+        for i in data:
+            out[str(i)] = data[i]
+        payload = self.generate_payload(CONTROL, out)
+        return self._send_receive(payload, getresponse=(not nowait))
+
     def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""
-        self.set_status(True, switch, nowait)
+        return self.set_status(True, switch, nowait)
 
     def turn_off(self, switch=1, nowait=False):
         """Turn the device off"""
-        self.set_status(False, switch, nowait)
+        return self.set_status(False, switch, nowait)
 
     def set_timer(self, num_secs, dps_id=0, nowait=False):
         """
