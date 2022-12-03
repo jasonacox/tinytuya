@@ -1,5 +1,32 @@
 # RELEASE NOTES
 
+## v1.9.0 - Zigbee Gateway Support
+
+* PyPI 1.9.0
+* Add support for subdevices connected to gateway by @LesTR in https://github.com/jasonacox/tinytuya/pull/222
+* Rework Zigbee Gateway handling to support multiple devices with persistent connections by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/226
+* Add support for newer IR devices, and several IR format converters by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/228
+* Rework Cloud log start/end times, and update documentation by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/229
+
+```python
+import tinytuya
+
+# Zigbee Gateway support uses a parent/child model where a parent gateway device is
+#  connected and then one or more children are added.
+
+# Configure the parent device
+gw = tinytuya.Device( 'eb...4', address=None, local_key='aabbccddeeffgghh', persist=True, version=3.3 )
+
+print( 'GW IP found:', gw.address )
+
+# Configure one or more children.  Every dev_id must be unique!
+zigbee1 = tinytuya.OutletDevice( 'eb14...w', cid='0011223344556601', parent=gw )
+zigbee2 = tinytuya.OutletDevice( 'eb04...l', cid='0011223344556689', parent=gw )
+
+print(zigbee1.status())
+print(zigbee2.status())
+```
+
 ## v1.8.0 - Expanded Cloud Functions
 
 * PyPI 1.8.0
