@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.9.1 - Minor Bug Fix for Cloud
+
+* PyPI 1.9.1
+* Fix logging for Cloud `_gettoken()` to prevent extraneous output. #229
+
 ## v1.9.0 - Zigbee Gateway Support
 
 * PyPI 1.9.0

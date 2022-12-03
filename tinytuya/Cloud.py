@@ -252,7 +252,7 @@ class Cloud(object):
             # round it to 2 minutes to try and factor out any processing delays
             self.server_time_offset = round( ((response_dict['t'] / 1000.0) - time.time()) / 120 )
             self.server_time_offset *= 120
-            log.warning(self.server_time_offset)
+            log.debug("server_time_offset: %r", self.server_time_offset)
 
         self.token = response_dict['result']['access_token']
         return self.token
