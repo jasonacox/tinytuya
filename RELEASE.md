@@ -1,5 +1,53 @@
 # RELEASE NOTES
 
+## v1.9.1 - Minor Bug Fix for Cloud
+
+* PyPI 1.9.1
+* Fix logging for Cloud `_gettoken()` to prevent extraneous output. #229
+
+## v1.9.0 - Zigbee Gateway Support
+
+* PyPI 1.9.0
+* Add support for subdevices connected to gateway by @LesTR in https://github.com/jasonacox/tinytuya/pull/222
+* Rework Zigbee Gateway handling to support multiple devices with persistent connections by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/226
+* Add support for newer IR devices, and several IR format converters by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/228
+* Rework Cloud log start/end times, and update documentation by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/229
+
+```python
+import tinytuya
+
+# Zigbee Gateway support uses a parent/child model where a parent gateway device is
+#  connected and then one or more children are added.
+
+# Configure the parent device
+gw = tinytuya.Device( 'eb...4', address=None, local_key='aabbccddeeffgghh', persist=True, version=3.3 )
+
+print( 'GW IP found:', gw.address )
+
+# Configure one or more children.  Every dev_id must be unique!
+zigbee1 = tinytuya.OutletDevice( 'eb14...w', cid='0011223344556601', parent=gw )
+zigbee2 = tinytuya.OutletDevice( 'eb04...l', cid='0011223344556689', parent=gw )
+
+print(zigbee1.status())
+print(zigbee2.status())
+```
+
+## v1.8.0 - Expanded Cloud Functions
+
+* PyPI 1.8.0
+* Add AtorchTemperatureController by @Poil in https://github.com/jasonacox/tinytuya/pull/213
+* Add new Cloud functions to fetch device logs from TuyaCloud (`getdevicelog(id)`), make generic cloud request with custom URL and params (`cloudrequest(url, ...)`) and fetch connection status (`getconnectstatus(id)`) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/219
+* Update README for new Cloud functions, and tighter deviceid error checking by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/220
+
+```python
+import tinytuya
+import json
+
+c = tinytuya.Cloud()
+r = c.getdevicelog( '00112233445566778899' )
+print( json.dumps(r, indent=2) )
+```
+
 ## v1.7.2 - Fix Contrib Devices Bug
 
 * PyPI 1.7.2

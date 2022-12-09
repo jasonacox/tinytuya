@@ -208,12 +208,15 @@ Functions:
     
     Cloud
         setregion(apiRegion)
+	cloudrequest(url, action=[POST if post else GET], post={}, query={})
         getdevices(verbose=False)
         getstatus(deviceid)
         getfunctions(deviceid)
         getproperties(deviceid)
         getdps(deviceid)
         sendcommand(deviceid, commands)
+	getconnectstatus(deviceid)
+	getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
 ```
 
 ### TinyTuya Error Codes
@@ -387,6 +390,19 @@ commands = {
 print("Sending command...")
 result = c.sendcommand(id,commands)
 print("Results\n:", result)
+```
+
+Up to one week of device logs can also be pulled from the Cloud.  By default getdevicelog() will pull 1 day of logs or 100 log entries, whichever comes first.  The returned timestamps are unixtime*1000, and event_id 7 (data report) will probably be the most useful.
+
+```python
+import tinytuya
+import json
+
+c = tinytuya.Cloud()
+#r = c.getdevicelog( '00112233445566778899', start=-1, end=0, size=100 )
+#r = c.getdevicelog( '00112233445566778899', start=1669990000, end=1669990300, size=20 )
+r = c.getdevicelog( '00112233445566778899' )
+print( json.dumps(r, indent=2) )
 ```
 
 ### Encryption notes

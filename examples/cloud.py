@@ -64,3 +64,19 @@ print("Sending command...")
 result = c.sendcommand(id,commands)
 print("Results\n:", result)
 
+# Get device logs
+# Note: the returned timestamps are unixtime*1000
+# event_id 7 (data report) will probably be the most useful
+# More information can be found at https://developer.tuya.com/en/docs/cloud/cbea13f274?id=Kalmcohrembze
+
+# Get device logs from the last day
+result = c.getdevicelog(id)
+print("Device logs:\n", result)
+
+# Get device logs from 7 days ago through 5 days ago (2 days worth)
+#result = c.getdevicelog(id, start=-7, end=-5)
+#print("Device logs:\n", result)
+
+# Get device logs for one day ending an hour ago
+#result = c.getdevicelog(id, end=time.time() - 3600)
+#print("Device logs:\n", result)
