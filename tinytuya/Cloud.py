@@ -461,20 +461,24 @@ class Cloud(object):
             )
         return(response_dict["result"]["online"])
 
-    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=100, params={}):
+    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params={}):
         """
         Get the logs for a device.
 
         Note: The cloud only returns logs for DPs in the "official" DPS list.
           If the device specifications are wrong then not all logs will be returned!
-          This is a limitation of Tuya's servers and there's nothing we can do about it.
+          This is a limitation of Tuya's servers and there is nothing we can do about it.
 
         Args:
           devid:  Required.  Device ID
           start:  Optional.  Get logs starting from this time.  Defaults to yesterday
           end:    Optional.  Get logs until this time.  Defaults to the current time
           evtype: Optional.  Limit to events of this type.  1 = Online, 7 = DP Reports.  Defaults to all events.
-          size:   Optional.  Maximum number of log entries to return.  Defaults to 100.
+          size:   Optional.  Target number of log entries to return.  Defaults to 0 (all, up to max_fetches*100).
+                               Actual number of log entries returned will be between "0" and "size * 2 - 1"
+          max_fetches: Optional. Maximum number of queries to send to the server.  Tuya's server has a hard limit
+                               of 100 records per query, so the maximum number of logs returned is "max_fetches * 100"
+          start_row_key: Optional. The "next_row_key" from a previous run.
           params: Optional.  Additional values to include in the query string.  Defaults to an empty dict.
 
         Returns:
@@ -508,6 +512,15 @@ class Cloud(object):
             # 1 = device online, 7 = DP report
             # https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
             evtype = '1,2,3,4,5,6,7,8,9,10'
+        want_size = size
+        if not size:
+            size = 100
+        elif size > 100:
+            size = 100
+            #if (want_size / size) * 2 > max_fetches:
+            #    max_fetches = round( (want_size / size) * 2 ) + 1
+        if not max_fetches or max_fetches < 1:
+            max_fetches = 50
         if type(params) != dict:
             params = {}
         if 'start_time' not in params:
@@ -520,8 +533,49 @@ class Cloud(object):
             params['size'] = size
         if 'query_type' not in params:
             params['query_type'] = 1
+        if start_row_key:
+            params['start_row_key'] = start_row_key
 
-        return self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
+        ret = self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
+        max_fetches -= 1
+        fetches = 1
+
+        if ret and 'result' in ret:
+            # ret['result'] is a dict so the 'result' below will be a reference, not a copy
+            result = ret['result']
+            again = True
+            next_row_key = ''
+            while (
+                    again and max_fetches and
+                    'logs' in result and
+                    'has_next' in result and result['has_next'] and
+                    (not want_size or len(result['logs']) < size) and
+                    'next_row_key' in result and result['next_row_key'] and next_row_key != result['next_row_key']
+            ):
+                log.warning( '%r %r', len(result['logs']), max_fetches)
+                again =	False
+                max_fetches -= 1
+                fetches += 1
+                params['start_row_key'] = result['next_row_key']
+                next_row_key = result['next_row_key']
+                result['next_row_key'] = None
+                result['has_next'] = False
+                res = self.cloudrequest( '/v1.0/devices/%s/logs' % deviceid, query=params)
+                if res and 'result' in res:
+                    result2 = res['result']
+                    if 'logs' in result2:
+                        result['logs'] += result2['logs']
+                        again = True
+                    if 'has_next' in result2:
+                        result['has_next'] = result2['has_next']
+                    if 'next_row_key' in result2:
+                        result['next_row_key'] = result2['next_row_key']
+                else:
+                    break
+
+            ret['fetches'] = fetches
+
+        return ret
 
     @staticmethod
     def format_timestamp( ts ):
