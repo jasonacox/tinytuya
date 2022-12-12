@@ -552,7 +552,6 @@ class Cloud(object):
                     (not want_size or len(result['logs']) < size) and
                     'next_row_key' in result and result['next_row_key'] and next_row_key != result['next_row_key']
             ):
-                log.warning( '%r %r', len(result['logs']), max_fetches)
                 again =	False
                 max_fetches -= 1
                 fetches += 1
