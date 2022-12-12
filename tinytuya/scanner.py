@@ -32,11 +32,11 @@ import tinytuya
 import traceback
 
 # Optional libraries required for forced scanning
-try:
-    from getmac import get_mac_address
-    SCANLIBS = True
-except:
-    SCANLIBS = False
+#try:
+#    from getmac import get_mac_address
+#    SCANLIBS = True
+#except:
+#    SCANLIBS = False
 
 # Backward compatability for python2
 try:
@@ -98,7 +98,7 @@ def getmyIP():
     s.close()
     return str(r)
 
-def getmyIPs( term, ask ):
+def getmyIPs( term, verbose, ask ):
     ips = {}
     interfaces = netifaces.interfaces()
     try:
@@ -125,6 +125,7 @@ def getmyIPs( term, ask ):
                         ask = 2
                     elif answer[0:1].lower() == 'n':
                         continue
+            if verbose:
                 print(term.dim + 'Adding Network', k, 'to the force-scan list')
             ips[k] = True
     return ips.keys()
@@ -203,12 +204,16 @@ class DeviceDetect(object):
 
 
     def close( self ):
+        if self.debug:
+            print('in close 0', self.ip)
         if self.sock: self.sock.close()
         self.sock = None
         self.read = self.write = False
         self.remove = True
 
     def stop(self):
+        if self.debug:
+            print('in stop 0', self.ip)
         if self.sock:
             self.close()
 
@@ -336,20 +341,29 @@ class ForceScannedDevice(DeviceDetect):
         self.connect()
 
     def abort( self ):
+        if self.debug:
+            print('in abort', self.ip)
         self.found = False
         self.close()
 
     def stop( self ):
+        if self.debug:
+            print('in stop', self.ip)
         super(ForceScannedDevice, self).stop()
 
         if self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
             self.brute_force_v3x_data()
+
+        if not self.ver_found:
+            self.deviceinfo['version'] = self.deviceinfo['ver'] = 0.0
 
         if self.options['verbose'] and self.found and not self.displayed:
             _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message )
             self.displayed = True
 
     def timeout( self, forced=False ):
+        if self.debug:
+            print( 'in timeout', self.ip, self.step ) #self.__dict__ )
         if self.remove:
             return
 
@@ -383,6 +397,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
                 self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.4
+                self.ver_found = True
                 self.keygen = (i for i in self.options['keylist'] if not i.used)
                 self.cur_key = next( self.keygen, None )
                 if self.debug:
@@ -419,7 +434,8 @@ class ForceScannedDevice(DeviceDetect):
                 self.timeo = time.time() + 5.0
                 self.passive = True
         elif self.step == FSCAN_FINAL_POLL:
-            self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
+            if not self.message:
+                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
             _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message )
             self.displayed = True
             self.remove = True
@@ -546,6 +562,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.read = False
                 self.write = True
                 self.step = FSCAN_FINAL_POLL
+                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
                 self.ver_found = True
                 self.deviceinfo['key'] = self.cur_key.key
                 self.found_key()
@@ -589,6 +606,7 @@ class ForceScannedDevice(DeviceDetect):
                     # encrypted response, probably v3.3
                     self.device.set_version(3.3)
                     self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.3
+                    self.ver_found = True
                     self.step = FSCAN_v33_BRUTE_FORCE_ACQUIRE
                     self.brute_force_data.append( payload )
 
@@ -611,14 +629,18 @@ class ForceScannedDevice(DeviceDetect):
                     print(result)
 
                 finished = False
-                if 'dps' in result:
+                if not result:
+                    #self.message = "%s    Error: %s" % (self.options['termcolors'].alertdim, result)
+                    pass
+                elif 'dps' in result:
                     if len(result['dps']) > 2:
                         finished = True
                     self.message = "%s    Status: %s" % (self.options['termcolors'].dim, result["dps"])
+                    #self.last_result = result
                 elif 'Error' in result:
                     self.message = "%s    Error: %s" % (self.options['termcolors'].alertdim, result)
                 else:
-                    self.message = "%s    Status: %s" % (self.options['termcolors'].dim, result)
+                    self.message = "%s    Unknown: %s" % (self.options['termcolors'].dim, result)
 
                 if self.options['verbose'] and finished:
                     _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message )
@@ -668,6 +690,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.device.local_key = self.device.real_local_key = matched
                 self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
                 self.step = FSCAN_FINAL_POLL
+                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
                 self.timeo = time.time() + 2.0
                 key.used = True
                 return True
@@ -722,6 +745,7 @@ class PollDevice(DeviceDetect):
         super(PollDevice, self).close()
         if self.options['verbose']:
             _print_device_info( self.deviceinfo, 'Valid Broadcast', self.options['termcolors'], self.message )
+            self.displayed = True
 
     def	timeout( self ):
         if self.retries > 0:
@@ -862,9 +886,9 @@ class PollDevice(DeviceDetect):
 
 
 # Scan function shortcut
-def scan(scantime=None, color=True, forcescan=False, discover=True):
+def scan(scantime=None, color=True, forcescan=False, discover=True, assume_yes=False):
     """Scans your network for Tuya devices with output to stdout"""
-    devices(verbose=True, scantime=scantime, color=color, poll=True, forcescan=forcescan, discover=discover)
+    devices(verbose=True, scantime=scantime, color=color, poll=True, forcescan=forcescan, discover=discover, assume_yes=assume_yes)
 
 def _generate_ip(networks, verbose, term):
     for netblock in networks:
@@ -889,48 +913,48 @@ def _generate_ip(networks, verbose, term):
             yield str(addr)
 
 def _print_device_info( result, note, term, extra_message=None ):
-        ip = result["ip"]
-        gwId = result["gwId"]
-        productKey = result["productKey"] if result["productKey"] else '?'
-        version = result["version"] if result["version"] and result["version"] != '0.0' else '?'
-        devicename = result["name"]
-        dkey = result["key"]
-        mac = result["mac"]
-        devicetype = result['dev_type'] if 'dev_type' in result else '??'
+    ip = result["ip"]
+    gwId = result["gwId"]
+    productKey = result["productKey"] if result["productKey"] else '?'
+    version = result["version"] if result["version"] and result["version"] != '0.0' else '??'
+    devicename = result["name"]
+    dkey = result["key"]
+    mac = result["mac"]
+    devicetype = result['dev_type'] if 'dev_type' in result else '??'
 
-        suffix = term.dim + ", MAC = " + mac + ""
-        if not result['name']:
-            dname = gwId
-            devicename = "%sUnknown v%s Device%s" % (term.alert, version, term.normal+term.dim) # (term.normal+term.dim, term.normal, version, term.dim)
-        else:
-            devicename = term.normal + result['name'] + term.dim
-        print(
-            "%s   Product ID = %s  [%s]:\n    %sAddress = %s,  %sDevice ID = %s (%d), %sLocal Key = %s, %sVersion = %s, %sType = %s%s"
-            % (
-                devicename,
-                productKey,
-                note,
-                term.subbold,
-                ip,
-                term.cyan,
-                gwId,
-                len(gwId),
-                term.red,
-                dkey,
-                term.yellow,
-                version,
-                term.cyan,
-                devicetype,
-                suffix
-            )
+    suffix = term.dim + ", MAC = " + mac + ""
+    if not result['name']:
+        dname = gwId
+        devicename = "%sUnknown v%s Device%s" % (term.alert, version, term.normal+term.dim) # (term.normal+term.dim, term.normal, version, term.dim)
+    else:
+        devicename = term.normal + result['name'] + term.dim
+    print(
+        "%s   Product ID = %s  [%s]:\n    %sAddress = %s   %sDevice ID = %s (len:%d)  %sLocal Key = %s  %sVersion = %s  %sType = %s%s"
+        % (
+            devicename,
+            productKey,
+            note,
+            term.subbold,
+            ip,
+            term.cyan,
+            gwId,
+            len(gwId),
+            term.red,
+            dkey,
+            term.yellow,
+            version,
+            term.cyan,
+            devicetype,
+            suffix
         )
+    )
 
-        if extra_message:
-            print( extra_message )
+    if extra_message:
+        print( extra_message )
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -994,6 +1018,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         #clients.settimeout(TIMEOUT)
     else:
         client = clients = None
+        # no broadcast and no force scan???
+        if not forcescan:
+            scantime = 0.1
 
     if scantime is None:
         scantime = tinytuya.SCANTIME
@@ -1008,17 +1035,21 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         )
         if havekeys:
             print("%s[Loaded devices.json - %d devices]\n" % (term.dim, len(tuyadevices)))
-        print(
-            "%sScanning on UDP ports %s and %s for devices for %d seconds...%s\n"
-            % (term.subbold, UDPPORT, UDPPORTS, scantime, term.normal)
-        )
+        if discover:
+            print(
+                "%sScanning on UDP ports %s and %s for devices for %d seconds...%s\n"
+                % (term.subbold, UDPPORT, UDPPORTS, scantime, term.normal)
+            )
 
     debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67','172.20.10.102', '172.20.10.1']
     #debug_ips = ['172.20.10.107']
     #debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
+    debug_ips = ['172.20.10.51', '172.20.10.136']
+    debug_ips = []
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
+    broadcast_messages = {}
     devicelist = []
     read_socks = []
     write_socks = []
@@ -1082,7 +1113,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                               'ERROR: Unable to get your IP address and network automatically.'
                               '       (using %s)' % DEFAULT_NETWORK + term.normal)
             else:
-                networks = getmyIPs( term, verbose )
+                networks = getmyIPs( term, verbose, not assume_yes )
                 if not networks:
                     print(term.alert + 'No networks to force-scan, exiting.' + term.normal)
                     return
@@ -1121,22 +1152,24 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         connect_next_round = []
         device_end_time = 0
         devices_with_timers = ''
-        if timeout_time > scan_end_time:
+        if timeout_time >= scan_end_time:
             do_timeout = True
         else:
-            do_timeout = timeout_time < time.time()
+            do_timeout = timeout_time <= time.time()
             if do_timeout: timeout_time = time.time() + 1.0 #connect_timeout
 
         for dev in devicelist:
+            if dev.scanned and dev.ip not in scanned_devices:
+                scanned_devices[dev.ip] = dev
             if do_timeout and dev.hard_time_limit < time.time():
                 dev.stop()
             if dev.remove:
                 remove.append(dev)
-                if dev.scanned:
-                    scanned_devices[dev.ip] = dev
+                #if dev.scanned:
+                #    scanned_devices[dev.ip] = dev
                 continue
             else:
-                if do_timeout and dev.timeo < time.time():
+                if do_timeout and dev.timeo <= time.time():
                     dev.timeout()
 
                 if (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
@@ -1188,7 +1221,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                             break
                         else:
                             if current_ip in broadcasted_devices:
-                                pass
+                                continue
                             elif current_ip in snapshot and snapshot[current_ip]['version'] and snapshot[current_ip]['gwId']:
                                 ip = current_ip
                                 broadcasted_devices[ip] = PollDevice( ip, snapshot[current_ip], options, ip in debug_ips )
@@ -1275,16 +1308,26 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 result["mac"] = mac
 
                 if verbose:
-                    print(term.alertdim + 'New Broadcast', ip, mac, result, term.normal)
+                    broadcast_messages[ip] = term.alertdim + term.dim + 'New Broadcast from ' + str(ip) + ' / ' + str(mac) + ' ' + str(result) + term.normal
+                    if False:
+                        print( broadcast_messages[ip] )
 
-                if not mac and SCANLIBS:
-                    a = time.time()
-                    mac = get_mac_address(ip=ip, network_request=False)
-                    b = time.time()
-                    if verbose:
-                        print('Discovered MAC', mac, 'in', (b-a))
-                    if mac and mac != '00:00:00:00:00:00':
-                        result["mac"] = mac
+                #if not mac and SCANLIBS:
+                #    a = time.time()
+                #    mac = get_mac_address(ip=ip, network_request=False)
+                #    b = time.time()
+                #    if verbose:
+                #        print('Discovered MAC', mac, 'in', (b-a))
+                #    if mac and mac != '00:00:00:00:00:00':
+                #        result["mac"] = mac
+
+                # 20-digit-long IDs are product_idx + MAC
+                if not mac and len(result['gwId']) == 20:
+                    try:
+                        mac = bytearray.fromhex( result['gwId'][-12:] )
+                        result["mac"] = '%02x:%02x:%02x:%02x:%02x:%02x' % tuple(mac)
+                    except:
+                        pass
 
                 broadcasted_devices[ip] = PollDevice( ip, result, options, ip in debug_ips )
                 do_poll = False
@@ -1293,6 +1336,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     # v3.1 does not require a key for polling, but v3.2+ do
                     if result['version'] != "3.1" and not dkey:
                         broadcasted_devices[ip].message = "%s    No Stats for %s: DEVICE KEY required to poll for status%s" % (term.alertdim, ip, term.dim)
+                    elif user_break_count:
+                        broadcasted_devices[ip].message = "%s    No Stats for %s: User interrupted scan%s" % (term.alertdim, ip, term.dim)
                     else:
                         # open a connection and dump it into the select()
                         do_poll = True
@@ -1321,7 +1366,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             check_end_time = time.time() + connect_timeout
             if check_end_time > device_end_time: device_end_time = check_end_time
 
-        if (not ip_scan_running) and wantips and scan_end_time <= time.time() and device_end_time <= time.time():
+        if (not ip_scan_running) and wantips and scan_end_time <= time.time() and device_end_time <= time.time() and not user_break_count:
             if verbose:
                 print("Not all devices were found by broadcast, starting force-scan for missing devices %r" % wantips)
             scan_ips = (i for i in wantips)
@@ -1355,7 +1400,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         clients.close()
 
     if verbose:
-        print( 'Scanned in', time.time() - start_time )
+        print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
         #print( len(response_list), response_list )
 
     ver_count = { '3.1': 0, '3.2': 0, '3.3': 0, '3.4': 0 }
@@ -1376,8 +1421,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         elif not broadcasted_devices[ip].deviceinfo['key']:
             no_key_count += 1
 
+        if broadcasted_devices[ip].displayed and ip in broadcast_messages:
+            del broadcast_messages[ip]
+
     for ip in scanned_devices:
-        ver_str = str(broadcasted_devices[ip].deviceinfo['version'])
+        ver_str = str(scanned_devices[ip].deviceinfo['version'])
         if ver_str not in ver_count:
             ver_count[ver_str] = 1
         else:
@@ -1388,6 +1436,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         elif not scanned_devices[ip].deviceinfo['key']:
             no_key_count += 1
 
+        if scanned_devices[ip].displayed and ip in broadcast_messages:
+            # remove the "Received Broadcast from ..." line
+            del	broadcast_messages[ip]
+
+        if scanned_devices[ip].sock or not scanned_devices[ip].displayed:
+            scanned_devices[ip].stop()
 
     found_count = len(broadcasted_devices)+len(scanned_devices)
 
@@ -1423,9 +1477,14 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             print( '%sMissing Local Key: %s%s' % (term.alert, no_key_count, term.normal) )
 
         if wantips:
-            print('%s%sDid not find %s devices by ip: %r%s' % (term.alert, term.yellow, len(wantips), wantips, term.normal))
+            print('%s%sDid not find %s devices by IP Address: %r%s' % (term.alert, term.yellow, len(wantips), wantips, term.normal))
         if wantids:
-            print('%s%sDid not find %s devices by ID: %r%s' % (term.alert, term.yellow, len(wantids), wantids, term.normal))
+            print('%s%sDid not find %s devices by DevID: %r%s' % (term.alert, term.yellow, len(wantids), wantids, term.normal))
+
+        if broadcast_messages:
+            print('%sUndisplayed Broadcasts:%s' % (term.alert, term.normal))
+            for ip in broadcast_messages:
+                print( broadcast_messages[ip] )
 
     if byID:
         k = 'gwId'

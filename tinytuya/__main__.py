@@ -9,7 +9,7 @@
  Run TinyTuya Setup Wizard:
     python -m tinytuya wizard
  This network scan will run if calling this module via command line:
-    python -m tinytuya <max_retry>
+    python -m tinytuya <max_time>
 
 """
 
@@ -27,6 +27,7 @@ force = False
 force_list = []
 last_force = False
 broadcast_listen = True
+assume_yes = False
 
 for i in sys.argv:
     if i==sys.argv[0]:
@@ -49,6 +50,8 @@ for i in sys.argv:
         state = 3
     elif i.lower() == "json":
         state = 4
+    elif i.lower() == "-yes":
+        assume_yes = True
     elif last_force and len(i) > 6:
         this_force = True
         force_list.append( i )
@@ -67,9 +70,9 @@ if force and len(force_list) > 0:
 # State 0 = Run Network Scan
 if state == 0:
     if retriesprovided:
-        scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen)
+        scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
     else:
-        scanner.scan(color=color, forcescan=force, discover=broadcast_listen)
+        scanner.scan(color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
 
 # State 1 = Run Setup Wizard
 if state == 1:
@@ -97,7 +100,7 @@ if state == 4:
 if state == 10:
     print("TinyTuya [%s]\n" % (tinytuya.version))
     print("Usage:\n")
-    print("    python -m tinytuya <command> [<max_retry>] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
+    print("    python -m tinytuya <command> [<max_time>] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
     print("")
     print("      wizard         Launch Setup Wizard to get Tuya Local KEYs.")
     print("      scan           Scan local network for Tuya devices.")
