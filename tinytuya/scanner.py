@@ -24,7 +24,7 @@ import sys
 import time
 import errno
 from colorama import init
-from hashlib import sha256
+from hashlib import md5, sha256
 import hmac
 import base64
 import tinytuya
@@ -406,7 +406,7 @@ class ForceScannedDevice(DeviceDetect):
                     self.remove = True
                 else:
                     self.connect()
-        elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE or self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE:
+        elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE: # or self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE or self.step == FSCAN_v31_BRUTE_FORCE_ACTIVE:
             if not forced:
                 # actual timeout, connect failed
                 if self.retries < 2:
@@ -420,6 +420,9 @@ class ForceScannedDevice(DeviceDetect):
                     self.displayed = True
                     self.close()
                 return
+            # brute-forcing the key
+            self.v3x_brute_force_try_next_key()
+        elif self.step == FSCAN_v31_BRUTE_FORCE_ACTIVE:
             # brute-forcing the key
             self.v3x_brute_force_try_next_key()
         elif forced:
@@ -487,6 +490,7 @@ class ForceScannedDevice(DeviceDetect):
         if self.debug and self.step == 0:
             print(" ForceScannedDevice: Force-Scan Found Device %s" % (self.ip,))
 
+        msg = None
         if self.step == FSCAN_NOT_STARTED:
             self.scanned = True
             self.step = FSCAN_INITIAL_CONNECT
@@ -496,23 +500,19 @@ class ForceScannedDevice(DeviceDetect):
             # v3.3 devices will return an encrypted rejection message
             # v3.4 devices will slam the door in our face by dropping the connection
             if self.deviceinfo['dev_type'] == 'device22':
-                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.CONTROL_NEW, b'') )
+                msg = tinytuya.MessagePayload(tinytuya.CONTROL_NEW, b'')
             else:
-                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.DP_QUERY, b'') )
-            self.sock.sendall( msg )
+                msg = tinytuya.MessagePayload(tinytuya.DP_QUERY, b'')
         elif self.step == FSCAN_INITIAL_CONNECT:
             # this is a connect retry
             dummy_payload = bytes(bytearray.fromhex('deadbeef112233445566778899aabbccddeeffb00bface112233feedbabe74f0'))
             if self.deviceinfo['dev_type'] == 'device22':
-                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.CONTROL_NEW, dummy_payload) )
+                msg = tinytuya.MessagePayload(tinytuya.CONTROL_NEW, dummy_payload)
             else:
-                msg = self.device._encode_message( tinytuya.MessagePayload(tinytuya.DP_QUERY, dummy_payload) )
-            try:
-                self.sock.sendall( msg )
-            except:
-                self.send_queue.append( msg )
-                self.write = True
-                self.read = False
+                msg = tinytuya.MessagePayload(tinytuya.DP_QUERY, dummy_payload)
+        elif self.step == FSCAN_v31_BRUTE_FORCE_ACTIVE:
+            dummy_payload = bytes(bytearray.fromhex('deadbeef112233445566778899aabbccddeeffb00bface112233feedbabe74f0'))
+            msg = tinytuya.MessagePayload(tinytuya.CONTROL, dummy_payload)
         #elif self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE:
         #    pass
         elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE:
@@ -520,6 +520,17 @@ class ForceScannedDevice(DeviceDetect):
             self.v34_negotiate_sess_key_start()
         else:
             print('ForceScannedDevice: Unhandled step in write()?!?!', self.ip, 'step', self.step)
+
+        if msg:
+            if self.debug:
+                print(" ForceScannedDevice: Sending Device %s Message %r" % (self.ip,msg))
+            msg = self.device._encode_message( msg )
+            try:
+                self.sock.sendall( msg )
+            except:
+                self.send_queue.append( msg )
+                self.write = True
+                self.read = False
 
     def read_data( self ):
         try:
@@ -581,6 +592,9 @@ class ForceScannedDevice(DeviceDetect):
             else:
                 payload = msg.payload
 
+            if self.debug:
+                print( 'Got message from %s for step %s: %r' % (self.ip, self.step, msg) )
+
             if self.step == FSCAN_INITIAL_CONNECT:
                 # FIXME try and use the response?
             #    self.step = FSCAN_v3x_PROVOKE_RESPONSE
@@ -596,24 +610,34 @@ class ForceScannedDevice(DeviceDetect):
                         self.device.set_version(3.1)
                         self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.1
                         # there is no good way of brute-forcing this one, so listen passively in hopes of receiving a message containing the gwId
-                        self.step = FSCAN_v31_PASSIVE_LISTEN
-                        self.passive = True
+                        self.step = FSCAN_v31_BRUTE_FORCE_ACTIVE #FSCAN_v31_PASSIVE_LISTEN
+                        #self.passive = True
                         have_err_string = True
+                        if self.debug:
+                            print( 'Trying brute force!' )
+
+                        self.keygen = (i for i in self.options['keylist'] if not i.used)
+                        self.v3x_brute_force_try_next_key()
+                        #self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
+                        #self.step = FSCAN_FINAL_POLL
                 except:
                     pass
 
                 if not have_err_string:
                     # encrypted response, probably v3.3
+                    if self.debug:
+                        print( 'Device %s is probably v3.3' % self.ip )
                     self.device.set_version(3.3)
                     self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.3
                     self.ver_found = True
                     self.step = FSCAN_v33_BRUTE_FORCE_ACQUIRE
                     self.brute_force_data.append( payload )
-
             elif self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
                 # no timout resetting for this one, let self.timeout() process the data
                 self.brute_force_data.append( payload )
-
+            elif self.step ==  FSCAN_v31_BRUTE_FORCE_ACTIVE:
+                if 'error' in payload.decode('utf8'):
+                    self.brute_force_found_key()
             elif self.step == FSCAN_v31_PASSIVE_LISTEN:
                 if msg.cmd == tinytuya.STATUS and msg.retcode == 0:
                     try:
@@ -657,6 +681,7 @@ class ForceScannedDevice(DeviceDetect):
             return False
 
         for key in (i for i in self.options['keylist'] if not i.used):
+            self.cur_key = key
             bad = False
             cipher = tinytuya.AESCipher( key.key_encoded )
             matched = None
@@ -679,20 +704,7 @@ class ForceScannedDevice(DeviceDetect):
                     break
 
             if matched and not bad:
-                if self.debug: #self.options['verbose']:
-                    print('ForceScannedDevice: v3.3 brute forced key', matched, 'for', self.ip)
-                self.brute_force_data = []
-                self.read = True
-                self.write = False
-                self.ver_found = True
-                self.deviceinfo['key'] = matched.decode()
-                self.found_key()
-                self.device.local_key = self.device.real_local_key = matched
-                self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
-                self.step = FSCAN_FINAL_POLL
-                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
-                self.timeo = time.time() + 2.0
-                key.used = True
+                self.brute_force_found_key()
                 return True
 
         self.brute_force_data =	[]
@@ -700,15 +712,24 @@ class ForceScannedDevice(DeviceDetect):
 
     def v3x_brute_force_try_next_key( self ):
         self.cur_key = next( self.keygen, None )
+
+        if not self.passive:
+            while self.cur_key and self.cur_key.used:
+                self.cur_key = next( self.keygen, None )
+        #if self.debug and self.cur_key:
+        #    print( 'ForceScannedDevice: v3.x', self.step, 'brute force got key', self.cur_key.key )
         if self.cur_key is None:
             # Keep trying.  Go through the list again but include "already-used" keys as well
             if not self.passive:
                 self.keygen = (i for i in self.options['keylist'])
-                self.cur_key = next( self.keygen, None )
+                try:
+                    self.cur_key = next( self.keygen, None )
+                except:
+                    self.cur_key = None
             self.passive = True
             if self.cur_key is None:
                 if self.debug:
-                    print('ForceScannedDevice: v3.4 brute force ran out of keys without finding a match!', self.ip)
+                    print('ForceScannedDevice: v3.x brute force ran out of keys without finding a match!', self.ip)
                 self.remove = True
                 self.deviceinfo['version'] = self.deviceinfo['ver'] = 0.0
                 self.message = "%s    Polling %s Failed: No matching key found" % (self.options['termcolors'].alertdim, self.ip)
@@ -716,12 +737,28 @@ class ForceScannedDevice(DeviceDetect):
                 self.displayed = True
             else:
                 if self.debug:
-                    print('ForceScannedDevice: v3.4 brute force ran out of keys, restarting without skipping any', self.ip, self.cur_key.key)
+                    print('ForceScannedDevice: v3.x brute force ran out of keys, restarting without skipping any', self.ip, self.cur_key.key)
                 self.connect()
         else:
             if self.debug:
-                print('ForceScannedDevice: v3.4 brute force trying next key', self.ip, self.cur_key.key)
+                print('ForceScannedDevice: v3.x brute force trying next key', self.ip, self.cur_key.key)
             self.connect()
+
+    def brute_force_found_key( self ):
+        if self.debug:
+            print('ForceScannedDevice: v3.x brute forced key', self.cur_key.key, 'for', self.ip)
+        self.brute_force_data = []
+        self.read = True
+        self.write = False
+        self.ver_found = True
+        self.deviceinfo['key'] = self.cur_key.key
+        self.found_key()
+        self.device.local_key = self.device.real_local_key = self.cur_key.key_encoded
+        self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
+        self.step = FSCAN_FINAL_POLL
+        self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
+        self.timeo = time.time() + 2.0
+        self.cur_key.used = True
 
     def found_key( self ):
         for dev in self.options['tuyadevices']:
@@ -1019,8 +1056,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     else:
         client = clients = None
         # no broadcast and no force scan???
-        if not forcescan:
-            scantime = 0.1
+        #if not forcescan:
+        scantime = 0.1
 
     if scantime is None:
         scantime = tinytuya.SCANTIME
@@ -1044,7 +1081,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67','172.20.10.102', '172.20.10.1']
     #debug_ips = ['172.20.10.107']
     #debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
-    debug_ips = ['172.20.10.51', '172.20.10.136']
+    debug_ips = ['172.20.10.144'] #, '172.20.10.91']#, '172.20.10.51', '172.20.10.136']
     debug_ips = []
     networks = []
     scanned_devices = {}
@@ -1267,7 +1304,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
         # these sockets are now writable (just connected) or failed
         for sock in wr:
-            all_socks[sock].write_data()
+            if sock in all_socks:
+                all_socks[sock].write_data()
 
         # these sockets are now have data waiting to be read
         for sock in rd:
