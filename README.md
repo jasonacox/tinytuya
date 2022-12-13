@@ -354,6 +354,8 @@ while(True):
 
 You can poll and manage Tuya devices using the `Cloud` class and functions.
 
+_CAUTION: The free Tuya IoT Developer (Trial) account allows a very limited number of Cloud API calls. Be aware of the restrictions before enabling any automation that makes frequent calls._
+
 ```python
 import tinytuya
 
