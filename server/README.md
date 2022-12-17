@@ -9,6 +9,7 @@ The TinyTuya API Server provides a central service to access all your Tuya devic
 API Functions - The server listens for GET requests on local port 8888:
 
 ```
+    /help                           - List all available commands
     /devices                        - List all devices discovered with metadata   
     /device/{DeviceID}              - List specific device metadata
     /numdevices                     - List current number of devices discovered
@@ -16,6 +17,7 @@ API Functions - The server listens for GET requests on local port 8888:
     /set/{DeviceID}/{Key}/{Value}   - Set DPS {Key} with {Value} 
     /turnon/{DeviceID}/{SwitchNo}   - Turn on device, optional {SwtichNo}
     /turnoff/{DeviceID}/{SwitchNo}  - Turn off device, optional {SwtichNo}
+    /delayedoff/{DeviceID}/{SwitchNo}/{Seconds} - Turn off device with a delay, optional {SwitchNo}/{Delay}
     /sync                           - Fetches the device list and local keys from the Tuya Cloud API
     /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
                                     - Sets the Tuya Cloud API login info
