@@ -23,6 +23,8 @@ Description
                                         - Sets the Tuya Cloud API login info
         /offline                        - List of registered devices that are offline
 
+        /delayoff/{DeviceID}/{Time} - Turn off device with delay
+
 """
 
 # Modules
@@ -293,6 +295,11 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     pass
 
+def delayoff(d, sw, delay):
+    time.sleep(int(delay))
+    d.turn_off(switch=sw, nowait=True)
+    d.close()
+
 class handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         if DEBUGMODE:
@@ -327,6 +334,21 @@ class handler(BaseHTTPRequestHandler):
         contenttype = 'application/json'
         if self.path == '/devices':
             message = json.dumps(deviceslist)
+        elif self.path == '/help':
+            # show available commands
+            cmds = [("/devices","List all devices discovered with metadata"),
+                    ("/device/{DeviceID}", "List specific device metadata"),
+                    ("/numdevices", "List current number of devices discovered"),
+                    ("/status/{DeviceID}", "List current device status"),
+                    ("/set/{DeviceID}/{Key}/{Value}", "Set DPS {Key} with {Value}"),
+                    ("/turnon/{DeviceID}/{SwitchNo}", "Turn on device, optional {SwtichNo}"),
+                    ("/turnoff/{DeviceID}/{SwitchNo}", "Turn off device, optional {SwtichNo}"),
+                    ("/delayoff/{DeviceID}/{SwitchNo}/{Time}", "Turn off device with delay of 10 secs, optional {SwitchNo}/{Time}"),
+                    ("/sync", "Fetches the device list and local keys from the Tuya Cloud API"),
+                    ("/cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}", "Sets the Tuya Cloud API login info"),
+                    ("/offline", "List of registered devices that are offline")]
+
+            message = json.dumps(cmds)
         elif self.path == '/stats':
             # Give Internal Stats
             serverstats['ts'] = int(time.time())
@@ -386,6 +408,29 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
             elif id != "":
                 message = json.dumps({"Error": "Device ID not found.", "id": id})            
+        elif self.path.startswith('/delayoff/'):
+            id = self.path.split('/delayoff/')[1]
+            sw = 1
+            delay = 10
+            if "/" in id:
+                try:
+                    (id, sw, delay) = id.split("/")
+                except:
+                    id = ""
+                    message = json.dumps({"Error": "Invalid syntax in delayoff command.", "url": self.path})
+            if id in deviceslist:
+                try:
+                    d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
+                    d.set_version(float(deviceslist[id]["version"]))
+
+                    thread = threading.Thread(target = delayoff, args = (d, sw, delay))
+                    thread.start()
+
+                    message = json.dumps({"OK": "Turning of in %s seconds." % (delay), "url": self.path})
+                except:
+                    message = json.dumps({"Error": "Error sending command to device.", "id": id})
+            elif id != "":
+                message = json.dumps({"Error": "Device ID not found.", "id": id})
         elif self.path.startswith('/turnon/'):
             id = self.path.split('/turnon/')[1]
             sw = 1
