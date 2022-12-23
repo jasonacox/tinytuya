@@ -295,8 +295,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     pass
 
-def delayoff(d, sw, delay):
-    time.sleep(int(delay))
+def delayoff(d, sw):
     d.turn_off(switch=sw, nowait=True)
     d.close()
 
@@ -423,8 +422,8 @@ class handler(BaseHTTPRequestHandler):
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                     d.set_version(float(deviceslist[id]["version"]))
 
-                    thread = threading.Thread(target = delayoff, args = (d, sw, delay))
-                    thread.start()
+                    timer = threading.Timer(int(delay), delayoff, args = (d, sw))
+                    timer.start()
 
                     message = json.dumps({"OK": "Turning of in %s seconds." % (delay), "url": self.path})
                 except:
