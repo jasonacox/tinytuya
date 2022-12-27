@@ -72,7 +72,7 @@
                 output = output + rownum + 
                     " - <a href='device.html?id=" + sortedDevices[x].id + "'>" +
                     (sortedDevices[x].name.length > 0 ? sortedDevices[x].name : '[' + sortedDevices[x].id + ']') + "</a> - " + 
-                    sortedDevices[x].id + " - " + 
+                    "<a href='device_dps.html?id=" + sortedDevices[x].id + "'>" + sortedDevices[x].id + "</a> -" +
                     sortedDevices[x].ip + "<br>\n";
                 rownum++;
             }
