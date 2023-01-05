@@ -1330,8 +1330,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 log.debug("Received valid UDP packet: %r", result)
             except:
                 if verbose:
-                    print(term.alertdim + "*  Unexpected payload=%r\n" + term.normal, result)
-                log.debug("Invalid UDP Packet: %r", result)
+                    print(term.alertdim + "*  Unexpected payload=%r\n" + term.normal, data)
+                log.debug("Invalid UDP Packet: %r", data)
                 continue
 
             if ip_force_wants_end:
