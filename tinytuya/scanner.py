@@ -62,7 +62,7 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
-UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
+UDPPORT = 7000 #tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 SCANTIME = tinytuya.SCANTIME        # How many seconds to wait before stopping
@@ -1320,7 +1320,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             data, addr = sock.recvfrom(4048)
             ip = addr[0]
             try:
-                result = data[20:-8]
                 try:
                     result = tinytuya.decrypt_udp(result)
                 except:
