@@ -154,10 +154,15 @@ MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
 MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
 MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
 MESSAGE_END_FMT_HMAC = ">32sI"  # 32s:hmac, uint32:suffix
-PREFIX_VALUE = 0x000055AA
-PREFIX_BIN = b"\x00\x00U\xaa"
-SUFFIX_VALUE = 0x0000AA55
-SUFFIX_BIN = b"\x00\x00\xaaU"
+PREFIX_VALUE = PREFIX_55AA_VALUE = 0x000055AA
+PREFIX_BIN = PREFIX_55AA_BIN = b"\x00\x00U\xaa"
+SUFFIX_VALUE = SUFFIX_55AA_VALUE = 0x0000AA55
+SUFFIX_BIN = SUFFIX_55AA_BIN = b"\x00\x00\xaaU"
+PREFIX_6699_VALUE = 0x00006699
+PREFIX_6699_BIN = b"\x00\x00\x66\x99"
+SUFFIX_6699_VALUE = 0x00009966
+SUFFIX_6699_BIN = b"\x00\x00\x99\x66"
+
 NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH ]
 
 # Python 2 Support
@@ -445,7 +450,6 @@ def find_device(dev_id=None, address=None):
             gwId = version = ""
             result = data
             try:
-                result = data[20:-8]
                 try:
                     result = decrypt_udp(result)
                 except:
@@ -1556,14 +1560,19 @@ def encrypt(msg, key):
 def decrypt(msg, key):
     return unpad(AES.new(key, AES.MODE_ECB).decrypt(msg)).decode()
 
+def decrypt_gcm(msg, key):
+    nonce = msg[:12]
+    return AES.new(key, AES.MODE_GCM, nonce=nonce).decrypt(msg[12:]).decode()
 
 # UDP packet payload decryption - credit to tuya-convert
 udpkey = md5(b"yGAdlopoPVldABfn").digest()
 
-
 def decrypt_udp(msg):
+    if msg[:4] == PREFIX_55AA_BIN:
+        return decrypt(msg[20:-8], udpkey)
+    if msg[:4] == PREFIX_6699_BIN:
+        return decrypt_gcm(msg[18:-20], udpkey)
     return decrypt(msg, udpkey)
-
 
 # Return positive number or zero
 def floor(x):
