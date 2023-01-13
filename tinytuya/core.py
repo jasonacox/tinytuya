@@ -1572,7 +1572,14 @@ def decrypt_udp(msg):
     if msg[:4] == PREFIX_55AA_BIN:
         return decrypt(msg[20:-8], udpkey)
     if msg[:4] == PREFIX_6699_BIN:
-        return decrypt_gcm(msg[18:-20], udpkey)
+        dec = decrypt_gcm(msg[18:-20], udpkey)
+        # strip return code if present
+        if dec[:4] == (chr(0) * 4):
+            dec = dec[4:]
+        # app sometimes has extra bytes at the end
+        while dec[-1] == chr(0):
+            dec = dec[:-1]
+        return dec
     return decrypt(msg, udpkey)
 
 # Return positive number or zero

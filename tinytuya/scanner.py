@@ -1078,8 +1078,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             print("%s[Loaded devices.json - %d devices]\n" % (term.dim, len(tuyadevices)))
         if discover:
             print(
-                "%sScanning on UDP ports %s and %s for devices for %d seconds...%s\n"
-                % (term.subbold, UDPPORT, UDPPORTS, scantime, term.normal)
+                "%sScanning on UDP ports %s and %s and %s for devices for %d seconds...%s\n"
+                % (term.subbold, UDPPORT, UDPPORTS, UDPPORTAPP, scantime, term.normal)
             )
 
     #debug_ips = ['172.20.10.144', '172.20.10.91', '172.20.10.51', '172.20.10.136']
@@ -1107,7 +1107,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     ip_scan_running = False
     scan_end_time = time.time() + scantime
     device_end_time = 0
-    log.debug("Listening for Tuya devices on UDP " + str(UDPPORT) + " and " + str(UDPPORTS))
+    log.debug("Listening for Tuya devices on UDP " + str(UDPPORT) + " and " + str(UDPPORTS) + " and " + str(UDPPORTAPP))
     start_time = time.time()
     timeout_time = time.time() + 5
     current_ip = None
@@ -1319,6 +1319,15 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 continue
 
             # if we are here then it is from a UDP listener
+            if sock is client:
+                tgt_port = UDPPORT
+            elif sock is clients:
+                tgt_port = UDPPORTS
+            elif sock is clientapp:
+                tgt_port = UDPPORTAPP
+            else:
+                tgt_port = '???'
+
             data, addr = sock.recvfrom(4048)
             ip = addr[0]
             try:
@@ -1326,13 +1335,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     result = tinytuya.decrypt_udp( data )
                 except:
                     result = data.decode()
-
                 result = json.loads(result)
                 log.debug("Received valid UDP packet: %r", result)
             except:
                 if verbose:
-                    print(term.alertdim + "*  Unexpected payload=%r\n" + term.normal, data)
-                log.debug("Invalid UDP Packet: %r", data)
+                    print(term.alertdim + "*  Unexpected payload from %r to port %r:%s %r\n" % (ip, tgt_port, term.normal, data))
+                log.debug("Invalid UDP Packet from %r port %r - %r", ip, tgt_port, data)
                 continue
 
             if ip_force_wants_end:
@@ -1342,7 +1350,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 if ip not in broadcasted_apps:
                     broadcasted_apps[ip] = result
                     if verbose:
-                        print( term.alertdim + term.dim + 'New Broadcast from Tuya App at ' + str(ip) + ' - ' + str(result) + term.normal )
+                        print( term.alertdim + 'New Broadcast from App at ' + str(ip) + term.dim + ' - ' + str(result) + term.normal )
                 continue
 
             # check to see if we have seen this device before and add to devices array
