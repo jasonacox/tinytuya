@@ -62,8 +62,9 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
-UDPPORT = 7000 #tinytuya.UDPPORT          # Tuya 3.1 UDP Port
+UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
+UDPPORTAPP = tinytuya.UDPPORTAPP    # Tuya app encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 SCANTIME = tinytuya.SCANTIME        # How many seconds to wait before stopping
 
@@ -675,7 +676,7 @@ class ForceScannedDevice(DeviceDetect):
                 else:
                     self.timeo = time.time() + 2.0
                 return
-            
+
     def brute_force_v3x_data( self ):
         if len( self.brute_force_data ) == 0:
             return False
@@ -1053,8 +1054,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         clients.bind(("", UDPPORTS))
         #clients.settimeout(TIMEOUT)
+        clientapp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        clientapp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        clientapp.bind(("", UDPPORTAPP))
     else:
-        client = clients = None
+        client = clients = clientapp = None
         # no broadcast and no force scan???
         #if not forcescan:
         scantime = 0.1
@@ -1078,15 +1082,13 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 % (term.subbold, UDPPORT, UDPPORTS, scantime, term.normal)
             )
 
-    debug_ips = ['172.20.10.106','172.20.10.107','172.20.10.114','172.20.10.138','172.20.10.156','172.20.10.166','172.20.10.175','172.20.10.181','172.20.10.191', '172.20.10.67','172.20.10.102', '172.20.10.1']
-    #debug_ips = ['172.20.10.107']
-    #debug_ips = ["10.0.1.36","172.20.10.106"] #['172.24.5.112']
-    debug_ips = ['172.20.10.144'] #, '172.20.10.91']#, '172.20.10.51', '172.20.10.136']
+    #debug_ips = ['172.20.10.144', '172.20.10.91', '172.20.10.51', '172.20.10.136']
     debug_ips = []
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
     broadcast_messages = {}
+    broadcasted_apps = {}
     devicelist = []
     read_socks = []
     write_socks = []
@@ -1105,7 +1107,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     ip_scan_running = False
     scan_end_time = time.time() + scantime
     device_end_time = 0
-    log.debug("Listening for Tuya devices on UDP 6666 and 6667")
+    log.debug("Listening for Tuya devices on UDP " + str(UDPPORT) + " and " + str(UDPPORTS))
     start_time = time.time()
     timeout_time = time.time() + 5
     current_ip = None
@@ -1125,7 +1127,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         options['keylist'].append( KeyObj( i['id'], i['key'] ) )
 
     if not wantips:
-        wantips = [] #'172.20.10.3']
+        wantips = [] #['192.168.1.3']
     if not wantids:
         wantids = [] #['abcdef']
 
@@ -1178,7 +1180,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     while ip_scan_running or scan_end_time > time.time() or device_end_time > time.time() or connect_next_round:
         if client:
-            read_socks = [client, clients]
+            read_socks = [client, clients, clientapp]
         else:
             read_socks = []
 
@@ -1310,7 +1312,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         # these sockets are now have data waiting to be read
         for sock in rd:
             # this sock is not a UDP listener
-            if sock is not client and sock is not clients:
+            if sock is not client and sock is not clients and sock is not clientapp:
                 # may not exist if user-interrupted
                 if sock in all_socks:
                     all_socks[sock].read_data()
@@ -1321,9 +1323,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             ip = addr[0]
             try:
                 try:
-                    result = tinytuya.decrypt_udp(result)
+                    result = tinytuya.decrypt_udp( data )
                 except:
-                    result = result.decode()
+                    result = data.decode()
 
                 result = json.loads(result)
                 log.debug("Received valid UDP packet: %r", result)
@@ -1334,6 +1336,13 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 continue
 
             if ip_force_wants_end:
+                continue
+
+            if sock is clientapp:
+                if ip not in broadcasted_apps:
+                    broadcasted_apps[ip] = result
+                    if verbose:
+                        print( term.alertdim + term.dim + 'New Broadcast from Tuya App at ' + str(ip) + ' - ' + str(result) + term.normal )
                 continue
 
             # check to see if we have seen this device before and add to devices array
@@ -1347,6 +1356,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 if verbose:
                     broadcast_messages[ip] = term.alertdim + term.dim + 'New Broadcast from ' + str(ip) + ' / ' + str(mac) + ' ' + str(result) + term.normal
                     if False:
+                        print( data )
+                        print( result )
                         print( broadcast_messages[ip] )
 
                 #if not mac and SCANLIBS:
@@ -1435,6 +1446,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     if client:
         client.close()
         clients.close()
+        clientapp.close()
 
     if verbose:
         print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
