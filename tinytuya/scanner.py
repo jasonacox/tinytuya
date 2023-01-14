@@ -1570,9 +1570,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     if verbose:
         # Save polling data into snapshot format
         devicesarray = list(devices.values())
+        # Add devices from devices.json even if they didn't poll
         for item in tuyadevices:
             k = item["id"]
-            if k not in devices:
+            if not any(d['gwId'] == k for d in devicesarray):
                 tmp = item
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = ''
