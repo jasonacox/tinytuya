@@ -771,6 +771,8 @@ class XenonDevice(object):
         except:
             self._check_socket_close(True)
             return None
+        if not recv_retries:
+            return True
         while recv_retries:
             try:
                 msg = self._receive()
@@ -783,7 +785,7 @@ class XenonDevice(object):
                 log.debug("received null payload (%r) but out of recv retries, giving up", msg)
             else:
                 log.debug("received null payload (%r), fetch new one - %s retries remaining", msg, recv_retries)
-        return None
+        return False
 
     def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
         """
@@ -926,6 +928,9 @@ class XenonDevice(object):
             self._check_socket_close()
             return msg
 
+        return self._process_message( msg, dev_type, from_child )
+
+    def _process_message( self, msg, dev_type=None, from_child=None ):
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
             log.debug("raw unpacked message = %r", msg)
@@ -950,7 +955,7 @@ class XenonDevice(object):
             result = error_json(ERR_PAYLOAD)
 
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
-        if dev_type != self.dev_type:
+        if dev_type and dev_type != self.dev_type:
             log.debug(
                 "Device22 detected and updated (%s -> %s) - Update payload and try again",
                 dev_type,
@@ -1391,16 +1396,16 @@ class Device(XenonDevice):
     #def __init__(self, *args, **kwargs):
     #    super(Device, self).__init__(*args, **kwargs)
 
-    def status(self):
+    def status(self, nowait=False):
         """Return device status."""
         query_type = DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(query_type)
 
-        data = self._send_receive(payload)
+        data = self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("status() received data=%r", data)
         # Error handling
-        if data and "Err" in data:
+        if (not nowait) and data and "Err" in data:
             if data["Err"] == str(ERR_DEVTYPE):
                 # Device22 detected and change - resend with new payload
                 log.debug("status() rebuilding payload for device22")
