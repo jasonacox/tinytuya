@@ -93,11 +93,14 @@ log = logging.getLogger(__name__)
 
 # Helper Functions
 def getmyIP():
+    # Fetch my IP address and assume /24 network
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
     r = s.getsockname()[0]
     s.close()
-    return str(r)
+    r = str(r).split('.')
+    # assume a /24 network
+    return '%s.%s.%s.0/24' % tuple(r[:3])
 
 def getmyIPs( term, verbose, ask ):
     ips = {}
@@ -120,7 +123,7 @@ def getmyIPs( term, verbose, ask ):
                 # skip the loopback interface
                 continue
             if ask:
-                if ask is not 2:
+                if ask != 2:
                     answer = input( '%sScan network %s from interface %s?%s ([Y]es/[n]o/[a]ll yes): ' % (term.bold, k, str(interface), term.normal) )
                     if answer[0:1].lower() == 'a':
                         ask = 2
@@ -467,7 +470,8 @@ class ForceScannedDevice(DeviceDetect):
             # sometimes the devices immediately close the connection, so retry
             if self.debug:
                 print('ForceScannedDevice: Retrying connect', self.ip)
-            self.sock.close()
+            if self.sock:
+                self.sock.close()
             self.connect()
             return
 
@@ -790,7 +794,9 @@ class PollDevice(DeviceDetect):
             if self.debug:
                 print('PollDevice: Timeout for debug ip', self.ip, '- reconnecting, retries', self.retries)
             self.retries -= 1
-            self.sock.close()
+            # get_peer() may have closed it already
+            if self.sock:
+                self.sock.close()
             self.connect()
             self.timeo = time.time() + tinytuya.TIMEOUT
             if self.debug:
@@ -933,7 +939,6 @@ def _generate_ip(networks, verbose, term):
         if tinytuya.IS_PY2 and type(netblock) == str:
             netblock = netblock.decode('latin1')
         try:
-            # Fetch my IP address and assume /24 network
             network = ipaddress.ip_network(netblock)
             log.debug("Starting brute force network scan %s", network)
         except:
@@ -1142,15 +1147,16 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
                       '           (Requires: pip install netifaces)\n' + term.dim)
                 try:
-                    ip = getmyIP()+'/24'
+                    ip = getmyIP()
                     networks.append( ip )
                 except:
+                    #traceback.print_exc()
                     networks.append( u''+DEFAULT_NETWORK )
                     log.debug("Unable to get local network, using default %r", DEFAULT_NETWORK)
                     if verbose:
                         print(term.alert +
-                              'ERROR: Unable to get your IP address and network automatically.'
-                              '       (using %s)' % DEFAULT_NETWORK + term.normal)
+                              'ERROR: Unable to get your IP address and network automatically, using %s' % DEFAULT_NETWORK +
+                              term.normal)
             else:
                 networks = getmyIPs( term, verbose, not assume_yes )
                 if not networks:
@@ -1564,9 +1570,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     if verbose:
         # Save polling data into snapshot format
         devicesarray = list(devices.values())
+        # Add devices from devices.json even if they didn't poll
         for item in tuyadevices:
             k = item["id"]
-            if k not in devices:
+            if not any(d['gwId'] == k for d in devicesarray):
                 tmp = item
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = ''
