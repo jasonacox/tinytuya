@@ -1297,7 +1297,7 @@ class XenonDevice(object):
             )
 
         self.cipher = None
-        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True)
+        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
