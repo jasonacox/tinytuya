@@ -148,13 +148,17 @@ LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
 PROTOCOL_VERSION_BYTES_31 = b"3.1"
 PROTOCOL_VERSION_BYTES_33 = b"3.3"
 PROTOCOL_VERSION_BYTES_34 = b"3.4"
+PROTOCOL_VERSION_BYTES_35 = b"3.5"
 PROTOCOL_3x_HEADER = 12 * b"\x00"
 PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + PROTOCOL_3x_HEADER
 PROTOCOL_34_HEADER = PROTOCOL_VERSION_BYTES_34 + PROTOCOL_3x_HEADER
-MESSAGE_HEADER_FMT = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
+PROTOCOL_35_HEADER = PROTOCOL_VERSION_BYTES_35 + PROTOCOL_3x_HEADER
+MESSAGE_HEADER_FMT = MESSAGE_HEADER_FMT_55AA = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
+MESSAGE_HEADER_FMT_6699 = ">IHIII"  # 4*uint32: prefix, unknown, seqno, cmd, length
 MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
-MESSAGE_END_FMT = ">2I"  # 2*uint32: crc, suffix
+MESSAGE_END_FMT = MESSAGE_END_FMT_55AA = ">2I"  # 2*uint32: crc, suffix
 MESSAGE_END_FMT_HMAC = ">32sI"  # 32s:hmac, uint32:suffix
+MESSAGE_END_FMT_6699 = ">16sI"  # 16s:tag, suffix
 PREFIX_VALUE = PREFIX_55AA_VALUE = 0x000055AA
 PREFIX_BIN = PREFIX_55AA_BIN = b"\x00\x00U\xaa"
 SUFFIX_VALUE = SUFFIX_55AA_VALUE = 0x0000AA55
@@ -170,12 +174,12 @@ NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_K
 IS_PY2 = sys.version_info[0] == 2
 
 # Tuya Packet Format
-TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length')
+TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
 MessagePayload = namedtuple("MessagePayload", "cmd payload")
 try:
-    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good", defaults=(True,))
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv", defaults=(True,0x55AA,None))
 except:
-    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good")
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv")
 
 # TinyTuya Error Response Codes
 ERR_JSON = 900
@@ -220,12 +224,25 @@ class AESCipher(object):
         self.bs = 16
         self.key = key
 
-    def encrypt(self, raw, use_base64=True, pad=True):
+    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None):
         if Crypto:
-            if pad: raw = self._pad(raw)
-            cipher = AES.new(self.key, mode=AES.MODE_ECB)
-            crypted_text = cipher.encrypt(raw)
+            if iv:
+                if iv is True:
+                    iv = str(time.time() * 10)[:12].encode('utf8')
+                cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
+                if header:
+                    cipher.update(header)
+                crypted_text, tag = cipher.encrypt_and_digest(raw)
+                crypted_text = cipher.nonce + crypted_text + tag
+            else:
+                if pad: raw = self._pad(raw)
+                cipher = AES.new(self.key, mode=AES.MODE_ECB)
+                crypted_text = cipher.encrypt(raw)
         else:
+            if iv:
+                # FIXME
+                raise NotImplementedError( 'GCM support for pyaes not implemented yet' )
+
             _ = self._pad(raw)
             cipher = pyaes.blockfeeder.Encrypter(
                 pyaes.AESModeOfOperationECB(self.key),
@@ -239,19 +256,35 @@ class AESCipher(object):
         else:
             return crypted_text
 
-    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False):
-        if use_base64:
-            enc = base64.b64decode(enc)
+    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
+        if not iv:
+            if use_base64:
+                enc = base64.b64decode(enc)
 
-        if len(enc) % 16 != 0:
-            raise ValueError("invalid length")
+            if len(enc) % 16 != 0:
+                raise ValueError("invalid length")
 
         if Crypto:
-            cipher = AES.new(self.key, AES.MODE_ECB)
-            raw = cipher.decrypt(enc)
-            raw = self._unpad(raw, verify_padding)
+            if iv:
+                if iv is True:
+                    iv = enc[:12]
+                    enc = enc[12:]
+                cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
+                if header:
+                    cipher.update(header)
+                if tag:
+                    raw = cipher.decrypt_and_verify(enc, tag)
+                else:
+                    raw = cipher.decrypt(enc)
+            else:
+                cipher = AES.new(self.key, AES.MODE_ECB)
+                raw = cipher.decrypt(enc)
+                raw = self._unpad(raw, verify_padding)
             return raw.decode("utf-8") if decode_text else raw
         else:
+            if iv:
+                # FIXME
+                raise NotImplementedError( 'GCM support for pyaes not implemented yet' )
             cipher = pyaes.blockfeeder.Decrypter(
                 pyaes.AESModeOfOperationECB(self.key),
                 pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
@@ -306,90 +339,147 @@ def set_debug(toggle=True, color=True):
     else:
         log.setLevel(logging.NOTSET)
 
-def pack_message(msg,hmac_key=None):
+def pack_message(msg, hmac_key=None):
     """Pack a TuyaMessage into bytes."""
-    end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT
-    # Create full message excluding CRC and suffix
-    buffer = (
-        struct.pack(
-            MESSAGE_HEADER_FMT,
-            PREFIX_VALUE,
-            msg.seqno,
-            msg.cmd,
-            len(msg.payload) + struct.calcsize(end_fmt),
-        )
-        + msg.payload
-    )
-    if hmac_key:
-        crc = hmac.new(hmac_key, buffer, sha256).digest()
+    if msg.prefix == PREFIX_55AA_VALUE:
+        header_fmt = MESSAGE_HEADER_FMT_55AA
+        end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT_55AA
+        msg_len = len(msg.payload) + struct.calcsize(end_fmt)
+        header_data = ( msg.prefix, msg.seqno, msg.cmd, msg_len )
+    elif msg.prefix == PREFIX_6699_VALUE:
+        if not hmac_key:
+            raise TypeError( 'key must be provided to pack 6699-format messages' )
+        header_fmt = MESSAGE_HEADER_FMT_6699
+        end_fmt = MESSAGE_END_FMT_6699
+        msg_len = len(msg.payload) + (struct.calcsize(end_fmt) - 4) + 12
+        if type(msg.retcode) == int:
+            msg_len += struct.calcsize(MESSAGE_RETCODE_FMT)
+        header_data = ( msg.prefix, 0, msg.seqno, msg.cmd, msg_len )
     else:
-        crc = binascii.crc32(buffer) & 0xFFFFFFFF
-    # Calculate CRC, add it together with suffix
-    buffer += struct.pack(
-        end_fmt, crc, SUFFIX_VALUE
-    )
-    return buffer
+        raise ValueError( 'pack_message() cannot handle message format %08X' % msg.prefix )
+
+    # Create full message excluding CRC and suffix
+    data = struct.pack( header_fmt, *header_data )
+
+    if msg.prefix == PREFIX_6699_VALUE:
+        cipher = AESCipher( hmac_key )
+        if type(msg.retcode) == int:
+            raw = struct.pack( MESSAGE_RETCODE_FMT, msg.retcode ) + msg.payload
+        else:
+            raw = msg.payload
+        data2 = cipher.encrypt( raw, use_base64=False, pad=False, iv=True if not msg.iv else msg.iv, header=data[4:])
+        data += data2 + SUFFIX_6699_BIN
+    else:
+        data += msg.payload
+        if hmac_key:
+            crc = hmac.new(hmac_key, data, sha256).digest()
+        else:
+            crc = binascii.crc32(data) & 0xFFFFFFFF
+        # Calculate CRC, add it together with suffix
+        data += struct.pack( end_fmt, crc, SUFFIX_VALUE )
+
+    return data
 
 def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
     """Unpack bytes into a TuyaMessage."""
-    end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT
-    # 4-word header plus return code
-    header_len = struct.calcsize(MESSAGE_HEADER_FMT)
-    retcode_len = 0 if no_retcode else struct.calcsize(MESSAGE_RETCODE_FMT)
-    end_len = struct.calcsize(end_fmt)
-    headret_len = header_len + retcode_len
-
-    if len(data) < headret_len+end_len:
-        log.debug('unpack_message(): not enough data to unpack header! need %d but only have %d', headret_len+end_len, len(data))
-        raise DecodeError('Not enough data to unpack header')
-
     if header is None:
         header = parse_header(data)
 
-    if len(data) < header_len+header.length:
+    if header.prefix == PREFIX_55AA_VALUE:
+        # 4-word header plus return code
+        header_len = struct.calcsize(MESSAGE_HEADER_FMT_55AA)
+        end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT_55AA
+        retcode_len = 0 if no_retcode else struct.calcsize(MESSAGE_RETCODE_FMT)
+        msg_len = header_len + header.length
+    elif header.prefix == PREFIX_6699_VALUE:
+        if not hmac_key:
+            raise TypeError( 'key must be provided to unpack 6699-format messages' )
+        header_len = struct.calcsize(MESSAGE_HEADER_FMT_6699)
+        end_fmt = MESSAGE_END_FMT_6699
+        retcode_len = 0
+        msg_len = header_len + header.length + 4
+    else:
+        raise ValueError( 'unpack_message() cannot handle message format %08X' % header.prefix )
+
+    if len(data) < msg_len:
         log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
         raise DecodeError('Not enough data to unpack payload')
 
-    retcode = 0 if no_retcode else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:headret_len])[0]
+    end_len = struct.calcsize(end_fmt)
     # the retcode is technically part of the payload, but strip it as we do not want it here
-    payload = data[header_len+retcode_len:header_len+header.length]
+    retcode = 0 if not retcode_len else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:header_len+retcode_len])[0]
+    payload = data[header_len+retcode_len:msg_len]
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
+    payload = payload[:-end_len]
 
-    if hmac_key:
-        have_crc = hmac.new(hmac_key, data[:(header_len+header.length)-end_len], sha256).digest()
-    else:
-        have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
-
-    if suffix != SUFFIX_VALUE:
-        log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
-
-    if crc != have_crc:
+    if header.prefix == PREFIX_55AA_VALUE:
         if hmac_key:
-            log.debug('HMAC checksum wrong! %r != %r', binascii.hexlify(have_crc), binascii.hexlify(crc))
+            have_crc = hmac.new(hmac_key, data[:(header_len+header.length)-end_len], sha256).digest()
         else:
-            log.debug('CRC wrong! %08X != %08X', have_crc, crc)
+            have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
 
-    return TuyaMessage(header.seqno, header.cmd, retcode, payload[:-end_len], crc, crc == have_crc)
+        if suffix != SUFFIX_VALUE:
+            log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
+
+        if crc != have_crc:
+            if hmac_key:
+                log.debug('HMAC checksum wrong! %r != %r', binascii.hexlify(have_crc), binascii.hexlify(crc))
+            else:
+                log.debug('CRC wrong! %08X != %08X', have_crc, crc)
+        crc_good = crc == have_crc
+        iv = None
+    elif header.prefix == PREFIX_6699_VALUE:
+        iv = payload[:12]
+        payload = payload[12:]
+        try:
+            cipher = AESCipher( hmac_key )
+            payload = cipher.decrypt( payload, use_base64=False, decode_text=False, verify_padding=False, iv=iv, header=data[4:header_len], tag=crc)
+            crc_good = True
+        except:
+            crc_good = False
+
+        retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
+        if no_retcode is None and payload[0] != b'{' and payload[retcode_len] == b'{':
+            # auto-detect
+            pass
+        elif no_retcode:
+            retcode_len = 0
+        if retcode_len:
+            retcode = struct.unpack(MESSAGE_RETCODE_FMT, payload[:retcode_len])[0]
+            payload = payload[retcode_len:]
+
+    return TuyaMessage(header.seqno, header.cmd, retcode, payload, crc, crc_good, header.prefix, iv)
 
 def parse_header(data):
-    header_len = struct.calcsize(MESSAGE_HEADER_FMT)
+    if( data[:4] == PREFIX_6699_BIN ):
+        fmt = MESSAGE_HEADER_FMT_6699
+    else:
+        fmt = MESSAGE_HEADER_FMT_55AA
+
+    header_len = struct.calcsize(fmt)
 
     if len(data) < header_len:
         raise DecodeError('Not enough data to unpack header')
 
-    prefix, seqno, cmd, payload_len = struct.unpack(
-        MESSAGE_HEADER_FMT, data[:header_len]
-    )
+    unpacked = struct.unpack( fmt, data[:header_len] )
+    prefix = unpacked[0]
 
-    if prefix != PREFIX_VALUE:
+    if prefix == PREFIX_55AA_VALUE:
+        prefix, seqno, cmd, payload_len = unpacked
+        total_length = payload_len + header_len
+    elif prefix == PREFIX_6699_VALUE:
+        prefix, unknown, seqno, cmd, payload_len = unpacked
+        #seqno |= unknown << 32
+        total_length = payload_len + header_len + len(SUFFIX_6699_BIN)
+    else:
         #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
-        raise DecodeError('Header prefix wrong! %08X != %08X' % (prefix, PREFIX_VALUE))
+        raise DecodeError('Header prefix wrong! %08X is not %08X or %08X' % (prefix, PREFIX_55AA_VALUE, PREFIX_6699_VALUE))
 
     # sanity check. currently the max payload length is somewhere around 300 bytes
     if payload_len > 1000:
-        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes' % payload_len)
+        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (payload_len,fmt,unpacked))
 
-    return TuyaHeader(prefix, seqno, cmd, payload_len)
+    return TuyaHeader(prefix, seqno, cmd, payload_len, total_length)
 
 def has_suffix(payload):
     """Check to see if payload has valid Tuya suffix"""
@@ -558,6 +648,13 @@ payload_dict = {
             },
         DP_QUERY: { "command_override": DP_QUERY_NEW },
     },
+    "v3.5": {
+        CONTROL: {
+            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
+            "command": {"protocol":5, "t": "int", "data": ""}
+        },
+        DP_QUERY: { "command_override": DP_QUERY_NEW },
+    },
     "zigbee": {
         CONTROL: {
             "command": {"t": ""},
@@ -600,6 +697,7 @@ class XenonDevice(object):
         self.socketNODELAY = True
         self.socketRetryLimit = 5
         self.socketRetryDelay = 5
+        self.version = 0
         self.dps_to_request = {}
         self.seqno = 1
         self.sendWait = 0.01
@@ -615,7 +713,7 @@ class XenonDevice(object):
                 local_key = devinfo['key']
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
-        self.cipher = AESCipher(self.local_key)
+        self.cipher = None
 
         if self.parent:
             XenonDevice.set_version(self, self.parent.version)
@@ -674,7 +772,7 @@ class XenonDevice(object):
                 try:
                     retries = retries + 1
                     self.socket.connect((self.address, self.port))
-                    if self.version == 3.4:
+                    if self.version >= 3.4:
                         # restart session key negotiation
                         if self._negotiate_session_key():
                             return True
@@ -730,37 +828,42 @@ class XenonDevice(object):
         # make sure to use the parent's self.seqno and session key
         if self.parent:
             return self.parent._receive()
-        # message consists of header + retcode + data + footer
-        header_len = struct.calcsize(MESSAGE_HEADER_FMT)
-        retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
-        end_len = struct.calcsize(MESSAGE_END_FMT)
-        ret_end_len = retcode_len + end_len
-        prefix_len = len(PREFIX_BIN)
+        # message consists of header + retcode + [data] + crc (4 or 32) + footer
+        min_len_55AA = struct.calcsize(MESSAGE_HEADER_FMT_55AA) + 4 + 4 + len(SUFFIX_BIN)
+        # message consists of header + iv + retcode + [data] + crc (16) + footer
+        min_len_6699 = struct.calcsize(MESSAGE_HEADER_FMT_6699) + 12 + 4 + 16 + len(SUFFIX_BIN)
+        min_len = min_len_55AA if min_len_55AA < min_len_6699 else min_len_6699
+        prefix_len = len( PREFIX_BIN_55AA )
 
-        data = self._recv_all(header_len+ret_end_len)
+        data = self._recv_all( min_len )
 
         # search for the prefix.  if not found, delete everything except
         # the last (prefix_len - 1) bytes and recv more to replace it
-        prefix_offset = data.find(PREFIX_BIN)
-        while prefix_offset != 0:
+        prefix_offset_55AA = data.find( PREFIX_BIN_55AA )
+        prefix_offset_6699 = data.find( PREFIX_BIN_6699 )
+
+        while prefix_offset_55AA != 0 and prefix_offset_6699 != 0:
             log.debug('Message prefix not at the beginning of the received data!')
             log.debug('Offset: %d, Received data: %r', prefix_offset, data)
-            if prefix_offset < 0:
+            if prefix_offset_55AA < 0 and prefix_offset_6699 < 0:
                 data = data[1-prefix_len:]
             else:
+                prefix_offset = prefix_offset_6699 if prefix_offset_55AA < 0 else prefix_offset_55AA
                 data = data[prefix_offset:]
 
-            data += self._recv_all(header_len+ret_end_len-len(data))
-            prefix_offset = data.find(PREFIX_BIN)
+            data += self._recv_all( min_len - len(data) )
+            prefix_offset_55AA = data.find( PREFIX_BIN_55AA )
+            prefix_offset_6699 = data.find( PREFIX_BIN_6699 )
 
         header = parse_header(data)
-        remaining = header_len + header.length - len(data)
+        remaining = header.total_length - len(data)
         if remaining > 0:
-            data += self._recv_all(remaining)
+            data += self._recv_all( remaining )
 
         log.debug("received data=%r", binascii.hexlify(data))
-        hmac_key = self.local_key if self.version == 3.4 else None
-        return unpack_message(data, header=header, hmac_key=hmac_key)
+        hmac_key = self.local_key if self.version >= 3.4 else None
+        no_retcode = None if self.version >= 3.5 else False
+        return unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
 
     # similar to _send_receive() but never retries sending and does not decode the response
     def _send_receive_quick(self, payload, recv_retries, from_child=None):
@@ -1024,7 +1127,7 @@ class XenonDevice(object):
             # Decrypt payload
             # Remove 16-bytes of MD5 hexdigest of payload
             payload = cipher.decrypt(payload[16:])
-        elif self.version >= 3.2: # 3.2 or 3.3 or 3.4
+        elif self.version >= 3.2: # 3.2 or 3.3 or 3.4 or 3.5
             # Trim header for non-default device type
             if payload.startswith( self.version_bytes ):
                 payload = payload[len(self.version_header) :]
@@ -1033,7 +1136,7 @@ class XenonDevice(object):
                 payload = payload[len(self.version_header) :]
                 log.debug("removing device22 3.x header=%r", payload)
 
-            if self.version != 3.4:
+            if self.version < 3.4:
                 try:
                     log.debug("decrypting=%r", payload)
                     payload = cipher.decrypt(payload, False)
@@ -1100,13 +1203,14 @@ class XenonDevice(object):
             return False
 
         payload = rkey.payload
-        try:
-            log.debug("decrypting=%r", payload)
-            cipher = AESCipher(self.real_local_key)
-            payload = cipher.decrypt(payload, False, decode_text=False)
-        except:
-            log.debug("session key step 2 decrypt failed, payload=%r (len:%d)", payload, len(payload), exc_info=True)
-            return False
+        if self.version == 3.4:
+            try:
+                log.debug("decrypting=%r", payload)
+                cipher = AESCipher(self.real_local_key)
+                payload = cipher.decrypt(payload, False, decode_text=False)
+            except:
+                log.debug("session key step 2 decrypt failed, payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                return False
 
         log.debug("decrypted session key negotiation step 2 payload=%r", payload)
         log.debug("payload type = %s len = %d", type(payload), len(payload))
@@ -1144,14 +1248,26 @@ class XenonDevice(object):
         if self.parent:
             return self.parent._encode_message( msg )
         hmac_key = None
+        iv = None
         payload = msg.payload
         self.cipher = AESCipher(self.local_key)
-        if self.version == 3.4:
+
+        if self.version >= 3.4:
             hmac_key = self.local_key
             if msg.cmd not in NO_PROTOCOL_HEADER_CMDS:
                 # add the 3.x header
                 payload = self.version_header + payload
             log.debug('final payload: %r', payload)
+
+            if self.version >= 3.5:
+                iv = True
+                # seqno cmd retcode payload crc crc_good, prefix, iv
+                msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, PREFIX_6699_VALUE, True)
+                self.seqno += 1  # increase message sequence number
+                data = pack_message(msg,hmac_key=self.local_key)
+                log.debug("payload encrypted=%r",binascii.hexlify(data))
+                return data
+
             payload = self.cipher.encrypt(payload, False)
         elif self.version >= 3.2:
             # expect to connect and then disconnect to set new
@@ -1246,6 +1362,7 @@ class XenonDevice(object):
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
     def set_version(self, version):
+        last_version = self.version
         self.version = version
         self.version_bytes = str(version).encode('latin1')
         self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
@@ -1254,9 +1371,9 @@ class XenonDevice(object):
                 self.dev_type="device22"  
                 if self.dps_to_request == {}:
                     self.detect_available_dps()
-        elif version == 3.4:
-            self.dev_type = "v3.4"
-        elif self.dev_type == "v3.4":
+        elif version >= 3.4:
+            self.dev_type = "v" + str(version)
+        elif last_version >= 3.4 and self.dev_type[0] == "v":
             self.dev_type = "default"
 
     def set_socketPersistent(self, persist):
@@ -1566,9 +1683,9 @@ def encrypt(msg, key):
 def decrypt(msg, key):
     return unpad(AES.new(key, AES.MODE_ECB).decrypt(msg)).decode()
 
-def decrypt_gcm(msg, key):
-    nonce = msg[:12]
-    return AES.new(key, AES.MODE_GCM, nonce=nonce).decrypt(msg[12:]).decode()
+#def decrypt_gcm(msg, key):
+#    nonce = msg[:12]
+#    return AES.new(key, AES.MODE_GCM, nonce=nonce).decrypt(msg[12:]).decode()
 
 # UDP packet payload decryption - credit to tuya-convert
 udpkey = md5(b"yGAdlopoPVldABfn").digest()
@@ -1577,14 +1694,15 @@ def decrypt_udp(msg):
     if msg[:4] == PREFIX_55AA_BIN:
         return decrypt(msg[20:-8], udpkey)
     if msg[:4] == PREFIX_6699_BIN:
-        dec = decrypt_gcm(msg[18:-20], udpkey)
-        # strip return code if present
-        if dec[:4] == (chr(0) * 4):
-            dec = dec[4:]
-        # app sometimes has extra bytes at the end
-        while dec[-1] == chr(0):
-            dec = dec[:-1]
-        return dec
+        #dec = decrypt_gcm(msg[18:-20], udpkey)
+        ## strip return code if present
+        #if dec[:4] == (chr(0) * 4):
+        #    dec = dec[4:]
+        ## app sometimes has extra bytes at the end
+        #while dec[-1] == chr(0):
+        #    dec = dec[:-1]
+        dec = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
+        return dec.payload.decode()
     return decrypt(msg, udpkey)
 
 # Return positive number or zero
