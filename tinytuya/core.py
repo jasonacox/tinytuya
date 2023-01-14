@@ -444,7 +444,7 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
         retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
         if no_retcode is False:
             pass
-        elif no_retcode is None and payload[0] != b'{' and payload[retcode_len] == b'{':
+        elif no_retcode is None and payload[0:1] != b'{' and payload[retcode_len:retcode_len+1] == b'{':
             retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
         else:
             retcode_len = 0
