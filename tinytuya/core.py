@@ -228,7 +228,10 @@ class AESCipher(object):
         if Crypto:
             if iv:
                 if iv is True:
-                    iv = str(time.time() * 10)[:12].encode('utf8')
+                    if log.isEnabledFor( logging.DEBUG ):
+                        iv = b'0123456789ab'
+                    else:
+                        iv = str(time.time() * 10)[:12].encode('utf8')
                 cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
                 if header:
                     cipher.update(header)
