@@ -1336,6 +1336,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
             data, addr = sock.recvfrom(4048)
             ip = addr[0]
+            result = b''
             try:
                 try:
                     result = tinytuya.decrypt_udp( data )
@@ -1344,8 +1345,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 result = json.loads(result)
                 log.debug("Received valid UDP packet: %r", result)
             except:
+                #traceback.print_exc()
                 if verbose:
-                    print(term.alertdim + "*  Unexpected payload from %r to port %r:%s %r\n" % (ip, tgt_port, term.normal, data))
+                    print(term.alertdim + "*  Unexpected payload from %r to port %r:%s %r (%r)\n" % (ip, tgt_port, term.normal, result, data))
                 log.debug("Invalid UDP Packet from %r port %r - %r", ip, tgt_port, data)
                 continue
 

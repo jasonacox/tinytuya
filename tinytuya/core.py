@@ -439,10 +439,11 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
             crc_good = False
 
         retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
-        if no_retcode is None and payload[0] != b'{' and payload[retcode_len] == b'{':
-            # auto-detect
+        if no_retcode is False:
             pass
-        elif no_retcode:
+        elif no_retcode is None and payload[0] != b'{' and payload[retcode_len] == b'{':
+            retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
+        else:
             retcode_len = 0
         if retcode_len:
             retcode = struct.unpack(MESSAGE_RETCODE_FMT, payload[:retcode_len])[0]
@@ -1694,15 +1695,12 @@ def decrypt_udp(msg):
     if msg[:4] == PREFIX_55AA_BIN:
         return decrypt(msg[20:-8], udpkey)
     if msg[:4] == PREFIX_6699_BIN:
-        #dec = decrypt_gcm(msg[18:-20], udpkey)
-        ## strip return code if present
-        #if dec[:4] == (chr(0) * 4):
-        #    dec = dec[4:]
-        ## app sometimes has extra bytes at the end
-        #while dec[-1] == chr(0):
-        #    dec = dec[:-1]
-        dec = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
-        return dec.payload.decode()
+        unpacked = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
+        payload = unpacked.payload.decode()
+        # app sometimes has extra bytes at the end
+        while payload[-1] == chr(0):
+            payload = payload[:-1]
+        return payload
     return decrypt(msg, udpkey)
 
 # Return positive number or zero
