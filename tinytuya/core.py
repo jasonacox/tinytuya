@@ -1752,7 +1752,7 @@ def termcolor(color=True):
 def scan(maxretry=None, color=True, forcescan=False):
     """Scans your network for Tuya devices with output to stdout"""
     from . import scanner
-    scanner.scan(maxretry=maxretry, color=color, forcescan=forcescan)
+    scanner.scan(scantime=maxretry, color=color, forcescan=forcescan)
 
 
 # Scan function
@@ -1781,4 +1781,4 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
 
     """
     from . import scanner
-    return scanner.devices(verbose=verbose, maxretry=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
+    return scanner.devices(verbose=verbose, scantime=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
