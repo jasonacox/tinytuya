@@ -132,6 +132,8 @@ def offlineDevices():
     # return undiscovered devices
     offline={}
     for d in tuyadevices:
+        if type(d) != dict:
+            continue
         id = d["id"]
         if id not in deviceslist:
             offline[id] = {}
