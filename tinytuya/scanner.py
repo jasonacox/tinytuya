@@ -202,10 +202,11 @@ class DeviceDetect(object):
         self.timeo = time.time() + self.options['connect_timeout']
         #print( 'key', self.ip, self.deviceinfo['key'])
         key = self.cur_key.key if self.cur_key else self.deviceinfo['key']
+        if key == "":
+            key = 'f'*16 # use bogus key if missing
         self.device = tinytuya.OutletDevice( self.deviceinfo['gwId'], self.ip, key, dev_type=self.deviceinfo['dev_type'], version=float(self.deviceinfo['version']))
         self.device.set_socketPersistent(True)
         self.device.socket = self.sock
-
 
     def close( self ):
         if self.debug:
@@ -967,7 +968,6 @@ def _print_device_info( result, note, term, extra_message=None ):
 
     suffix = term.dim + ", MAC = " + mac + ""
     if not result['name']:
-        dname = gwId
         devicename = "%sUnknown v%s Device%s" % (term.alert, version, term.normal+term.dim) # (term.normal+term.dim, term.normal, version, term.dim)
     else:
         devicename = term.normal + result['name'] + term.dim
@@ -1616,6 +1616,8 @@ def _build_item( old, new ):
 
 def _display_status( item, dps, term ):
     name = item['name']
+    if name == "":
+        name = item['gwId']
     ip = item['ip']
     if not ip:
         print("    %s[%-25.25s] %sError: No IP found%s" %
@@ -1636,7 +1638,7 @@ def _display_status( item, dps, term ):
             print("    %s[%-25.25s] %s%-18s - DPS: %r" %
                   (term.subbold, name, term.dim, ip, dps))
 
-# Scan Devices in tuyascan.json
+# Scan Devices in snapshot.json
 def snapshot(color=True):
     """Uses snapshot.json to scan devices
 
@@ -1644,10 +1646,8 @@ def snapshot(color=True):
         color = True or False, print output in color [Default: True]
     """
     # Terminal formatting
-    #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
-
 
     print(
         "\n%sTinyTuya %s(Tuya device scanner)%s [%s]\n"
@@ -1672,13 +1672,16 @@ def snapshot(color=True):
     for idx in devicesx:
         device = _build_item( idx, None )
         ips = device['ip'] if device['ip'] else (term.alert + "Error: No IP found" + term.normal)
+        dname = device['name']
+        if dname == "":
+            dname = device['gwId']
         print("%s%-25.25s %s%-24s %s%-18s %s%-17s %s%-5s" %
-            (term.dim, device['name'], term.cyan, device['gwId'], term.subbold, ips, term.red, device['key'], term.yellow, device['version']))
+            (term.dim, dname, term.cyan, device['gwId'], term.subbold, ips, term.red, device['key'], term.yellow, device['version']))
         if device['ip']:
             by_ip[device['ip']] = device
 
     # Find out if we should poll all devices
-    answer = 'y' #input(subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
+    answer = input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
     if answer[0:1].lower() != 'n':
         print("")
         print("%sPolling %s local devices from last snapshot..." % (term.normal, len(devicesx)))
