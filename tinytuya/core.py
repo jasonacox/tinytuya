@@ -837,14 +837,14 @@ class XenonDevice(object):
         # message consists of header + iv + retcode + [data] + crc (16) + footer
         min_len_6699 = struct.calcsize(MESSAGE_HEADER_FMT_6699) + 12 + 4 + 16 + len(SUFFIX_BIN)
         min_len = min_len_55AA if min_len_55AA < min_len_6699 else min_len_6699
-        prefix_len = len( PREFIX_BIN_55AA )
+        prefix_len = len( PREFIX_55AA_BIN )
 
         data = self._recv_all( min_len )
 
         # search for the prefix.  if not found, delete everything except
         # the last (prefix_len - 1) bytes and recv more to replace it
-        prefix_offset_55AA = data.find( PREFIX_BIN_55AA )
-        prefix_offset_6699 = data.find( PREFIX_BIN_6699 )
+        prefix_offset_55AA = data.find( PREFIX_55AA_BIN )
+        prefix_offset_6699 = data.find( PREFIX_6699_BIN )
 
         while prefix_offset_55AA != 0 and prefix_offset_6699 != 0:
             log.debug('Message prefix not at the beginning of the received data!')
@@ -856,8 +856,8 @@ class XenonDevice(object):
                 data = data[prefix_offset:]
 
             data += self._recv_all( min_len - len(data) )
-            prefix_offset_55AA = data.find( PREFIX_BIN_55AA )
-            prefix_offset_6699 = data.find( PREFIX_BIN_6699 )
+            prefix_offset_55AA = data.find( PREFIX_55AA_BIN )
+            prefix_offset_6699 = data.find( PREFIX_6699_BIN )
 
         header = parse_header(data)
         remaining = header.total_length - len(data)
