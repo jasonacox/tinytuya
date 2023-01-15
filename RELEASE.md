@@ -1,5 +1,14 @@
 # RELEASE NOTES
 
+## v1.10.0 - Tuya Protocol v3.5 Device Support [Unreleased]
+
+* Updated getdevicelog() to handle fetching more when "has_next" is True by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/236
+* [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] Added delayed-off & help function to server by @cowboy3d in https://github.com/jasonacox/tinytuya/pull/242 & https://github.com/jasonacox/tinytuya/pull/243
+* [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] Added ability to modify device dps using web browser by @cowboy3d in https://github.com/jasonacox/tinytuya/pull/244
+* Added nowait parameter to status() and split message parsing into separate function by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/253
+* [[Scanner](https://github.com/jasonacox/tinytuya#network-scanner)] Complete rewrite of the scanner, now allows force-scanning of IP ranges by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/252 & https://github.com/jasonacox/tinytuya/pull/254
+* Added Protocol v3.5 Support (work in progress) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/256 & https://github.com/jasonacox/tinytuya/pull/257
+
 ## v1.9.1 - Minor Bug Fix for Cloud
 
 * PyPI 1.9.1
