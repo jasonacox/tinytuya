@@ -805,7 +805,10 @@ class PollDevice(DeviceDetect):
         else:
             if self.debug:
                 print('PollDevice: Final timeout for debug ip', self.ip, '- aborting')
-            self.message = "%s    Polling %s Failed: %s" % (self.options['termcolors'].alertdim, self.ip, self.deviceinfo["err"])
+            err = ""
+            if "err" in self.deviceinfo:
+                err = self.deviceinfo["err"]
+            self.message = "%s    Polling %s Failed: %s" % (self.options['termcolors'].alertdim, self.ip, err)
             self.close()
 
     def write_data( self ):
@@ -1097,12 +1100,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     devicelist = []
     read_socks = []
     write_socks = []
-    count = 0
-    counts = 0
     spinnerx = 0
     spinner = "|/-\\|"
-    ip_list = {}
-    response_list = {}
     connect_this_round = []
     connect_next_round = []
     ip_wantips = bool(wantips)
