@@ -1245,7 +1245,7 @@ class XenonDevice(object):
         if self.version == 3.4:
             self.local_key = cipher.encrypt( self.local_key, False, pad=False )
         else:
-            self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=rkey.iv )
+            self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=rkey.iv )[12:28]
 
         log.debug("Session key negotiate success! session key: %r", self.local_key)
         return True
