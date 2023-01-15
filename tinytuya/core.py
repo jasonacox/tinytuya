@@ -83,7 +83,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 9, 2)
+version_tuple = (1, 10, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -226,7 +226,7 @@ class AESCipher(object):
 
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None):
         if Crypto:
-            if iv:
+            if iv: # initialization vector or nonce (number used once) 
                 if iv is True:
                     if log.isEnabledFor( logging.DEBUG ):
                         iv = b'0123456789ab'
