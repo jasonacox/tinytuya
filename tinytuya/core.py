@@ -866,7 +866,7 @@ class XenonDevice(object):
 
         log.debug("received data=%r", binascii.hexlify(data))
         hmac_key = self.local_key if self.version >= 3.4 else None
-        no_retcode = None if self.version >= 3.5 else False
+        no_retcode = False #None if self.version >= 3.5 else False
         return unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
 
     # similar to _send_receive() but never retries sending and does not decode the response
@@ -1245,7 +1245,9 @@ class XenonDevice(object):
         if self.version == 3.4:
             self.local_key = cipher.encrypt( self.local_key, False, pad=False )
         else:
-            self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=rkey.iv )[12:28]
+            iv = self.local_nonce[:12]
+            log.debug("Session IV: %r", iv)
+            self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=iv )[12:28]
 
         log.debug("Session key negotiate success! session key: %r", self.local_key)
         return True
