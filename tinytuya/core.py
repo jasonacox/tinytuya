@@ -1192,11 +1192,22 @@ class XenonDevice(object):
         return response
 
     def _negotiate_session_key(self):
+        rkey = self._send_receive_quick( self._negotiate_session_key_generate_step_1(), 2 )
+        step3 = self._negotiate_session_key_generate_step_3( rkey )
+        if not step3:
+            return False
+        self._send_receive_quick( step3, None )
+        self._negotiate_session_key_generate_finalize()
+        return True
+
+    def _negotiate_session_key_generate_step_1( self ):
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
         self.local_key = self.real_local_key
 
-        rkey = self._send_receive_quick( MessagePayload(SESS_KEY_NEG_START, self.local_nonce), 2 )
+        return MessagePayload(SESS_KEY_NEG_START, self.local_nonce)
+
+    def	_negotiate_session_key_generate_step_3( self, rkey ):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
             log.debug("session key negotiation failed on step 1")
@@ -1228,12 +1239,14 @@ class XenonDevice(object):
 
         if hmac_check != payload[16:48]:
             log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
+            return False
 
         log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
 
         rkey_hmac = hmac.new(self.local_key, self.remote_nonce, sha256).digest()
-        self._send_receive_quick( MessagePayload(SESS_KEY_NEG_FINISH, rkey_hmac), None )
+        return MessagePayload(SESS_KEY_NEG_FINISH, rkey_hmac)
 
+    def _negotiate_session_key_generate_finalize( self ):
         if IS_PY2:
             k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_nonce,self.remote_nonce) ]
             self.local_key = ''.join(k)
