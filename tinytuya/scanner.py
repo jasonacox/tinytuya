@@ -556,7 +556,7 @@ class ForceScannedDevice(DeviceDetect):
                 prefix_offset = data.find(tinytuya.PREFIX_BIN)
                 if prefix_offset > 0:
                     data = data[prefix_offset:]
-                hmac_key = self.device.local_key if self.deviceinfo['version'] == 3.4 else None
+                hmac_key = self.device.local_key if self.deviceinfo['version'] >= 3.4 else None
                 msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
             except:
                 break
@@ -839,7 +839,7 @@ class PollDevice(DeviceDetect):
 
         try:
 	    # connected, send the query
-            if self.device.version == 3.4 :
+            if self.device.version >= 3.4 :
                 # self.device.real_local_key, self.device.local_key
                 self.v34_negotiate_sess_key_start()
             else:
@@ -873,7 +873,7 @@ class PollDevice(DeviceDetect):
                 prefix_offset = data.find(tinytuya.PREFIX_BIN)
                 if prefix_offset > 0:
                     data = data[prefix_offset:]
-                hmac_key = self.device.local_key if self.device.version == 3.4 else None
+                hmac_key = self.device.local_key if self.device.version >= 3.4 else None
                 msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
             except:
                 break
@@ -920,7 +920,7 @@ class PollDevice(DeviceDetect):
 
             if not result or "dps" not in result:
                 if result and "Error" in result:
-                    self.message = "%s    Access rejected by %s: %s: %s" % (self.options['termcolors'].alertdim, self.ip, result["Error"], result["Payload"])
+                    self.message = "%s    Access rejected by %s (check key): %s: %s" % (self.options['termcolors'].alertdim, self.ip, result["Error"], result["Payload"])
                 else:
                     self.message = "%s    Check DEVICE KEY - Invalid response from %s: %r" % (self.options['termcolors'].alertdim, self.ip, result)
                 self.deviceinfo["err"] = "Unable to poll"
@@ -1467,7 +1467,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
         #print( len(response_list), response_list )
 
-    ver_count = { '3.1': 0, '3.2': 0, '3.3': 0, '3.4': 0 }
+    ver_count = { '3.1': 0, '3.2': 0, '3.3': 0, '3.4': 0, '3.5': 0 }
     unknown_dev_count = 0
     no_key_count = 0
 
