@@ -27,10 +27,13 @@ for item in data["devices"]:
 # Print status of everything
 for item in data["devices"]:
     print("\nDevice: %s" % item["name"])
-    d = tinytuya.OutletDevice(item["id"], item["ip"], item["key"])
-    d.set_version(float(item["ver"]))
-    status = d.status()  
-    print(status)
+    if item["ip"] == "":
+        print("No IP Address - Skipping")
+    else:
+        d = tinytuya.OutletDevice(item["id"], item["ip"], item["key"])
+        d.set_version(float(item["ver"]))
+        status = d.status()  
+        print(status)
 
 # Turn on a device by name
 def turn_on(name):
