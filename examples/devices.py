@@ -98,8 +98,4 @@ for i in tuyadevices:
 # for loop
 
 # Save polling data snapshot.json
-current = {'timestamp' : time.time(), 'devices' : polling}
-output = json.dumps(current, indent=4) 
-print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
-with open(SNAPSHOTFILE, "w") as outfile:
-    outfile.write(output)
+tinytuya.scanner.save_snapshotfile( SNAPSHOTFILE, polling, None )
