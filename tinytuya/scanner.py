@@ -314,7 +314,7 @@ class ForceScannedDevice(DeviceDetect):
             self.brute_force_v3x_data()
 
         if not self.ver_found:
-            self.deviceinfo['version'] = self.deviceinfo['ver'] = 0.0
+            self.deviceinfo['version'] = 0.0
 
         if self.options['verbose'] and self.found and not self.displayed:
             _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message )
@@ -355,7 +355,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.retries = 0
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
-                self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.4
+                self.deviceinfo['version'] = 3.4
                 self.ver_found = True
                 self.keygen = (i for i in self.options['keylist'] if not i.used)
                 self.cur_key = next( self.keygen, None )
@@ -373,7 +373,7 @@ class ForceScannedDevice(DeviceDetect):
                     self.connect()
                 else:
                     self.err_found = True
-                    self.deviceinfo['version'] = self.deviceinfo['ver'] = 0.0
+                    self.deviceinfo['version'] = 0.0
                     self.message = "%s    Polling %s Failed: Device stopped responding before key was found" % (self.options['termcolors'].alertdim, self.ip)
                     _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
                     self.displayed = True
@@ -542,11 +542,11 @@ class ForceScannedDevice(DeviceDetect):
                 return
 
             if msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_31):
-                self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.1
+                self.deviceinfo['version'] = 3.1
                 payload = msg.payload[len(tinytuya.PROTOCOL_VERSION_BYTES_31)+16 :]
                 self.ver_found = True
             elif msg.payload.startswith(tinytuya.PROTOCOL_VERSION_BYTES_33):
-                self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.3
+                self.deviceinfo['version'] = 3.3
                 payload = msg.payload[len(tinytuya.PROTOCOL_33_HEADER) :]
                 self.ver_found = True
             else:
@@ -568,7 +568,7 @@ class ForceScannedDevice(DeviceDetect):
                         # clear-text response, device is v3.1
                         self.ver_found = True
                         self.device.set_version(3.1)
-                        self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.1
+                        self.deviceinfo['version'] = 3.1
                         # there is no good way of brute-forcing this one, so listen passively in hopes of receiving a message containing the gwId
                         self.step = FSCAN_v31_BRUTE_FORCE_ACTIVE #FSCAN_v31_PASSIVE_LISTEN
                         #self.passive = True
@@ -588,7 +588,7 @@ class ForceScannedDevice(DeviceDetect):
                     if self.debug:
                         print( 'Device %s is probably v3.3' % self.ip )
                     self.device.set_version(3.3)
-                    self.deviceinfo['version'] = self.deviceinfo['ver'] = 3.3
+                    self.deviceinfo['version'] = 3.3
                     self.ver_found = True
                     self.step = FSCAN_v33_BRUTE_FORCE_ACQUIRE
                     self.brute_force_data.append( payload )
@@ -691,7 +691,7 @@ class ForceScannedDevice(DeviceDetect):
                 if self.debug:
                     print('ForceScannedDevice: v3.x brute force ran out of keys without finding a match!', self.ip)
                 self.remove = True
-                self.deviceinfo['version'] = self.deviceinfo['ver'] = 0.0
+                self.deviceinfo['version'] = 0.0
                 self.message = "%s    Polling %s Failed: No matching key found" % (self.options['termcolors'].alertdim, self.ip)
                 _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
                 self.displayed = True
@@ -954,7 +954,7 @@ def _print_device_info( result, note, term, extra_message=None ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[]):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -963,8 +963,15 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         scantime = The time to wait to pick up UDP from all devices
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
-        forcescan = True or False, force network scan for device IP addresses
+        forcescan = True, False, or a list of networks to force scan for device IP addresses
         byID = True or False, return dictionary by ID, otherwise by IP (default)
+        show_timer = True or False, if True then timer will be displayed even when verbose=False
+        discover = True or False, when False, UDP broadcast packets will be ignored
+        wantips = A list of IP addresses we want.  Scan will stop early if all are found
+        wantids = A list of Device IDs we want.  Scan will stop early if all are found
+        snapshot = True or False, save snapshot once finished
+        assume_yes = True or False, do not prompt to confirm auto-detected network ranges
+        tuyadevices = contents of devices.json, to prevent re-loading it if we already have it
 
     Response:
         devices = Dictionary of all devices found
@@ -979,9 +986,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             dps = devices[ip]['dps']
 
     """
-    havekeys = False
-    tuyadevices = []
-
     # Terminal formatting
     termcolors = tinytuya.termcolor(color)
     #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = termcolors
@@ -994,16 +998,18 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 return (i["name"], i["key"], i["mac"] if "mac" in i else "")
         return ("", "", "")
 
-    # Check to see if we have additional Device info
-    try:
-        # Load defaults
-        with open(DEVICEFILE) as f:
-            tuyadevices = json.load(f)
-            havekeys = True
-            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-    except:
-        # No Device info
-        pass
+    havekeys = False
+    if not tuyadevices:
+        # Check to see if we have additional Device info
+        try:
+            # Load defaults
+            with open(DEVICEFILE) as f:
+                tuyadevices = json.load(f)
+                havekeys = True
+                log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
+        except:
+            # No Device info
+            pass
 
     if forcescan and not len(tuyadevices):
         if discover:
@@ -1536,12 +1542,14 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     for ip in broadcasted_devices:
         dev = broadcasted_devices[ip].deviceinfo
         dev['ip'] = ip
+        dev['origin'] = 'broadcast'
         dkey = dev[k]
         devices[dkey] = dev
 
     for ip in scanned_devices:
         dev = scanned_devices[ip].deviceinfo
         dev['ip'] = ip
+        dev['origin'] = 'forcescan'
         dkey = dev[k]
         if scanned_devices[ip].found and dkey not in devices:
             devices[dkey] = dev
@@ -1556,12 +1564,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 tmp = item
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = ''
+                tmp['origin'] = 'cloud'
                 devicesarray.append(tmp)
-        current = {'timestamp' : time.time(), 'devices' : devicesarray}
-        output = json.dumps(current, indent=4)
-        print(term.bold + "\n>> " + term.normal + "Saving device snapshot data to " + SNAPSHOTFILE + "\n")
-        with open(SNAPSHOTFILE, "w") as outfile:
-            outfile.write(output)
+        save_snapshotfile( SNAPSHOTFILE, devicesarray, term )
 
     log.debug("Scan complete with %s devices found", found_count)
     return devices
@@ -1577,7 +1582,7 @@ def _build_item( old, new ):
     item = {}
     item['id'] = item['gwId'] = _get_gwid( old )
     ip = ver = 0
-    items = { 'ip':0, 'version':0, 'ver':0, 'name':'', 'key':'', 'mac':None }
+    items = { 'ip':0, 'version':0, 'name':'', 'key':'', 'mac':None }
     for itm in items:
         if new and itm in new and new[itm]:
             item[itm] = new[itm]
@@ -1585,10 +1590,6 @@ def _build_item( old, new ):
             item[itm] = old[itm]
         else:
             item[itm] = items[itm]
-    if item['version']:
-        item['ver'] = item['version']
-    elif item['ver']:
-        item['version'] = item['ver']
     return item
 
 def _display_status( item, dps, term ):
@@ -1615,6 +1616,73 @@ def _display_status( item, dps, term ):
             print("    %s[%-25.25s] %s%-18s - DPS: %r" %
                   (term.subbold, name, term.dim, ip, dps))
 
+def _snapshot_load_item( itm ):
+    # normalize all the fields
+    item['id'] = item['gwId'] = _get_gwid( itm )
+    if 'ver' in itm and itm['ver']:
+        itm['version'] = float(itm['ver'])
+        del itm['ver']
+    elif 'version' in itm and itm['version']:
+        itm['version'] = float(itm['version'])
+    else:
+        itm['version'] = 0.0
+    return itm
+
+def _snapshot_save_item( old ):
+    # normalize all the fields
+    # "version" is prefered over "ver", but saved as "ver"
+    # "gwId" is prefered over "id", but saved as "id"
+    item = {}
+    item['id'] = _get_gwid( old )
+    items = { 'ip':'', 'ver':'', 'origin':'', 'name':'', 'key':'', 'mac':'' }
+    for	itm in old:
+        item[itm] = old[itm]
+
+    for itm in items:
+        if itm not in item or not item[itm]:
+            item[itm] = items[itm]
+
+    if 'version' in old:
+        if old['version']:
+            item['ver'] = old['version']
+        del item['version']
+
+    if 'gwId' in item:
+        del item['gwId']
+
+    item['ver'] = str(item['ver'])
+
+    return item
+
+def load_snapshotfile(fname):
+    with open(fname) as json_file:
+        data = json.load(json_file)
+
+    devices = []
+    if data and 'devices' in data:
+        for dev in data['devices']:
+            devices.append( _snapshot_load_item(dev) )
+    if data:
+        data['devices'] = devices
+    return data
+
+def save_snapshotfile(fname, data, term=None):
+    if term:
+        norm = term.normal
+        bold = term.bold
+    else:
+        norm = bold = ''
+    devices = []
+    if type(data) == dict:
+        data = list(data.values())
+    for itm in data:
+        devices.append( _snapshot_save_item(itm) )
+    current = {'timestamp' : time.time(), 'devices' : devices}
+    output = json.dumps(current, indent=4)
+    print(bold + "\n>> " + norm + "Saving device snapshot data to " + fname + "\n")
+    with open(fname, "w") as outfile:
+        outfile.write(output)
+
 # Scan Devices in snapshot.json
 def snapshot(color=True):
     """Uses snapshot.json to scan devices
@@ -1632,8 +1700,7 @@ def snapshot(color=True):
     )
 
     try:
-        with open(SNAPSHOTFILE) as json_file:
-            data = json.load(json_file)
+        data = load_snapshotfile(SNAPSHOTFILE)
     except Exception as e:
         #traceback.print_exc(0)
         print("%s ERROR: Missing %s file:%s %s: %s\n" % (term.alert, SNAPSHOTFILE, term.normal, type(e).__name__, e))
@@ -1731,7 +1798,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
     by_id = [x['id'] for x in tuyadevices]
     # Scan network for devices and provide polling data
     print(term.normal + "\nScanning local network for Tuya devices...")
-    result = devices(verbose=False, poll=True, byID=True, scantime=scantime, wantids=by_id, show_timer=True, forcescan=forcescan)
+    result = devices(verbose=False, poll=True, byID=True, scantime=scantime, wantids=by_id, show_timer=True, forcescan=forcescan, tuyadevices=tuyadevices)
     print("    %s%s local devices discovered%s" % (term.dim, len(result), term.normal))
     print("")
 
@@ -1754,11 +1821,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
 
     if snapshot:
         # Save polling data snapsot
-        current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4)
-        print(term.bold + "\n>> " + term.normal + "Saving device snapshot data to " + SNAPSHOTFILE)
-        with open(SNAPSHOTFILE, "w") as outfile:
-            outfile.write(output)
+        save_snapshotfile( SNAPSHOTFILE, result, term )
 
     return polling
 
@@ -1769,8 +1832,7 @@ def snapshotjson():
     polling = []
 
     try:
-        with open(SNAPSHOTFILE) as json_file:
-            data = json.load(json_file)
+        data = load_snapshotfile(SNAPSHOTFILE)
     except:
         current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
         output = json.dumps(current, indent=4)

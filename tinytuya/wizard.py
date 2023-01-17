@@ -205,14 +205,17 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         iplist = {}
         found = 0
         for itm in result:
-            if 'gwId' in itm and itm['gwId'] and 'ip' in itm and itm['ip']:
+            if 'gwId' in itm and itm['gwId']:
                 gwid = itm['gwId']
-                iplist[gwid] = itm['ip']
+                ip = itm['ip'] if 'ip' in itm and itm['ip'] else ''
+                ver = itm['version'] if 'version' in itm and itm['version'] else ''
+                iplist[gwid] = (ip, ver)
         for k in range( len(tuyadevices) ):
             gwid = tuyadevices[k]['id']
             if gwid in iplist:
-                tuyadevices[k]['ip'] = iplist[gwid]
-                found += 1
+                tuyadevices[k]['ip'] = iplist[gwid][0]
+                tuyadevices[k]['version'] = iplist[gwid][1]
+                if iplist[gwid][0]: found += 1
         if found:
             # re-write devices.json now that we have IP addresses
             output = json.dumps(tuyadevices, indent=4)
