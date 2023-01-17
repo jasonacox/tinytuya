@@ -1618,7 +1618,7 @@ def _display_status( item, dps, term ):
 
 def _snapshot_load_item( itm ):
     # normalize all the fields
-    item['id'] = item['gwId'] = _get_gwid( itm )
+    itm['id'] = itm['gwId'] = _get_gwid( itm )
     if 'ver' in itm and itm['ver']:
         itm['version'] = float(itm['ver'])
         del itm['ver']
