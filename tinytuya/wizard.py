@@ -33,14 +33,6 @@ import requests
 from colorama import init
 import tinytuya
 
-# Optional libraries required for forced scanning
-try:
-    from getmac import get_mac_address
-    SCANLIBS = True
-except:
-    # Disable force scanning
-    SCANLIBS = False
-
 # Backward compatability for python2
 try:
     input = raw_input
@@ -61,15 +53,7 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 
-# Helper Functions
-def getmyIP():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    r = s.getsockname()[0]
-    s.close()
-    return r
-
-def wizard(color=True, retries=None, forcescan=False):
+def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
@@ -112,15 +96,6 @@ def wizard(color=True, retries=None, forcescan=False):
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
     print('')
-
-    if forcescan:
-        if not SCANLIBS:
-            print(alert +
-                '    ERROR: force network scanning requested but not available - disabled.\n'
-                '           (Requires: pip install getmac)\n' + dim)
-            forcescan = False
-        else:
-            print(subbold + "    Option: " + dim + "Network force scanning requested.\n")
 
     if (config['apiKey'] != '' and config['apiSecret'] != '' and
             config['apiRegion'] != '' and config['apiDeviceID'] != ''):
@@ -167,65 +142,30 @@ def wizard(color=True, retries=None, forcescan=False):
     DEVICEID = config['apiDeviceID']
     REGION = config['apiRegion']        # us, eu, cn, in
 
-    cloud = tinytuya.Cloud( **config )
+    if nocloud:
+        with open(DEVICEFILE, "r") as infile:
+            tuyadevices = json.load( infile )
+    else:
+        cloud = tinytuya.Cloud( **config )
 
-    # on auth error getdevices() will implode
-    if cloud.error:
-        err = cloud.error['Payload'] if 'Payload' in cloud.error else 'Unknown Error'
-        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
-        print('Check API Key and Secret')
-        return
+        # on auth error getdevices() will implode
+        if cloud.error:
+            err = cloud.error['Payload'] if 'Payload' in cloud.error else 'Unknown Error'
+            print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+            print('Check API Key and Secret')
+            return
 
-    # Get UID from sample Device ID
-    json_data = cloud.getdevices( True )
+        # Get UID from sample Device ID
+        json_data = cloud.getdevices( True )
 
-    if 'result' not in json_data:
-        err = json_data['Payload'] if 'Payload' in json_data else 'Unknown Error'
-        print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
-        print('Check DeviceID and Region')
-        return
+        if 'result' not in json_data:
+            err = json_data['Payload'] if 'Payload' in json_data else 'Unknown Error'
+            print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+            print('Check DeviceID and Region')
+            return
 
-    if forcescan:
-        # Force Scan - Get list of all local ip addresses
-        try:
-            # Fetch my IP address and assume /24 network
-            ip = getmyIP()
-            network = ipaddress.IPv4Interface(u''+ip+'/24').network
-        except:
-            network = DEFAULT_NETWORK
-            ip = None
-            print(alert +
-                'ERROR: Unable to get your IP address and network automatically.\n'
-                '       (using %s)' % network + normal)
-
-        try:
-            # Warn user of scan duration
-            print("\n" + bold + "Scanning local network.  This may take a while..." + dim)
-            print(bold + '\n    Running Scan...' + dim)
-            # Loop through each host
-            for addr in ipaddress.IPv4Network(network):
-                # Fetch my IP address and assume /24 network
-                print(dim + '\r      Host: ' + subbold + '%s ...' % addr + normal, end='')
-                a_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                a_socket.settimeout(TCPTIMEOUT)
-                location = (str(addr), TCPPORT)
-                result_of_check = a_socket.connect_ex(location)
-                if result_of_check == 0:
-                    # TODO: Verify Tuya Device
-                    ip = "%s" % addr
-                    mac = get_mac_address(ip=ip)
-                    ip_list[mac] = ip
-                    print(" Found Device [%s]" % mac)
-                a_socket.close()
-
-            print(dim + '\r      Done                           ' +normal +
-                        '\n\nDiscovered %d Tuya Devices\n' % len(ip_list))
-        except:
-            print('\n' + alert + '    Error scanning network - Ignoring' + dim)
-            forcescan = False
-
-    # Filter to only Name, ID and Key, IP and mac-address
-    tuyadevices = cloud.filter_devices( json_data['result'], ip_list )
+        # Filter to only Name, ID and Key, IP and mac-address
+        tuyadevices = cloud.filter_devices( json_data['result'] )
 
     for dev in tuyadevices:
         if 'sub' in dev and dev['sub'] and 'key' in dev:
@@ -249,89 +189,37 @@ def wizard(color=True, retries=None, forcescan=False):
         outfile.write(output)
     print(dim + "    %d registered devices saved" % len(tuyadevices))
 
-    # Save raw TuyaPlatform data to tuya-raw.json
-    print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
-    try:
-        with open(RAWFILE, "w") as outfile:
-            outfile.write(json.dumps(json_data, indent=4))
-    except:
-        print('\n\n' + bold + 'Unable to save raw file' + dim )
+    if not nocloud:
+        # Save raw TuyaPlatform data to tuya-raw.json
+        print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
+        try:
+            with open(RAWFILE, "w") as outfile:
+                outfile.write(json.dumps(json_data, indent=4))
+        except:
+            print('\n\n' + bold + 'Unable to save raw file' + dim )
 
     # Find out if we should poll all devices
-    answer = input(subbold + '\nPoll local devices? ' +
-                   normal + '(Y/n): ')
-    if answer[0:1].lower() != 'n':
-        # Set retries based on number of devices if undefined
-        if retries is None:
-            retries = len(tuyadevices)+10+tinytuya.MAXCOUNT
-
-        # Scan network for devices and provide polling data
-        print(normal + "\nScanning local network for Tuya devices (retry %d times)..." % retries)
-        devices = tinytuya.deviceScan(False, retries)
-        print("    %s%s local devices discovered%s" %
-              (dim, len(devices), normal))
-        print("")
-
-        def getIP(d, gwid):
-            for ip in d:
-                if 'gwId' in d[ip]:
-                    if gwid == d[ip]['gwId']:
-                        return (ip, d[ip]['version'])
-            return (0, 0)
-
-        polling = []
-        print("Polling local devices...")
-        for i in tuyadevices:
-            item = {}
-            name = i['name']
-            (ip, ver) = getIP(devices, i['id'])
-            item['name'] = name
-            item['ip'] = ip
-            item['ver'] = ver
-            item['id'] = i['id']
-            item['key'] = i['key']
-            if ip == 0:
-                print("    %s[%s] - %s%s - %sError: No IP found%s" %
-                      (subbold, name, dim, ip, alert, normal))
-            else:
-                try:
-                    d = tinytuya.OutletDevice(i['id'], ip, i['key'])
-                    d.set_version(float(ver))
-                    data = d.status()
-                    if 'dps' in data:
-                        item['dps'] = data
-                        state = alertdim + "Off" + dim
-                        try:
-                            if '1' in data['dps'] or '20' in data['dps']:
-                                if '1' in data['dps']:
-                                    if data['dps']['1'] is True:
-                                        state = bold + "On" + dim
-                                if '20' in data['dps']:
-                                    if data['dps']['20'] is True:
-                                        state = bold + "On" + dim
-                                print("    %s[%s] - %s%s - %s - DPS: %r" %
-                                    (subbold, name, dim, ip, state, data['dps']))
-                            else:
-                                print("    %s[%s] - %s%s - DPS: %r" %
-                                    (subbold, name, dim, ip, data['dps']))
-                        except:
-                            print("    %s[%s] - %s%s - %sNo Response" %
-                                  (subbold, name, dim, ip, alertdim))
-                    else:
-                        print("    %s[%s] - %s%s - %sNo Response" %
-                              (subbold, name, dim, ip, alertdim))
-                except:
-                    print("    %s[%s] - %s%s - %sNo Response" %
-                          (subbold, name, dim, ip, alertdim))
-            polling.append(item)
-        # for loop
-
-        # Save polling data snapsot
-        current = {'timestamp' : time.time(), 'devices' : polling}
-        output = json.dumps(current, indent=4)
-        print(bold + "\n>> " + normal + "Saving device snapshot data to " + SNAPSHOTFILE)
-        with open(SNAPSHOTFILE, "w") as outfile:
-            outfile.write(output)
+    answer = input(subbold + '\nPoll local devices? ' + normal + '(Y/n): ')
+    if answer.lower().find('n') < 0:
+        result = tinytuya.scanner.poll_and_display( tuyadevices, color=color, scantime=retries, snapshot=True, forcescan=forcescan )
+        iplist = {}
+        found = 0
+        for itm in result:
+            if 'gwId' in itm and itm['gwId'] and 'ip' in itm and itm['ip']:
+                gwid = itm['gwId']
+                iplist[gwid] = itm['ip']
+        for k in range( len(tuyadevices) ):
+            gwid = tuyadevices[k]['id']
+            if gwid in iplist:
+                tuyadevices[k]['ip'] = iplist[gwid]
+                found += 1
+        if found:
+            # re-write devices.json now that we have IP addresses
+            output = json.dumps(tuyadevices, indent=4)
+            print(bold + "\n>> " + normal + "Saving IP addresses to " + DEVICEFILE)
+            with open(DEVICEFILE, "w") as outfile:
+                outfile.write(output)
+            print(dim + "    %d device IP addresses found" % found)
 
     print("\nDone.\n")
     return

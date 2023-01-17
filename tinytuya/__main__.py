@@ -19,10 +19,9 @@ import tinytuya
 from . import wizard
 from . import scanner
 
-retries = 0
+retries = None
 state = 0
 color = True
-retriesprovided = False
 force = False
 force_list = []
 last_force = False
@@ -58,7 +57,6 @@ for i in sys.argv:
     else:
         try:
             retries = int(i)
-            retriesprovided = True
         except:
             state = 10
 
@@ -69,17 +67,11 @@ if force and len(force_list) > 0:
 
 # State 0 = Run Network Scan
 if state == 0:
-    if retriesprovided:
-        scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
-    else:
-        scanner.scan(color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
+    scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
 
 # State 1 = Run Setup Wizard
 if state == 1:
-    if retriesprovided:
-        wizard.wizard(color=color, retries=retries, forcescan=force)
-    else:
-        wizard.wizard(color=color, forcescan=force)
+    wizard.wizard(color=color, retries=retries, forcescan=force)
 
 # State 2 = Snapshot Display and Scan
 if state == 2:
@@ -87,10 +79,7 @@ if state == 2:
 
 # State 3 = Scan All Devices
 if state == 3:
-    if retriesprovided:
-        scanner.alldevices(color=color, scantime=retries)
-    else:
-        scanner.alldevices(color=color)
+    scanner.alldevices(color=color, scantime=retries)
 
 # State 4 = Scan All Devices
 if state == 4:
