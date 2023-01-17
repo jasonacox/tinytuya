@@ -1,13 +1,33 @@
 # RELEASE NOTES
 
-## v1.10.0 - Scanner Rewrite / Tuya Protocol v3.5 Device Support [Unreleased]
+## v1.10.0 - Tuya Protocol v3.5 Device Support / Scanner Rewrite
 
+* PyPI 1.10.0
+* Tuya Protocol v3.5 Support by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/256 https://github.com/jasonacox/tinytuya/pull/257 & #259
 * Updated getdevicelog() to handle fetching more when "has_next" is True by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/236
 * [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] Added delayed-off & help function to server by @cowboy3d in https://github.com/jasonacox/tinytuya/pull/242 & https://github.com/jasonacox/tinytuya/pull/243
 * [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] Added ability to modify device dps using web browser by @cowboy3d in https://github.com/jasonacox/tinytuya/pull/244
 * Added nowait parameter to status() and split message parsing into separate function by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/253
-* [[Scanner](https://github.com/jasonacox/tinytuya#network-scanner)] Complete rewrite of the scanner for speed improvements and allowing force-scanning of IP ranges by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/252 & https://github.com/jasonacox/tinytuya/pull/254
-* Added Protocol v3.5 Support by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/256 & https://github.com/jasonacox/tinytuya/pull/257
+* [[Scanner](https://github.com/jasonacox/tinytuya#network-scanner)] Complete rewrite of the scanner for speed improvements and allowing force-scanning of IP ranges by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/252 https://github.com/jasonacox/tinytuya/pull/254 https://github.com/jasonacox/tinytuya/pull/261 & https://github.com/jasonacox/tinytuya/pull/262
+
+```
+TinyTuya [1.10.0]
+
+Usage:
+
+    python -m tinytuya <command> [<max_time>] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]
+
+      wizard         Launch Setup Wizard to get Tuya Local KEYs.
+      scan           Scan local network for Tuya devices.
+      devices        Scan all devices listed in devices.json file.
+      snapshot       Scan devices listed in snapshot.json file.
+      json           Scan devices listed in snapshot.json file [JSON].
+      <max_time>     Maximum time to find Tuya devices [Default=18]
+      -nocolor       Disable color text output.
+      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.
+      -no-broadcasts Ignore broadcast packets when force scanning.
+      -h             Show usage.
+```
 
 ## v1.9.1 - Minor Bug Fix for Cloud
 

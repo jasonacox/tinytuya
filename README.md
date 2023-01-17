@@ -11,7 +11,7 @@ Python module to interface with Tuya WiFi smart devices
 
 ## Description
 
-This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module and currently support Tuya Protocols 3.1, 3.2, 3.3 and 3.4.
+This python module controls and reads state of [Tuya](https://en.tuya.com/) compatible WiFi Smart Devices (Plugs, Switches, Lights, Window Covers, etc.) using the local area network (LAN) or the cloud (TuyaCloud API).  This is a compatible replacement for the `pytuya` PyPi module and currently supports Tuya Protocols 3.1, 3.2, 3.3, 3.4 and 3.5.
 
 [Tuya](https://en.tuya.com/) devices are designed to communicate with the TuyaCloud but most also expose a local area network API.  This allows us to directly control the devices without using the cloud. This python module provides a way to poll status and issue commands to these devices.
 
@@ -795,7 +795,8 @@ For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/dis
     The origin of this python module (now abandoned). Thanks to nijave for pycryptodome support and testing, Exilit for unittests and docstrings, mike-gracia for improved Python version support, samuscherer for RGB Bulb support, magneticflux for improved Python version support, sean6541 for initial PyPi package and Home Assistant support <https://github.com/sean6541/tuya-homeassistant>, ziirish - for resolving a dependency problem related to version numbers at install time
   * https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio. 
     Updated pytuya to support devices with Device IDs of 22 characters
-  * Thanks to [@uzlonewolf](https://github.com/uzlonewolf) for breaking the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules, making enhancements to TuyaMessage logic for multi-payload messages and adding Tuya Protocol 3.4 support to TinyTuya.
+  * Thanks to [@uzlonewolf](https://github.com/uzlonewolf), our top contributor and resident wizard, for expanding the Outlet/Cover/Bulb/Cloud modules into separate files, introducing Contrib structure for user generated device modules, making enhancements to TuyaMessage logic for multi-payload messages, rewriting the scanner and adding [Tuya Protocol 3.2, 3.4 & 3.5](https://github.com/jasonacox/tinytuya/discussions/260) support to TinyTuya!
+  * Finally, thanks to the entire TinyTuya community for the great engagement, contributions and encouragement! See [RELEASE notes](https://github.com/jasonacox/tinytuya/blob/master/RELEASE.md#release-notes) for the ever growing journal of improvements and the incredible list of talent making this project possible.
 
 ## Related Projects
 
