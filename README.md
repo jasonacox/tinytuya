@@ -711,8 +711,20 @@ Battery-powered Tuya sensors are usually designed to stay in sleep mode until a 
 
 NOTE (*) - The range can vary depending on the device. As an example, for dimmers, it may be 10-1000 or 25-255.
 
-#### Version 3.3 - Robot Mower Type
+#### Version 3.3 - WiFi Air Quality Detector PM2.5/Formaldehyde/VOC/CO2/Temperature/Humidity
 
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+| 2 | PM2.5 value | integer | 0 - 999 | ug/m3 |
+| 18 | Current Temperature | integer | 0 - 850 | ˚C (multiplied by 10) |
+| 19 | Current Humidity | integer | 0 - 1000 | % (multiplied by 10) |
+| 20 | CH2O (Formaldehyde) value | integer | 0 - 1000 | ppm |
+| 21 | VOC (Volatile organic compound) value | integer | 0 - 2000 | ppm |
+| 22 | CO2 value | integer | 350 - 2000 | ppm |
+
+Example device: https://www.aliexpress.com/item/1005005034880204.html
+
+#### Version 3.3 - Robot Mower Type
 
 | DP ID        | Function Point | Type        | Range       | Units |
 | ------------- | ------------- | ------------- | ------------- |------------- |
