@@ -407,13 +407,11 @@ r = c.getdevicelog( '00112233445566778899' )
 print( json.dumps(r, indent=2) )
 ```
 
-### Encryption notes
+### Encryption Notes
 
-These devices uses AES encryption which is not available in the Python standard library. There are three options:
+Tuya devices use AES encryption which is not available in the Python standard library. **PyCryptodome** is recommended and installed by default. Other options include **PyCrypto** and **pyaes**.
 
- 1) PyCryptodome (recommended)
- 2) PyCrypto
- 3) pyaes (note Python 2.x support requires https://github.com/ricmoo/pyaes/pull/13)
+* Deprecation notice for pyaes: The pyaes library works for Tuya Protocol <= 3.4 but will not work for 3.5 devices. This is because pyaes does not support GCM which is required for v3.5 devices.
 
 ### Command Line
 
