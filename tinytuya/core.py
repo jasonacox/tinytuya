@@ -243,8 +243,8 @@ class AESCipher(object):
                 crypted_text = cipher.encrypt(raw)
         else:
             if iv:
-                # FIXME
-                raise NotImplementedError( 'GCM support for pyaes not implemented yet' )
+                # GCM required for 3.5 devices
+                raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
 
             _ = self._pad(raw)
             cipher = pyaes.blockfeeder.Encrypter(
@@ -286,8 +286,8 @@ class AESCipher(object):
             return raw.decode("utf-8") if decode_text else raw
         else:
             if iv:
-                # FIXME
-                raise NotImplementedError( 'GCM support for pyaes not implemented yet' )
+                # GCM required for 3.5 devices
+                raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
             cipher = pyaes.blockfeeder.Decrypter(
                 pyaes.AESModeOfOperationECB(self.key),
                 pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
