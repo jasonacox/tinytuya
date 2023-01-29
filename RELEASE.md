@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.10.1 - Bug Fix for BulbDevice and Zigbee Devices
+
+* PyPI 1.10.1
+* Fix _process_message() missing parameters discovered via issue https://github.com/jasonacox/tinytuya/issues/266 by @jasonacox in https://github.com/jasonacox/tinytuya/pull/267
+* Removed bulb attribute conditional blocking in BulbDevice set_colour(), set_hsv() and set_colourtemp() as some devices do not correctly report capabilities. Conditional provides debug warning message instead by @jasonacox in https://github.com/jasonacox/tinytuya/issues/265
+
 ## v1.10.0 - Tuya Protocol v3.5 Device Support / Scanner Rewrite
 
 * PyPI 1.10.0
