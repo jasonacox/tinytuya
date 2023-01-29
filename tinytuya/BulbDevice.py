@@ -312,9 +312,8 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
-            return error_json(
-                ERR_FUNCTION, "set_colour: Device does not support color."
-            )
+            log.debug("set_colour: Device does not appear to support color.")
+            # return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
         if not 0 <= r <= 255:
             return error_json(
                 ERR_RANGE,
@@ -354,22 +353,21 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
-            return error_json(
-                ERR_FUNCTION, "set_colour: Device does not support color."
-            )
+            log.debug("set_hsv: Device does not appear to support color.")
+            # return error_json(ERR_FUNCTION, "set_hsv: Device does not support color.")
         if not 0 <= h <= 1.0:
             return error_json(
-                ERR_RANGE, "set_colour: The value for Hue needs to be between 0 and 1."
+                ERR_RANGE, "set_hsv: The value for Hue needs to be between 0 and 1."
             )
         if not 0 <= s <= 1.0:
             return error_json(
                 ERR_RANGE,
-                "set_colour: The value for Saturation needs to be between 0 and 1.",
+                "set_hsv: The value for Saturation needs to be between 0 and 1.",
             )
         if not 0 <= v <= 1.0:
             return error_json(
                 ERR_RANGE,
-                "set_colour: The value for Value needs to be between 0 and 1.",
+                "set_hsv: The value for Value needs to be between 0 and 1.",
             )
 
         (r, g, b) = colorsys.hsv_to_rgb(h, s, v)
@@ -521,9 +519,8 @@ class BulbDevice(Device):
             if state["mode"] == "white":
                 # for white mode use DPS for brightness
                 if not self.has_brightness:
-                    return error_json(
-                        ERR_FUNCTION, "set_colour: Device does not support brightness."
-                    )
+                    log.debug("set_brightness: Device does not appear to support brightness.")
+                    # return error_json(ERR_FUNCTION, "set_brightness: Device does not support brightness.")
                 payload = self.generate_payload(
                     CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness}
                 )
@@ -572,9 +569,8 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colourtemp:
-            return error_json(
-                ERR_FUNCTION, "set_colourtemp: Device does not support colortemp."
-            )
+            log.debug("set_colourtemp: Device does not appear to support colortemp.")
+            # return error_json(ERR_FUNCTION, "set_colourtemp: Device does not support colortemp.")
         if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
                 ERR_RANGE,
