@@ -1040,9 +1040,9 @@ class XenonDevice(object):
             self._check_socket_close()
             return msg
 
-        return self._process_message( msg, dev_type, from_child )
+        return self._process_message( msg, dev_type, from_child, minresponse, decode_response )
 
-    def _process_message( self, msg, dev_type=None, from_child=None ):
+    def _process_message( self, msg, dev_type=None, from_child=None, minresponse=28, decode_response=True ):
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
             log.debug("raw unpacked message = %r", msg)
