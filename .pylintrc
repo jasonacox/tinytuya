@@ -1,5 +1,5 @@
 [MESSAGES CONTROL]
-disable=bad-whitespace, consider-iterating-dictionary, import-error, invalid-name, missing-docstring, no-else-return, no-member, too-many-lines, line-too-long, too-many-ancestors, too-many-arguments, too-many-branches, too-many-instance-attributes, too-many-locals, too-many-nested-blocks, too-many-return-statements, too-many-statements, too-few-public-methods, ungrouped-imports, use-dict-literal, superfluous-parens, fixme, consider-using-f-string, bare-except, broad-except, unused-variable, unspecified-encoding, redefined-builtin, consider-using-dict-items, redundant-u-string-prefix, useless-object-inheritance 
+disable=consider-iterating-dictionary, import-error, invalid-name, missing-docstring, no-else-return, no-member, too-many-lines, line-too-long, too-many-ancestors, too-many-arguments, too-many-branches, too-many-instance-attributes, too-many-locals, too-many-nested-blocks, too-many-return-statements, too-many-statements, too-few-public-methods, ungrouped-imports, use-dict-literal, superfluous-parens, fixme, consider-using-f-string, bare-except, broad-except, unused-variable, unspecified-encoding, redefined-builtin, consider-using-dict-items, redundant-u-string-prefix, useless-object-inheritance 
 
 [SIMILARITIES]
 min-similarity-lines=8
