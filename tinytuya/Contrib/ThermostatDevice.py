@@ -298,12 +298,12 @@ class ThermostatDevice(Device):
 
     def setSetpoint( self, setpoint, cf=None ):
         if self.mode == 'cool':
-            return self.setCoolSetpoint( self, setpoint, cf )
+            return self.setCoolSetpoint( setpoint, cf )
         elif self.mode == 'heat' or self.mode == 'emergencyheat':
-            return self.setHeatSetpoint( self, setpoint, cf )
+            return self.setHeatSetpoint( setpoint, cf )
         else:
             # no idea, let the thermostat figure it out
-            return self.setMiddleSetpoint( self, setpoint, cf )
+            return self.setMiddleSetpoint( setpoint, cf )
 
     def setCoolSetpoint( self, setpoint, cf=None ):
         k = 'cooling_setpoint_' + self.getCF( cf )
