@@ -21,4 +21,4 @@ jobs:
         pip install -r requirements.txt
     - name: Analysing the code with pylint
       run: |
-        pylint -E -e all $(git ls-files 'tinytuya/*.py')
+        pylint -E -e all tinytuya/*.py
