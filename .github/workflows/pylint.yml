@@ -19,8 +19,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install pylint
         pip install -r requirements.txt
-    - name: Analysing the code with pylint
+    - name: Analyzing the code with pylint
       run: |
-        pylint -E -e all $(git ls-files 'tinytuya/*.py') > pylint.log
-        echo "PyLint Results"
-        cat pylint.log
+        pylint -E -e all $(git ls-files 'tinytuya/*.py')
