@@ -21,7 +21,7 @@
     Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
   Functions
-    Device(XenonDevice) 
+    Device(XenonDevice)
         json = status()                    # returns json payload
         set_version(version)               # 3.1 [default] or 3.3
         set_socketPersistent(False/True)   # False [default] or True

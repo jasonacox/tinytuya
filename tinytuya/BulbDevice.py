@@ -27,7 +27,7 @@
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
-        
+
     Inherited
         json = status()                    # returns json payload
         set_version(version)               # 3.1 [default] or 3.3
@@ -55,7 +55,7 @@
 
 import colorsys
 
-from .core import *
+from .core import * # pylint: disable=W0401, W0614
 
 class BulbDevice(Device):
     """
@@ -215,7 +215,7 @@ class BulbDevice(Device):
 
         return (h, s, v)
 
-    def set_version(self, version):
+    def set_version(self, version): # pylint: disable=W0621
         """
         Set the Tuya device version 3.1 or 3.3 for BulbDevice
         Attempt to determine BulbDevice Type: A or B based on:

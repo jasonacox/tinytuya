@@ -25,17 +25,17 @@
              i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
 
  Reference
-    * https://developer.tuya.com/en/docs/cloud/device-connection-service?id=Kb0b8geg6o761 
-    
-"""
+    * https://developer.tuya.com/en/docs/cloud/device-connection-service?id=Kb0b8geg6o761
 
-from .core import *
+"""
 
 import hashlib
 import hmac
 import json
 import time
 import requests
+
+from .core import * # pylint: disable=W0401, W0614
 
 ########################################################
 #             Cloud Classes and Functions
@@ -102,7 +102,7 @@ class Cloud(object):
                     "Tuya Cloud Key and Secret required",
                 )
                 #return self.error
-                raise TypeError('Tuya Cloud Key and Secret required')
+                raise TypeError('Tuya Cloud Key and Secret required') # pylint: disable=W0707
 
         self.setregion(apiRegion)
         # Attempt to connect to cloud and get token
@@ -444,10 +444,10 @@ class Cloud(object):
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return response_dict
-       
+
     def getconnectstatus(self, deviceid=None):
         """
-        Get the device Cloud connect status. 
+        Get the device Cloud connect status.
         """
         if not self.token:
             return self.error
@@ -460,12 +460,10 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri, ver='v1.0')
 
         if not response_dict['success']:
-            log.debug(
-                    "Error from Tuya Cloud: %r" % response_dict['msg'],
-            )
+            log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
         return(response_dict["result"]["online"])
 
-    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params={}):
+    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params={}): # pylint: disable=W0102
         """
         Get the logs for a device.
 
