@@ -51,6 +51,8 @@ for i in sys.argv:
         state = 4
     elif i.lower() == "-yes":
         assume_yes = True
+    elif i.lower() == "-debug":
+        tinytuya.set_debug(True)
     elif last_force and len(i) > 6:
         this_force = True
         force_list.append( i )
@@ -89,7 +91,7 @@ if state == 4:
 if state == 10:
     print("TinyTuya [%s]\n" % (tinytuya.version))
     print("Usage:\n")
-    print("    python -m tinytuya <command> [<max_time>] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
+    print("    python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
     print("")
     print("      wizard         Launch Setup Wizard to get Tuya Local KEYs.")
     print("      scan           Scan local network for Tuya devices.")
@@ -100,6 +102,7 @@ if state == 10:
     print("      -nocolor       Disable color text output.")
     print("      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.")
     print("      -no-broadcasts Ignore broadcast packets when force scanning.")
+    print("      -debug         Activate debug mode.")
     print("      -h             Show usage.")
     print("")
 
