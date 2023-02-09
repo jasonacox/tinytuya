@@ -273,7 +273,6 @@ class ThermostatDevice(Device):
         self.delayed_updates = { }
         self.sensorlists = [ ]
         self.sensors = self.SensorList( self )
-        self.mode = None
 
         for k in self.sensor_dps:
             self.sensorlists.append(ThermostatSensorList(k, self))
