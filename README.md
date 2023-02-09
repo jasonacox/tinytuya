@@ -426,6 +426,7 @@ python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0
   <max_time>     Maximum time to find Tuya devices [Default=18]
   -nocolor       Disable color text output.
   -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.
+                 [net1/mask1 net2/mask2 ...]
   -no-broadcasts Ignore broadcast packets when force scanning.
   -debug         Activate debug mode.
   -h             Show usage.

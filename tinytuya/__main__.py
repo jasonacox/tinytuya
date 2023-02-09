@@ -101,6 +101,7 @@ if state == 10:
     print("      <max_time>     Maximum time to find Tuya devices [Default=%s]" % tinytuya.SCANTIME)
     print("      -nocolor       Disable color text output.")
     print("      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.")
+    print("                     [net1/mask1 net2/mask2 ...]")
     print("      -no-broadcasts Ignore broadcast packets when force scanning.")
     print("      -debug         Activate debug mode.")
     print("      -h             Show usage.")
