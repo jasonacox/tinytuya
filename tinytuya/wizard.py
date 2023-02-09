@@ -23,17 +23,11 @@ Credits
 """
 # Modules
 from __future__ import print_function
-import hmac
-import hashlib
-import ipaddress
 import json
-import socket
-import time
-import requests
 from colorama import init
 import tinytuya
 
-# Backward compatability for python2
+# Backward compatibility for python2
 try:
     input = raw_input
 except NameError:

@@ -23,13 +23,10 @@ import select
 import sys
 import time
 import errno
-from colorama import init
-from hashlib import md5, sha256
-import hmac
 import base64
-import tinytuya
-
 import traceback
+from colorama import init
+import tinytuya
 
 # Optional libraries required for forced scanning
 #try:
@@ -45,7 +42,7 @@ except NameError:
     pass
 
 try:
-    import netifaces
+    import netifaces # pylint: disable=E0401
     NETIFLIBS = True
 except:
     NETIFLIBS = False
@@ -737,6 +734,7 @@ class PollDevice(DeviceDetect):
         super(PollDevice, self).__init__( ip, deviceinfo, options, debug )
         self.broadcasted = True
         self.retries = options['retries']
+        self.finished = False
 
     def close(self):
         super(PollDevice, self).close()
@@ -954,7 +952,7 @@ def _print_device_info( result, note, term, extra_message=None ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[]):
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[]): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1011,7 +1009,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             # No Device info
             pass
 
-    if forcescan and not len(tuyadevices):
+    if forcescan and len(tuyadevices) == 0:
         if discover:
             print(term.alert + 'Warning: Force-scan requires keys in %s but no keys were found.  Disabling force-scan.' % DEVICEFILE + term.normal)
             forcescan = False
@@ -1079,7 +1077,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     ip_scan_delay = False
     scan_end_time = time.time() + scantime
     device_end_time = 0
-    log.debug("Listening for Tuya devices on UDP " + str(UDPPORT) + " and " + str(UDPPORTS) + " and " + str(UDPPORTAPP))
+    log.debug("Listening for Tuya devices on UDP ports %d, %d and %d", UDPPORT, UDPPORTS, UDPPORTAPP)
     start_time = time.time()
     timeout_time = time.time() + 5
     current_ip = None
@@ -1128,7 +1126,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 networks = getmyIPs( term, verbose, not assume_yes )
                 if not networks:
                     print(term.alert + 'No networks to force-scan, exiting.' + term.normal)
-                    return
+                    return None
         else:
             for ip in forcescan:
                 networks.append( ip )
@@ -1187,10 +1185,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     dev.timeout()
 
                 if (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
-                    if False and dev.debug:
-                        print('Resetting device scan end time due to debug ip', dev.ip, device_end_time, dev.timeo)
-                        if len(devices_with_timers) < 64:
-                            devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
+                    # if dev.debug:
+                    #     print('Resetting device scan end time due to debug ip', dev.ip, device_end_time, dev.timeo)
+                    #     if len(devices_with_timers) < 64:
+                    #         devices_with_timers += ' ' + str(dev.ip) + ' ' + str(int(dev.timeo))
                     device_end_time = dev.timeo + 1.0
 
             if not dev.sock:
@@ -1354,10 +1352,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
                 if verbose:
                     broadcast_messages[ip] = term.alertdim + term.dim + 'New Broadcast from ' + str(ip) + ' / ' + str(mac) + ' ' + str(result) + term.normal
-                    if False:
-                        print( data )
-                        print( result )
-                        print( broadcast_messages[ip] )
+                    # if False:
+                    #     print( data )
+                    #     print( result )
+                    #     print( broadcast_messages[ip] )
 
                 #if not mac and SCANLIBS:
                 #    a = time.time()
@@ -1538,7 +1536,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         k = 'gwId'
     else:
         k = 'ip'
-    devices = {}
+    devices = {} # pylint: disable=W0621
     for ip in broadcasted_devices:
         dev = broadcasted_devices[ip].deviceinfo
         dev['ip'] = ip
@@ -1658,7 +1656,7 @@ def load_snapshotfile(fname):
     with open(fname) as json_file:
         data = json.load(json_file)
 
-    devices = []
+    devices = [] # pylint: disable=W0621
     if data and 'devices' in data:
         for dev in data['devices']:
             devices.append( _snapshot_load_item(dev) )
@@ -1672,7 +1670,7 @@ def save_snapshotfile(fname, data, term=None):
         bold = term.bold
     else:
         norm = bold = ''
-    devices = []
+    devices = [] # pylint: disable=W0621
     if type(data) == dict:
         data = list(data.values())
     for itm in data:
@@ -1791,7 +1789,7 @@ def alldevices(color=True, scantime=None):
     print("%s\nDone.\n" % term.dim)
     return
 
-def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False ):
+def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False ): # pylint: disable=W0621
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 

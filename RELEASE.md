@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.10.2 - Misc PyLint Cleanup
+
+* PyPI 1.10.2 (unreleased)
+* Miscellaneous PyLint Cleanup
+* Fix Contrib.ThermostatDevice.SetSetpoint() #273
+
 ## v1.10.1 - Bug Fix for BulbDevice and Zigbee Devices
 
 * PyPI 1.10.1

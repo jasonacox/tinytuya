@@ -416,17 +416,20 @@ Tuya devices use AES encryption which is not available in the Python standard li
 ### Command Line
 
 ```
-python -m tinytuya [command] [<max_retry>] [-nocolor] [-h]
+python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]
 
-  command = scan        Scan local network for Tuya devices.
-  command = wizard      Launch Setup Wizard to get Tuya Local KEYs.
-  command = devices     Scan all devices listed in devices.json file.
-  command = snapshot    Scan devices listed in snapshot.json file.
-  command = json        Scan devices listed in snapshot.json file [JSON].
-  max_retry             Maximum number of retries to find Tuya devices [Default=15]
-  -nocolor              Disable color text output.
-  -force                Force network scan for device IP addresses.
-  -h                    Show usage.
+  wizard         Launch Setup Wizard to get Tuya Local KEYs.
+  scan           Scan local network for Tuya devices.
+  devices        Scan all devices listed in devices.json file.
+  snapshot       Scan devices listed in snapshot.json file.
+  json           Scan devices listed in snapshot.json file [JSON].
+  <max_time>     Maximum time to find Tuya devices [Default=18]
+  -nocolor       Disable color text output.
+  -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.
+                 [net1/mask1 net2/mask2 ...]
+  -no-broadcasts Ignore broadcast packets when force scanning.
+  -debug         Activate debug mode.
+  -h             Show usage.
 ```
 
 ### Scan Tool 

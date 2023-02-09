@@ -37,7 +37,7 @@
     generate_payload(command, data)    # Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
     receive()                          # Receive payload from device
-    
+
  Credits
   * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
     For protocol reverse engineering
@@ -45,7 +45,7 @@
     The origin of this python module (now abandoned)
   * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
-  * Tuya Protocol 3.4 Support by uzlonewolf 
+  * Tuya Protocol 3.4 Support by uzlonewolf
     Enhancement to TuyaMessage logic for multi-payload messages and Tuya Protocol 3.4 support
 
 """
@@ -83,7 +83,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 10, 1)
+version_tuple = (1, 10, 2)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -94,8 +94,8 @@ log = logging.getLogger(__name__)
 log.debug("%s version %s", __name__, __version__)
 log.debug("Python %s on %s", sys.version, sys.platform)
 if Crypto is None:
-    log.debug("Using pyaes version %r", pyaes.VERSION)
-    log.debug("Using pyaes from %r", pyaes.__file__)
+    log.debug("Using pyaes version %r", pyaes.VERSION)  # pylint: disable=E0601
+    log.debug("Using pyaes from %r", pyaes.__file__)    # pylint: disable=E0601
 else:
     log.debug("Using PyCrypto %r", Crypto.version_info)
     log.debug("Using PyCrypto from %r", Crypto.__file__)
@@ -224,9 +224,9 @@ class AESCipher(object):
         self.bs = 16
         self.key = key
 
-    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None):
+    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if Crypto:
-            if iv: # initialization vector or nonce (number used once) 
+            if iv: # initialization vector or nonce (number used once)
                 if iv is True:
                     if log.isEnabledFor( logging.DEBUG ):
                         iv = b'0123456789ab'
@@ -542,7 +542,7 @@ def find_device(dev_id=None, address=None):
                 # Timeout
                 continue
             ip = addr[0]
-            gwId = version = ""
+            gwId = version = "" # pylint: disable=W0621
             result = data
             try:
                 try:
@@ -673,7 +673,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, parent=None
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, parent=None # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
@@ -697,7 +697,7 @@ class XenonDevice(object):
         self.disabledetect = False  # if True do not detect device22
         self.port = TCPPORT  # default - do not expect caller to pass in
         self.socket = None
-        self.socketPersistent = False if not persist else True
+        self.socketPersistent = False if not persist else True # pylint: disable=R1719
         self.socketNODELAY = True
         self.socketRetryLimit = 5
         self.socketRetryDelay = 5
@@ -709,6 +709,8 @@ class XenonDevice(object):
         self.parent = parent
         self.children = {}
         self.received_wrong_cid_queue = []
+        self.local_nonce = b'0123456789abcdef' # not-so-random random key
+        self.remote_nonce = b''
 
         if not local_key:
             local_key = ""
@@ -848,7 +850,7 @@ class XenonDevice(object):
 
         while prefix_offset_55AA != 0 and prefix_offset_6699 != 0:
             log.debug('Message prefix not at the beginning of the received data!')
-            log.debug('Offset: %d, Received data: %r', prefix_offset, data)
+            log.debug('Offset 55AA: %d, 6699: %d, Received data: %r', prefix_offset_55AA, prefix_offset_6699, data)
             if prefix_offset_55AA < 0 and prefix_offset_6699 < 0:
                 data = data[1-prefix_len:]
             else:
@@ -870,7 +872,7 @@ class XenonDevice(object):
         return unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
 
     # similar to _send_receive() but never retries sending and does not decode the response
-    def _send_receive_quick(self, payload, recv_retries, from_child=None):
+    def _send_receive_quick(self, payload, recv_retries, from_child=None): # pylint: disable=W0613
         if self.parent:
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
@@ -1185,7 +1187,7 @@ class XenonDevice(object):
 
         return json_payload
 
-    def _process_response(self, response):
+    def _process_response(self, response): # pylint: disable=R0201
         """
         Override this function in a sub-class if you want to do some processing on the received data
         """
@@ -1252,7 +1254,7 @@ class XenonDevice(object):
             self.local_key = ''.join(k)
         else:
             self.local_key = bytes( [ a^b for (a,b) in zip(self.local_nonce,self.remote_nonce) ] )
-        log.debug("Session nonce XOR'd: %r" % self.local_key)
+        log.debug("Session nonce XOR'd: %r", self.local_key)
 
         cipher = AESCipher(self.real_local_key)
         if self.version == 3.4:
@@ -1348,6 +1350,24 @@ class XenonDevice(object):
         """
         return self._send_receive(payload, 0, getresponse=False)
 
+    def status(self, nowait=False):
+        """Return device status."""
+        query_type = DP_QUERY
+        log.debug("status() entry (dev_type is %s)", self.dev_type)
+        payload = self.generate_payload(query_type)
+
+        data = self._send_receive(payload, 0, getresponse=(not nowait))
+        log.debug("status() received data=%r", data)
+        # Error handling
+        if (not nowait) and data and "Err" in data:
+            if data["Err"] == str(ERR_DEVTYPE):
+                # Device22 detected and change - resend with new payload
+                log.debug("status() rebuilding payload for device22")
+                payload = self.generate_payload(query_type)
+                data = self._send_receive(payload)
+
+        return data
+
     def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
         # device22 devices need a sort of bruteforce querying in order to detect the
@@ -1384,16 +1404,15 @@ class XenonDevice(object):
         else:
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
-    def set_version(self, version):
+    def set_version(self, version): # pylint: disable=W0621
         last_version = self.version
         self.version = version
         self.version_bytes = str(version).encode('latin1')
         self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
         if version == 3.2: # 3.2 behaves like 3.3 with device22
-                #self.version = 3.3
-                self.dev_type="device22"  
-                if self.dps_to_request == {}:
-                    self.detect_available_dps()
+            self.dev_type="device22"
+            if self.dps_to_request == {}:
+                self.detect_available_dps()
         elif version >= 3.4:
             self.dev_type = "v" + str(version)
         elif last_version >= 3.4 and self.dev_type[0] == "v":
@@ -1540,24 +1559,6 @@ class XenonDevice(object):
 class Device(XenonDevice):
     #def __init__(self, *args, **kwargs):
     #    super(Device, self).__init__(*args, **kwargs)
-
-    def status(self, nowait=False):
-        """Return device status."""
-        query_type = DP_QUERY
-        log.debug("status() entry (dev_type is %s)", self.dev_type)
-        payload = self.generate_payload(query_type)
-
-        data = self._send_receive(payload, 0, getresponse=(not nowait))
-        log.debug("status() received data=%r", data)
-        # Error handling
-        if (not nowait) and data and "Err" in data:
-            if data["Err"] == str(ERR_DEVTYPE):
-                # Device22 detected and change - resend with new payload
-                log.debug("status() rebuilding payload for device22")
-                payload = self.generate_payload(query_type)
-                data = self._send_receive(payload)
-
-        return data
 
     def set_status(self, on, switch=1, nowait=False):
         """
@@ -1736,11 +1737,6 @@ def floor(x):
 def appenddevice(newdevice, devices):
     if newdevice["ip"] in devices:
         return True
-    """
-    for i in devices:
-        if i['ip'] == newdevice['ip']:
-                return True
-    """
     devices[newdevice["ip"]] = newdevice
     return False
 

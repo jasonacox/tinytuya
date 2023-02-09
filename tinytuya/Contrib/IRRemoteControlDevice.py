@@ -904,7 +904,7 @@ class IRRemoteControlDevice(Device):
                 p_map[b] = new_p
                 for i in p_map:
                     if p_map[i] == a or p_map[i] == b:
-                        p_map[i] = new_p
+                        p_map[i] = new_p # pylint: disable=E4702
 
         return p_map
 

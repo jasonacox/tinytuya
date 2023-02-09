@@ -15,7 +15,7 @@
         open_cover(switch=1):
         close_cover(switch=1):
         stop_cover(switch=1):
-        
+
     Inherited
         json = status()                    # returns json payload
         set_version(version)               # 3.1 [default] or 3.3
@@ -38,7 +38,7 @@
         detect_available_dps()             # Return list of DPS available from device
         generate_payload(command, data)    # Generate TuyaMessage payload for command with data
         send(payload)                      # Send payload to device (do not wait for response)
-        receive()   
+        receive()
 """
 
 from .core import Device
