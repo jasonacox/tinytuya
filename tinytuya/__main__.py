@@ -38,7 +38,7 @@ for i in sys.argv:
         state = 0
     elif i.lower() == "-nocolor":
         color = False
-    elif i.lower() == "-force":
+    elif i.lower() == "-force" or i.lower() == "-f":
         force = True
         this_force = True
     elif i.lower() == "-no-broadcasts":
@@ -49,9 +49,9 @@ for i in sys.argv:
         state = 3
     elif i.lower() == "json":
         state = 4
-    elif i.lower() == "-yes":
+    elif i.lower() == "-yes" or i.lower() == "-y":
         assume_yes = True
-    elif i.lower() == "-debug":
+    elif i.lower() == "-debug" or i.lower() == "-d":
         tinytuya.set_debug(True)
     elif last_force and len(i) > 6:
         this_force = True
@@ -100,8 +100,8 @@ if state == 10:
     print("      json           Scan devices listed in snapshot.json file [JSON].")
     print("      <max_time>     Maximum time to find Tuya devices [Default=%s]" % tinytuya.SCANTIME)
     print("      -nocolor       Disable color text output.")
-    print("      -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.")
-    print("                     [net1/mask1 net2/mask2 ...]")
+    print("      -force         Force network scan of device IP addresses based on format:")
+    print("                     [net1/mask1 net2/mask2 ...] Auto-detects if none provided.")
     print("      -no-broadcasts Ignore broadcast packets when force scanning.")
     print("      -debug         Activate debug mode.")
     print("      -h             Show usage.")
