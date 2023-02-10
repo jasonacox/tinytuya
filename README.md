@@ -425,11 +425,12 @@ python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0
   json           Scan devices listed in snapshot.json file [JSON].
   <max_time>     Maximum time to find Tuya devices [Default=18]
   -nocolor       Disable color text output.
-  -force         Force network scan for device IP addresses.  Auto-detects network range if none provided.
-                 [net1/mask1 net2/mask2 ...]
+  -force         Force network scan of device IP addresses based on format:
+                 [net1/mask1 net2/mask2 ...] Auto-detects if none provided.
   -no-broadcasts Ignore broadcast packets when force scanning.
   -debug         Activate debug mode.
   -h             Show usage.
+
 ```
 
 ### Scan Tool 
