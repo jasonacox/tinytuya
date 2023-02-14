@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.10.3 - Bug Fix for Cloud
+
+* Unreleased
+* Fix params leak in getdevicelog() as discovered by @klightspeed and @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/219
+
 ## v1.10.2 - Bug Fix for ThermostatDevice and Misc. Cleanup
 
 * PyPI 1.10.2

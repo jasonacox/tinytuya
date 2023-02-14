@@ -523,8 +523,7 @@ class Cloud(object):
             #    max_fetches = round( (want_size / size) * 2 ) + 1
         if not max_fetches or max_fetches < 1:
             max_fetches = 50
-        if type(params) != dict:
-            params = {}
+        params = {} if type(params) != dict else params.copy()
         if 'start_time' not in params:
             params['start_time'] = start
         if 'end_time' not in params:
