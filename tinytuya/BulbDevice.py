@@ -136,9 +136,9 @@ class BulbDevice(Device):
 
         # Bulb Type A
         if bulb == "A":
+            # h:0-360,s:0-255,v:0-255|hsv|
             hexvalue = ""
             for value in rgb:
-                hsvarray = [int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255)]
                 temp = str(hex(int(value))).replace("0x", "")
                 if len(temp) == 1:
                     temp = "0" + temp
