@@ -204,7 +204,7 @@ class Cloud(object):
         if action == 'GET':
             response = requests.get(url, headers=headers)
             log.debug(
-                "GET: response code=%d text=%s token=%s", response.status_code, response.text, self.token
+                "GET: URL=%s HEADERS=%s response code=%d text=%s token=%s", url, headers, response.status_code, response.text, self.token
             )
         else:
             log.debug(
