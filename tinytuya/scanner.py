@@ -35,7 +35,7 @@ import tinytuya
 #except:
 #    SCANLIBS = False
 
-# Backward compatability for python2
+# Backward compatibility for python2
 try:
     input = raw_input
 except NameError:
