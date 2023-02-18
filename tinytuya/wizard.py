@@ -72,7 +72,6 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     """
 
     config = {}
-    ip_list = {}
     config['apiKey'] = ''
     config['apiSecret'] = ''
     config['apiRegion'] = ''
@@ -130,11 +129,6 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
             outfile.write(json_object)
         print(bold + "\n>> Configuration Data Saved to " + CONFIGFILE)
         print(dim + json_object)
-
-    KEY = config['apiKey']
-    SECRET = config['apiSecret']
-    DEVICEID = config['apiDeviceID']
-    REGION = config['apiRegion']        # us, eu, cn, in
 
     if nocloud:
         with open(DEVICEFILE, "r") as infile:
