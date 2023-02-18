@@ -463,7 +463,7 @@ class Cloud(object):
             log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
         return(response_dict["result"]["online"])
 
-    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params={}): # pylint: disable=W0102
+    def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):
         """
         Get the logs for a device.
 
