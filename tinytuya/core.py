@@ -26,6 +26,8 @@
     set_retry(retry=True)              # retry if response payload is truncated
     set_status(on, switch=1, nowait)   # Set status of switch to 'on' or 'off' (bool)
     set_value(index, value, nowait)    # Set int value of any index.
+    set_multiple_values(index_value_dict, nowait)
+                                       # Set multiple values with a single request
     heartbeat(nowait)                  # Send heartbeat to device
     updatedps(index=[1], nowait)       # Send updatedps command to device
     turn_on(switch=1, nowait)          # Turn on device / switch #
