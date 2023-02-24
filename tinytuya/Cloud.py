@@ -42,14 +42,12 @@ from .core import * # pylint: disable=W0401, W0614
 ########################################################
 
 class Cloud(object):
-    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True):
+    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None):
         """
         Tuya Cloud IoT Platform Access
 
         Args:
-            dev_id (str): The device id.
-            address (str): The network address.
-            local_key (str, optional): The encryption key. Defaults to None.
+            initial_token: The auth token from a previous run.  It will be refreshed if it has expired
 
         Playload Construction - Header Data:
             Parameter 	  Type    Required	Description
@@ -81,7 +79,7 @@ class Cloud(object):
         self.apiDeviceID = apiDeviceID
         self.urlhost = ''
         self.uid = None     # Tuya Cloud User ID
-        self.token = None
+        self.token = initial_token
         self.error = None
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
@@ -105,8 +103,10 @@ class Cloud(object):
                 raise TypeError('Tuya Cloud Key and Secret required') # pylint: disable=W0707
 
         self.setregion(apiRegion)
-        # Attempt to connect to cloud and get token
-        self._gettoken()
+
+        if not self.token:
+            # Attempt to connect to cloud and get token
+            self._gettoken()
 
     def setregion(self, apiRegion=None):
         # Set hostname based on apiRegion
