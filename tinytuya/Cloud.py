@@ -466,6 +466,7 @@ class Cloud(object):
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):
         """
         Get the logs for a device.
+        https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
 
         Note: The cloud only returns logs for DPs in the "official" DPS list.
           If the device specifications are wrong then not all logs will be returned!
@@ -512,8 +513,17 @@ class Cloud(object):
         if not evtype:
             # get them all by default
             # 1 = device online, 7 = DP report
-            # https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
             evtype = '1,2,3,4,5,6,7,8,9,10'
+        elif type(evtype) == str:
+            pass
+        elif type(evtype) == bytes:
+            evtype = evtype.decode('utf8')
+        elif type(evtype) == int:
+            evtype = str(evtype)
+        elif type(evtype) == list or type(evtype) == tuple:
+            evtype = ','.join( [str(i) for i in evtype] )
+        else:
+            raise ValueError( "Unhandled 'evtype' type %s - %r" % (type(evtype), evtype) )
         want_size = size
         if not size:
             size = 100
