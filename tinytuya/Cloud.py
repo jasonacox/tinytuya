@@ -93,7 +93,8 @@ class Cloud(object):
                     self.apiRegion = config['apiRegion']
                     self.apiKey = config['apiKey']
                     self.apiSecret = config['apiSecret']
-                    self.apiDeviceID = config['apiDeviceID']
+                    if 'apiDeviceID' in config:
+                        self.apiDeviceID = config['apiDeviceID']
             except:
                 self.error = error_json(
                     ERR_CLOUDKEY,
@@ -305,24 +306,45 @@ class Cloud(object):
             action = 'POST' if post else 'GET'
         return self._tuyaplatform(url, action=action, post=post, ver=None, query=query)
 
+    def _get_all_devices(self):
+        # API docu: https://developer.tuya.com/en/docs/cloud/fc19523d18?id=Kakr4p8nq5xsc
+        result = self.cloudrequest( '/v1.0/iot-01/associated-users/devices', query={'size':'100'} )
+
+
+        # FIXME inspect `has_more` and `last_row_key` and loop if there are more devices to fetch
+
+
+        # format it the same as before, basically just moves result->devices into result
+        our_result = {}
+        for i in result:
+            if i == 'result':
+                our_result[i] = result[i]['devices']
+            else:
+                our_result[i] = result[i]
+
+        return our_result
+
     def getdevices(self, verbose=False):
         """
         Return dictionary of all devices.
         If verbose is true, return full Tuya device
         details.
         """
-        uid = self._getuid(self.apiDeviceID)
-        if uid is None:
-            return error_json(
-                ERR_CLOUD,
-                "Unable to get uid for device list"
-            )
-        elif isinstance( uid, dict):
-            return uid
+        if self.apiDeviceID:
+            uid = self._getuid(self.apiDeviceID)
+            if uid is None:
+                return error_json(
+                    ERR_CLOUD,
+                    "Unable to get uid for device list"
+                )
+            elif isinstance( uid, dict):
+                return uid
 
-        # Use UID to get list of all Devices for User
-        uri = 'users/%s/devices' % uid
-        json_data = self._tuyaplatform(uri)
+            # Use UID to get list of all Devices for User
+            uri = 'users/%s/devices' % uid
+            json_data = self._tuyaplatform(uri)
+        else:
+            json_data = self._get_all_devices()
 
         if verbose:
             return json_data
