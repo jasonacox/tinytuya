@@ -172,6 +172,9 @@ Functions:
     set_status(on, switch=1, nowait)   # Control status of the device to 'on' or 'off' (bool)
                                        # nowait (default False) True to send without waiting for response
     set_value(index, value, nowait)    # Send and set value of any DPS/index on device.
+    set_multiple_values(index_value_dict, nowait)
+                                       # Set multiple values with a single request
+				       # Note: Some devices do not like this!
     heartbeat(nowait)                  # Send heartbeat to device
     updatedps(index=[1], nowait)       # Send updatedps command to device to refresh DPS values
     turn_on(switch=1, nowait)          # Turn on device / switch #

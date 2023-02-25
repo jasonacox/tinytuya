@@ -42,14 +42,12 @@ from .core import * # pylint: disable=W0401, W0614
 ########################################################
 
 class Cloud(object):
-    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True):
+    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None):
         """
         Tuya Cloud IoT Platform Access
 
         Args:
-            dev_id (str): The device id.
-            address (str): The network address.
-            local_key (str, optional): The encryption key. Defaults to None.
+            initial_token: The auth token from a previous run.  It will be refreshed if it has expired
 
         Playload Construction - Header Data:
             Parameter 	  Type    Required	Description
@@ -81,7 +79,7 @@ class Cloud(object):
         self.apiDeviceID = apiDeviceID
         self.urlhost = ''
         self.uid = None     # Tuya Cloud User ID
-        self.token = None
+        self.token = initial_token
         self.error = None
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
@@ -105,8 +103,10 @@ class Cloud(object):
                 raise TypeError('Tuya Cloud Key and Secret required') # pylint: disable=W0707
 
         self.setregion(apiRegion)
-        # Attempt to connect to cloud and get token
-        self._gettoken()
+
+        if not self.token:
+            # Attempt to connect to cloud and get token
+            self._gettoken()
 
     def setregion(self, apiRegion=None):
         # Set hostname based on apiRegion
@@ -466,6 +466,7 @@ class Cloud(object):
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):
         """
         Get the logs for a device.
+        https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
 
         Note: The cloud only returns logs for DPs in the "official" DPS list.
           If the device specifications are wrong then not all logs will be returned!
@@ -512,8 +513,17 @@ class Cloud(object):
         if not evtype:
             # get them all by default
             # 1 = device online, 7 = DP report
-            # https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
             evtype = '1,2,3,4,5,6,7,8,9,10'
+        elif type(evtype) == str:
+            pass
+        elif type(evtype) == bytes:
+            evtype = evtype.decode('utf8')
+        elif type(evtype) == int:
+            evtype = str(evtype)
+        elif type(evtype) == list or type(evtype) == tuple:
+            evtype = ','.join( [str(i) for i in evtype] )
+        else:
+            raise ValueError( "Unhandled 'evtype' type %s - %r" % (type(evtype), evtype) )
         want_size = size
         if not size:
             size = 100
