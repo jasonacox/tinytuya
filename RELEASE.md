@@ -1,9 +1,12 @@
 # RELEASE NOTES
 
-## v1.10.3 - Bug Fix for Cloud
+## v1.10.3 - Cloud Updates
 
-* Unreleased
+* PyPI 1.10.2
 * Fix params leak in getdevicelog() as discovered by @klightspeed and @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/219
+* Log message formatting by @johnno1962 in https://github.com/jasonacox/tinytuya/pull/285
+* Add Cloud IR example, updated docs, and allow an optional initial token to Cloud by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/288
+
 
 ## v1.10.2 - Bug Fix for ThermostatDevice and Misc. Cleanup
 
