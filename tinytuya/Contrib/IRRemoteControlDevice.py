@@ -115,7 +115,6 @@ import json
 import logging
 import struct
 import time
-from math import ceil, floor
 
 from ..core import Device, log, CONTROL
 
@@ -461,7 +460,7 @@ class IRRemoteControlDevice(Device):
                     data += '0'
             else:
                 # if the first byte is 0, the next byte is how many bits to transmit
-                byts = ceil( bits / 8 )
+                byts = int( (bits + 7) / 8 )
                 cnt = byts * 2
                 data = key[:cnt]
 
