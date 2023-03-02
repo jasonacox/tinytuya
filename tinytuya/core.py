@@ -1728,13 +1728,6 @@ def decrypt_udp(msg):
         return payload
     return decrypt(msg, udpkey)
 
-# Return positive number or zero
-def floor(x):
-    if x > 0:
-        return x
-    else:
-        return 0
-
 
 def appenddevice(newdevice, devices):
     if newdevice["ip"] in devices:
