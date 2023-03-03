@@ -34,6 +34,7 @@ import hmac
 import json
 import time
 import requests
+from datetime import datetime
 
 from .core import * # pylint: disable=W0401, W0614
 
@@ -83,6 +84,7 @@ class Cloud(object):
         self.error = None
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
+        self.use_old_device_list = False
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -307,20 +309,45 @@ class Cloud(object):
         return self._tuyaplatform(url, action=action, post=post, ver=None, query=query)
 
     def _get_all_devices(self):
-        # API docu: https://developer.tuya.com/en/docs/cloud/fc19523d18?id=Kakr4p8nq5xsc
-        result = self.cloudrequest( '/v1.0/iot-01/associated-users/devices', query={'size':'100'} )
+        fetches = 0
+        our_result = { 'result': [] }
+        last_row_key = None
+        has_more = True
+        total = 0
+        query = {'size':'50'}
 
+        while has_more:
+            # API docu: https://developer.tuya.com/en/docs/cloud/fc19523d18?id=Kakr4p8nq5xsc
+            result = self.cloudrequest( '/v1.0/iot-01/associated-users/devices', query=query )
+            fetches += 1
+            has_more = False
 
-        # FIXME inspect `has_more` and `last_row_key` and loop if there are more devices to fetch
-
-
-        # format it the same as before, basically just moves result->devices into result
-        our_result = {}
-        for i in result:
-            if i == 'result':
-                our_result[i] = result[i]['devices']
+            if type(result) == dict:
+                log.debug( 'Cloud response:' )
+                log.debug( json.dumps( result, indent=2 ) )
             else:
-                our_result[i] = result[i]
+                log.debug( 'Cloud response: %r', result )
+
+            # format it the same as before, basically just moves result->devices into result
+            for i in result:
+                if i == 'result':
+                    our_result[i] += result[i]['devices']
+                    if 'total' in result[i]: total = result[i]['total']
+                    if 'last_row_key' in result[i]:
+                        has_more = result[i]['has_more']
+                        query['last_row_key'] = result[i]['last_row_key']
+                else:
+                    our_result[i] = result[i]
+
+        our_result['file'] = {
+            "description": "Full raw list of Tuya devices.",
+            "account": self.apiKey,
+            "date": datetime.now().isoformat(),
+            "fetches": fetches,
+            "last_row_key": last_row_key,
+            "total": total,
+            "tinytuya": version
+        }
 
         return our_result
 
@@ -330,7 +357,7 @@ class Cloud(object):
         If verbose is true, return full Tuya device
         details.
         """
-        if self.apiDeviceID:
+        if self.apiDeviceID and self.use_old_device_list:
             uid = self._getuid(self.apiDeviceID)
             if uid is None:
                 return error_json(
@@ -357,26 +384,41 @@ class Cloud(object):
             # Filter to only Name, ID and Key
             return self.filter_devices( json_data['result'] )
 
+    def _get_hw_addresses( self, maclist, devices ):
+        while devices:
+            # returns id, mac, uuid (and sn if available)
+            uri = 'devices/factory-infos?device_ids=%s' % (",".join(devices[:50]))
+            result = self._tuyaplatform(uri)
+            log.debug( json.dumps( result, indent=2 ) )
+            if 'result' in result:
+                for dev in result['result']:
+                    if 'id' in dev:
+                        dev_id = dev['id']
+                        del dev['id']
+                        maclist[dev_id] = dev
+            devices = devices[50:]
+
     def filter_devices( self, devs, ip_list=None ):
-        # Use Device ID to get MAC addresses
-        uri = 'devices/factory-infos?device_ids=%s' % (",".join(i['id'] for i in devs))
-        json_mac_data = self._tuyaplatform(uri)
+        json_mac_data = {}
+        # mutable json_mac_data will be modified
+        self._get_hw_addresses( json_mac_data, [i['id'] for i in devs] )
 
         tuyadevices = []
         icon_host = 'https://images.' + self.urlhost.split( '.', 1 )[1] + '/'
 
         for i in devs:
-            item = {}
-            item['name'] = i['name'].strip()
-            item['id'] = i['id']
-            item['key'] = i['local_key']
-            if 'mac' in i:
-                item['mac'] = i['mac']
-            else:
-                try:
-                    item['mac'] = next((m['mac'] for m in json_mac_data['result'] if m['id'] == i['id']), "")
-                except:
-                    pass
+            dev_id = i['id']
+            item = {
+                'name': '' if 'name' not in i else i['name'].strip(),
+                'id': dev_id,
+                'key': '' if 'local_key' not in i else i['local_key'],
+                'mac': '' if 'mac' not in i else i['mac']
+            }
+
+            if dev_id in json_mac_data:
+                for k in ('mac','uuid','sn'):
+                    if k in json_mac_data[dev_id]:
+                        item[k] = json_mac_data[dev_id][k]
 
             if ip_list and 'mac' in item and item['mac'] in ip_list:
                 item['ip'] = ip_list[item['mac']]

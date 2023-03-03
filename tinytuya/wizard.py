@@ -181,6 +181,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     if not nocloud:
         # Save raw TuyaPlatform data to tuya-raw.json
         print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
+        if 'file' in json_data:
+            json_data['file']['name'] = RAWFILE
         try:
             with open(RAWFILE, "w") as outfile:
                 outfile.write(json.dumps(json_data, indent=4))
