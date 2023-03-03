@@ -25,6 +25,7 @@ Credits
 from __future__ import print_function
 import json
 from colorama import init
+from datetime import datetime
 import tinytuya
 
 # Backward compatibility for python2
@@ -181,8 +182,13 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     if not nocloud:
         # Save raw TuyaPlatform data to tuya-raw.json
         print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
-        if 'file' in json_data:
-            json_data['file']['name'] = RAWFILE
+        json_data['file'] = {
+            'name': RAWFILE,
+            'description': 'Full raw list of Tuya devices.',
+            'account': cloud.apiKey,
+            'date': datetime.now().isoformat(),
+            'tinytuya': tinytuya.version
+        }
         try:
             with open(RAWFILE, "w") as outfile:
                 outfile.write(json.dumps(json_data, indent=4))

@@ -34,7 +34,6 @@ import hmac
 import json
 import time
 import requests
-from datetime import datetime
 
 from .core import * # pylint: disable=W0401, W0614
 
@@ -339,15 +338,8 @@ class Cloud(object):
                 else:
                     our_result[i] = result[i]
 
-        our_result['file'] = {
-            "description": "Full raw list of Tuya devices.",
-            "account": self.apiKey,
-            "date": datetime.now().isoformat(),
-            "fetches": fetches,
-            "last_row_key": last_row_key,
-            "total": total,
-            "tinytuya": version
-        }
+        our_result['fetches'] = fetches
+        our_result['total'] = total
 
         return our_result
 
