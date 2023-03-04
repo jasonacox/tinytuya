@@ -25,6 +25,7 @@ Credits
 from __future__ import print_function
 import json
 from colorama import init
+from datetime import datetime
 import tinytuya
 
 # Backward compatibility for python2
@@ -91,11 +92,12 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     print('')
 
     if (config['apiKey'] != '' and config['apiSecret'] != '' and
-            config['apiRegion'] != '' and config['apiDeviceID'] != ''):
+            config['apiRegion'] != ''):
         needconfigs = False
+        apiDeviceID = '<None>' if not config['apiDeviceID'] else config['apiDeviceID']
         print("    " + subbold + "Existing settings:" + dim +
               "\n        API Key=%s \n        Secret=%s\n        DeviceID=%s\n        Region=%s" %
-              (config['apiKey'], config['apiSecret'], config['apiDeviceID'],
+              (config['apiKey'], config['apiSecret'], apiDeviceID,
                config['apiRegion']))
         print('')
         answer = input(subbold + '    Use existing credentials ' +
@@ -111,7 +113,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         config['apiSecret'] = input(subbold + "    Enter " + bold + "API Secret" + subbold +
                                     " from tuya.com: " + normal)
         config['apiDeviceID'] = input(subbold +
-                                      "    Enter " + bold + "any Device ID" + subbold +
+                                      "    (Optional) Enter " + bold + "any Device ID" + subbold +
                                       " currently registered in Tuya App (used to pull full list): " + normal)
         # TO DO - Determine apiRegion based on Device - for now, ask
         print("\n      " + subbold + "Region List" + dim +
@@ -180,6 +182,13 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     if not nocloud:
         # Save raw TuyaPlatform data to tuya-raw.json
         print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
+        json_data['file'] = {
+            'name': RAWFILE,
+            'description': 'Full raw list of Tuya devices.',
+            'account': cloud.apiKey,
+            'date': datetime.now().isoformat(),
+            'tinytuya': tinytuya.version
+        }
         try:
             with open(RAWFILE, "w") as outfile:
                 outfile.write(json.dumps(json_data, indent=4))
