@@ -47,8 +47,8 @@
     The origin of this python module (now abandoned)
   * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
     Updated pytuya to support devices with Device IDs of 22 characters
-  * Tuya Protocol 3.4 Support by uzlonewolf
-    Enhancement to TuyaMessage logic for multi-payload messages and Tuya Protocol 3.4 support
+  * Tuya Protocol 3.4 and 3.5 Support by uzlonewolf
+    Enhancement to TuyaMessage logic for multi-payload messages
 
 """
 
@@ -85,7 +85,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 10, 3)
+version_tuple = (1, 11, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 

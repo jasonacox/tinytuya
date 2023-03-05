@@ -1,5 +1,23 @@
 # RELEASE NOTES
 
+## v1.11.0 - Cloud Device Listing
+
+* PyPI 1.11.0
+* Simplification and cleanup of math functions in core and IRRemoteControlDevice by @gstein in https://github.com/jasonacox/tinytuya/pull/291
+* Rework Cloud device list fetching by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/289 includes new `tuya-raw.json` (backward compatible).
+
+Additional data in tuya-raw.json:
+
+```json
+    "file": {
+        "name": "tuya-raw.json",
+        "description": "Full raw list of Tuya devices.",
+        "account": "xxxxxxxxxxxxxxxxxxxx",
+        "date": "2023-03-04T19:50:08.879865",
+        "tinytuya": "1.11.0"
+    }
+```
+
 ## v1.10.3 - Cloud Updates
 
 * PyPI 1.10.3
