@@ -167,8 +167,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
                 if 'key' in parent and parent['key'] and dev['key'] == parent['key'] and ( 'sub' not in parent or not parent['sub']):
                     found = parent
                     break
-            if found:
-                dev['parent'] = found['id']
+            dev['parent'] = found['id'] if found else ''
 
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
