@@ -158,16 +158,22 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         tuyadevices = cloud.filter_devices( json_data['result'] )
 
     for dev in tuyadevices:
-        if 'sub' in dev and dev['sub'] and 'id' in dev and 'key' in dev and dev['key']:
-            found = False
-            for parent in tuyadevices:
-                if 'id' not in parent or parent['id'] == dev['id']:
-                    continue
-                # the local key seems to be the only way of identifying the parent device
-                if 'key' in parent and parent['key'] and dev['key'] == parent['key'] and ( 'sub' not in parent or not parent['sub']):
-                    found = parent
-                    break
-            dev['parent'] = found['id'] if found else ''
+        if 'sub' in dev and dev['sub']:
+            if 'parent' not in dev:
+                dev['parent'] = ''
+            if 'key' in dev and dev['key']:
+                if 'id' not in dev:
+                    dev['id'] = ''
+                found = False
+                for parent in tuyadevices:
+                    if 'id' not in parent or parent['id'] == dev['id']:
+                        continue
+                    # the local key seems to be the only way of identifying the parent device
+                    if 'key' in parent and parent['key'] and dev['key'] == parent['key'] and ( 'sub' not in parent or not parent['sub']):
+                        found = parent
+                        break
+                if found:
+                    dev['parent'] = found['id']
 
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
