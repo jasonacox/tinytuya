@@ -10,7 +10,8 @@
 
  Classes
   * AESCipher - Cryptography Helpers
-  * XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False) - Base Tuya Objects and Functions
+  * XenonDevice(...) - Base Tuya Objects and Functions
+        XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False, cid/node_id=None, parent=None)
   * Device(XenonDevice) - Tuya Class for Devices
 
  Functions
@@ -675,23 +676,25 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, parent=None # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
 
         Args:
             dev_id (str): The device id.
-            cid (str: Optional sub device id. Default to None.
             address (str): The network address.
             local_key (str, optional): The encryption key. Defaults to None.
+            cid (str: Optional sub device id. Default to None.
+            node_id (str: alias for cid)
+            parent (object: gateway device this device is a child of)
 
         Attributes:
             port (int): The port to connect to.
         """
 
         self.id = dev_id
-        self.cid = cid
+        self.cid = cid if cid else node_id
         self.address = address
         self.connection_timeout = connection_timeout
         self.retry = True
@@ -716,14 +719,21 @@ class XenonDevice(object):
 
         if not local_key:
             local_key = ""
-            devinfo = device_info( dev_id )
-            if devinfo and 'key' in devinfo and devinfo['key']:
-                local_key = devinfo['key']
+            if not parent:
+                devinfo = device_info( dev_id )
+                if devinfo and 'key' in devinfo and devinfo['key']:
+                    local_key = devinfo['key']
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
         self.cipher = None
 
         if self.parent:
+            if not self.cid:
+                devinfo = device_info( dev_id )
+                if devinfo and 'node_id' in devinfo and devinfo['node_id']:
+                    self.cid = devinfo['node_id']
+            if not self.cid:
+                log.debug( 'Child device but no cid/node_id given!' )
             XenonDevice.set_version(self, self.parent.version)
             self.parent._register_child(self)
         elif (not address) or address == "Auto" or address == "0.0.0.0":
@@ -742,8 +752,10 @@ class XenonDevice(object):
             # them (such as BulbDevice) make connections when called
             XenonDevice.set_version(self, 3.1)
 
-        if cid and self.dev_type == 'default':
+        if self.cid and self.dev_type == 'default':
             self.dev_type = 'zigbee'
+        elif self.dev_type == 'zigbee' and not self.cid:
+            log.debug( 'Zigbee device but no cid/node_id given, using dev_id as the cid!' )
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -1101,8 +1113,7 @@ class XenonDevice(object):
                     else:
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
-                # do not pass from_child this time to make sure we do not get stuck in a loop
-                return self._send_receive( None, minresponse, True, decode_response, from_child=True)
+                return self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
 
         # legacy/default mode avoids persisting socket across commands
         self._check_socket_close()

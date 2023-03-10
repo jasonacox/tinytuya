@@ -5,11 +5,14 @@ import time
 #  connected and then one or more children are added.
 
 # configure the parent device
+#   address=None will cause it to search the network for the device
 gw = tinytuya.Device( 'eb...4', address=None, local_key='aabbccddeeffgghh', persist=True, version=3.3 )
 
 print( 'GW IP found:', gw.address )
 
 # configure one or more children.  Every dev_id must be unique!
+#   cid is the "node_id" from devices.json
+#   node_id can be used as an alias for cid
 zigbee1 = tinytuya.OutletDevice( 'eb14...w', cid='0011223344556601', parent=gw )
 zigbee2 = tinytuya.OutletDevice( 'eb04...l', cid='0011223344556689', parent=gw )
 
