@@ -157,6 +157,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         # Filter to only Name, ID and Key, IP and mac-address
         tuyadevices = cloud.filter_devices( json_data['result'] )
 
+    # Try to create parent-child linkage on gateway controlled devices (with sub key)
     for dev in tuyadevices:
         if 'sub' in dev and dev['sub']:
             if 'parent' not in dev:
@@ -166,9 +167,10 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
                     dev['id'] = ''
                 found = False
                 for parent in tuyadevices:
+                    # loop through all devices again to see if there is a matching local key
                     if 'id' not in parent or parent['id'] == dev['id']:
                         continue
-                    # the local key seems to be the only way of identifying the parent device
+                    # check for matching keys and if device is missing sub key - assume we found parent
                     if 'key' in parent and parent['key'] and dev['key'] == parent['key'] and ( 'sub' not in parent or not parent['sub']):
                         found = parent
                         break
