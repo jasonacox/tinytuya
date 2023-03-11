@@ -45,10 +45,10 @@ Pip will attempt to install `pycryptodome`, `requests` and `colorama` if not alr
 ## Tuya Device Preparation
 
 Controlling and monitoring Tuya devices on your network requires the following:
-* *Address* - The network address (IPv4) of the device e.g. 10.0.1.100 
-* *Device ID* - The unique identifier for the Tuya device
-* *Version* - The Tuya protocol version used (3.1 or 3.3)
-* *Local_Key* - The security key required to access the Tuya device.
+* *Address* - Network address (IPv4) of the device e.g. 10.0.1.100
+* *Device ID* - Unique identifier for the Tuya device
+* *Version* - Tuya protocol version used (3.1, 3.2, 3.3, 3.4 or 3.5)
+* *Local_Key* - Security key needed to access the Tuya device. See [Setup Wizard](https://github.com/jasonacox/tinytuya#setup-wizard---getting-local-keys) to get these keys.
 
 ### Network Scanner
 
@@ -110,16 +110,12 @@ After importing tinytuya, you create a device handle for the device you want to 
 ```python
 import tinytuya
 
-# Connect to Device - pytuya Method
-d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)
-
-# And a Alternative Method for TinyTuya v1.7.0+
-# d = tinytuya.OutletDevice(
-#       dev_id='DEVICE_ID_HERE',
-#       address='IP_ADDRESS_HERE',
-#       local_key='LOCAL_KEY_HERE', 
-#       version=3.4)
+# Connect to Device
+d = tinytuya.OutletDevice(
+    dev_id='DEVICE_ID_HERE',
+    address='IP_ADDRESS_HERE',
+    local_key='LOCAL_KEY_HERE', 
+    version=3.3)
 
 # Get Status
 data = d.status() 
