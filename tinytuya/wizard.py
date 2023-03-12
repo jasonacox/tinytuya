@@ -157,16 +157,33 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         # Filter to only Name, ID and Key, IP and mac-address
         tuyadevices = cloud.filter_devices( json_data['result'] )
 
+    # The device list does not tell us which device is the parent for a sub-device, so we need to try and figure it out
+    # The only link between parent and child appears to be the local key
+    # if 'parent' not in device: device is not a sub-device
+    # if 'parent' in device: device is a sub-device
+    #     if device['parent'] == '': device is a sub-device with an unknown parent
+    #     else: device['parent'] == device_id of parent
     for dev in tuyadevices:
-        if 'sub' in dev and dev['sub'] and 'key' in dev:
-            found = False
-            for parent in tuyadevices:
-                # the local key seems to be the only way of identifying the parent device
-                if 'key' in parent and 'id' in parent and dev['key'] == parent['key']:
-                    found = parent
-                    break
-            if found:
-                dev['parent'] = found['id']
+        if 'sub' in dev and dev['sub']:
+            if 'parent' not in dev:
+                # Set 'parent' to an empty string in case we can't find it
+                dev['parent'] = ''
+
+            # Only try to find the parent if the device has a local key
+            if 'key' in dev and dev['key']:
+                if 'id' not in dev:
+                    dev['id'] = ''
+                found = False
+                # Loop through all devices again to try and find a non-sub-device with the same local key
+                for parent in tuyadevices:
+                    if 'id' not in parent or parent['id'] == dev['id']:
+                        continue
+                    # Check for matching local keys and if device is not a sub-device then assume we found the parent
+                    if 'key' in parent and parent['key'] and dev['key'] == parent['key'] and ( 'sub' not in parent or not parent['sub']):
+                        found = parent
+                        break
+                if found:
+                    dev['parent'] = found['id']
 
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
