@@ -1,5 +1,12 @@
 # RELEASE NOTES
 
+## v1.12.0 - Zigbee Gateway Updates
+
+* PyPI 1.12.0
+* Improve detect_available_dps() function by @nyok92 in https://github.com/jasonacox/tinytuya/pull/294
+* Tighten up parent device detection in the Wizard by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/296
+* Updates for Zigbee Gateway sub-device usage by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/298
+
 ## v1.11.0 - Cloud Device Listing
 
 * PyPI 1.11.0
