@@ -719,6 +719,7 @@ class XenonDevice(object):
 
         if not local_key:
             local_key = ""
+            # sub-devices do not need a local key, so only look it up if we are not a sub-device
             if not parent:
                 devinfo = device_info( dev_id )
                 if devinfo and 'key' in devinfo and devinfo['key']:
@@ -728,11 +729,14 @@ class XenonDevice(object):
         self.cipher = None
 
         if self.parent:
+            # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
             if not self.cid:
                 devinfo = device_info( dev_id )
                 if devinfo and 'node_id' in devinfo and devinfo['node_id']:
                     self.cid = devinfo['node_id']
             if not self.cid:
+                # not fatal as the user could have set the device_id to the cid
+                # in that case dev_type should be 'zigbee' to set the proper fields in requests
                 log.debug( 'Child device but no cid/node_id given!' )
             XenonDevice.set_version(self, self.parent.version)
             self.parent._register_child(self)
@@ -755,6 +759,7 @@ class XenonDevice(object):
         if self.cid and self.dev_type == 'default':
             self.dev_type = 'zigbee'
         elif self.dev_type == 'zigbee' and not self.cid:
+            # this probably won't work, but it might
             log.debug( 'Zigbee device but no cid/node_id given, using dev_id as the cid!' )
 
     def __del__(self):
@@ -1113,6 +1118,7 @@ class XenonDevice(object):
                     else:
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
+                # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
 
         # legacy/default mode avoids persisting socket across commands
