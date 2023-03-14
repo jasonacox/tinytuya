@@ -242,7 +242,7 @@ class BulbDevice(Device):
         else:
             # response has no dps
             self.bulb_type = "B"
-        log.debug("bulb type set to %s", self.bulb_type)
+        self.log.debug("bulb type set to %s", self.bulb_type)
 
     def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
@@ -312,7 +312,7 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
-            log.debug("set_colour: Device does not appear to support color.")
+            self.log.debug("set_colour: Device does not appear to support color.")
             # return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
         if not 0 <= r <= 255:
             return error_json(
@@ -353,7 +353,7 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colour:
-            log.debug("set_hsv: Device does not appear to support color.")
+            self.log.debug("set_hsv: Device does not appear to support color.")
             # return error_json(ERR_FUNCTION, "set_hsv: Device does not support color.")
         if not 0 <= h <= 1.0:
             return error_json(
@@ -519,7 +519,7 @@ class BulbDevice(Device):
             if state["mode"] == "white":
                 # for white mode use DPS for brightness
                 if not self.has_brightness:
-                    log.debug("set_brightness: Device does not appear to support brightness.")
+                    self.log.debug("set_brightness: Device does not appear to support brightness.")
                     # return error_json(ERR_FUNCTION, "set_brightness: Device does not support brightness.")
                 payload = self.generate_payload(
                     CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness}
@@ -569,7 +569,7 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not self.has_colourtemp:
-            log.debug("set_colourtemp: Device does not appear to support colortemp.")
+            self.log.debug("set_colourtemp: Device does not appear to support colortemp.")
             # return error_json(ERR_FUNCTION, "set_colourtemp: Device does not support colortemp.")
         if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
             return error_json(
