@@ -481,7 +481,7 @@ class Cloud(object):
             )
         return response_dict
 
-    def sendcommand(self, deviceid=None, commands=None):
+    def sendcommand(self, deviceid=None, commands=None, uri='iot-03/devices/'):
         """
         Send a command to the device
         """
@@ -492,7 +492,7 @@ class Cloud(object):
                 ERR_PARAMS,
                 "Missing DeviceID and/or Command Parameters"
             )
-        uri = 'iot-03/devices/%s/commands' % (deviceid)
+        uri += '%s/commands' % (deviceid)
         response_dict = self._tuyaplatform(uri,action='POST',post=commands)
 
         if not response_dict['success']:
