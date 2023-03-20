@@ -15,7 +15,10 @@
 
 # Modules
 import sys
+
 import tinytuya
+from . import wizard
+from . import scanner
 
 retries = None
 state = 0
@@ -67,16 +70,6 @@ if force and len(force_list) > 0:
     force = force_list
 
 tinytuya.set_debug(debug, color)
-#if debug:
-#    if color:
-#        logging.basicConfig( format="\x1b[0m\x1b[31;1m%(levelname)s:\x1b[22m%(name)s:\x1b[39;2m%(message)s\x1b[0m", level=logging.DEBUG )
-#    else:
-#        logging.basicConfig( level=logging.DEBUG )
-
-if state == 1:
-    from . import wizard
-else:
-    from . import scanner
 
 # State 0 = Run Network Scan
 if state == 0:

@@ -336,8 +336,7 @@ def set_debug(toggle=True, color=True):
     log._tinytuya_use_color = color
 
     if color:
-        # \x1b[39;2m
-        fmt = "\x1b[0m\x1b[31;1m%(levelname)s:\x1b[22m%(name)s:\x1b[31;1m%(message)s\x1b[0m"
+        fmt = Style.RESET_ALL + Fore.RED + Style.BRIGHT + '%(levelname)s:' + Style.NORMAL + '%(name)s:' + Fore.RED + Style.BRIGHT + '%(message)s' + Style.RESET_ALL
     else:
         fmt = "%(levelname)s:%(name)s:%(message)s"
 
@@ -345,6 +344,7 @@ def set_debug(toggle=True, color=True):
         log._tinytuya_created_formatter = True
         logging.basicConfig(format=fmt)
     else: #elif log._tinytuya_created_formatter:
+        # abuse log.root.handlers to overwrite the default formatter
         fmt = logging.Formatter(fmt)
         log.root.handlers[0].setFormatter(fmt)
 
@@ -488,7 +488,9 @@ def parse_header(data):
         #seqno |= unknown << 32
         total_length = payload_len + header_len + len(SUFFIX_6699_BIN)
     else:
-        raise DecodeError('Header prefix wrong! %08X is not %08X or %08X' % (prefix, PREFIX_55AA_VALUE, PREFIX_6699_VALUE))
+        # Tuya protocol should include a header prefix 0x55AA (3.1, 3.2, 3.3, 3.4) or 0x6699 (3.5) 
+        # (see https://github.com/jasonacox/tinytuya/discussions/260)
+        raise DecodeError('Unknown header prefix %08X - only %08X and %08X are handled' % (prefix, PREFIX_55AA_VALUE, PREFIX_6699_VALUE))
 
     # sanity check. currently the max payload length is somewhere around 300 bytes
     if payload_len > 1000:
@@ -1107,18 +1109,17 @@ class XenonDevice(object):
 
         found_child = False
         if self.children:
-            found_cid = want_cid = None
+            found_cid = None
             if result and 'cid' in result:
                 found_cid = result['cid']
                 for c in self.children:
                     if self.children[c].cid == result['cid']:
-                        want_cid = self.children[c].cid
                         result['device'] = found_child = self.children[c]
                         break
 
             if from_child and from_child is not True and from_child != found_child:
                 # async update from different CID, try again
-                self.log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, want_cid )
+                self.log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, from_child.cid )
                 if self.socketPersistent:
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
@@ -1776,15 +1777,15 @@ def termcolor(color=True):
         bold = subbold = normal = dim = alert = alertdim = cyan = red = yellow = ""
     else:
         # Terminal Color Formatting
-        bold = "\033[0m\033[97m\033[1m"
-        subbold = "\033[0m\033[32m"
-        normal = "\033[97m\033[0m"
-        dim = "\033[0m\033[97m\033[2m"
-        alert = "\033[0m\033[91m\033[1m"
-        alertdim = "\033[0m\033[91m\033[2m"
-        cyan = "\033[0m\033[36m"
-        red = "\033[0m\033[31m"
-        yellow = "\033[0m\033[33m"
+        bold     = Style.RESET_ALL + Fore.LIGHTWHITE_EX + Style.BRIGHT
+        subbold  = Style.RESET_ALL + Fore.GREEN
+        normal   = Style.RESET_ALL
+        dim      = Style.RESET_ALL + Fore.LIGHTWHITE_EX + Style.DIM
+        alert    = Style.RESET_ALL + Fore.LIGHTRED_EX + Style.BRIGHT
+        alertdim = Style.RESET_ALL + Fore.LIGHTRED_EX + Style.DIM
+        cyan     = Style.RESET_ALL + Fore.CYAN
+        red      = Style.RESET_ALL + Fore.RED
+        yellow   = Style.RESET_ALL + Fore.YELLOW
     return bold,subbold,normal,dim,alert,alertdim,cyan,red,yellow
 
 
