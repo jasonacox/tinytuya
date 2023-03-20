@@ -171,7 +171,7 @@ PREFIX_6699_BIN = b"\x00\x00\x66\x99"
 SUFFIX_6699_VALUE = 0x00009966
 SUFFIX_6699_BIN = b"\x00\x00\x99\x66"
 
-NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH ]
+NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH, LAN_EXT_STREAM ]
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
@@ -638,6 +638,7 @@ payload_dict = {
         CONTROL_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
         DP_QUERY_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
         UPDATEDPS: {"command": {"dpId": [18, 19, 20]}},
+        LAN_EXT_STREAM: { "command": { "reqType": "", "data": {} }},
     },
     # Special Case Device with 22 character ID - Some of these devices
     # Require the 0d command as the DP_QUERY status request and the list of
@@ -648,27 +649,51 @@ payload_dict = {
             "command": {"devId": "", "uid": "", "t": ""},
         },
     },
+    # v3.4+ devices do not need devId/gwId/uid
     "v3.4": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
-            "command": {"protocol":5, "t": "int", "data": ""}
+            "command": {"protocol":4, "t": "int", "data": {}}
             },
-        DP_QUERY: { "command_override": DP_QUERY_NEW },
+        CONTROL_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
+        DP_QUERY: {
+            "command_override": DP_QUERY_NEW,
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
+        DP_QUERY_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
     },
+    # v3.5 is just a copy of v3.4
     "v3.5": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
-            "command": {"protocol":5, "t": "int", "data": ""}
+            "command": {"protocol":4, "t": "int", "data": {}}
         },
-        DP_QUERY: { "command_override": DP_QUERY_NEW },
+        CONTROL_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
+        DP_QUERY: {
+            "command_override": DP_QUERY_NEW,
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
+        DP_QUERY_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {}}
+        },
     },
+    # placeholders, not yet needed
+    "gateway": { },
+    "gateway_v3.4": { },
+    "gateway_v3.5": { },
     "zigbee": {
-        CONTROL: {
-            "command": {"t": ""},
-        },
-    }
+        CONTROL: { "command": {"t": "int", "cid": ""} },
+        DP_QUERY: { "command": {"t": "int", "cid": ""} },
+    },
+    "zigbee_v3.4": { },
+    "zigbee_v3.5": { },
 }
-
 
 ########################################################
 #             Core Classes and Functions
@@ -696,9 +721,11 @@ class XenonDevice(object):
         self.id = dev_id
         self.cid = cid if cid else node_id
         self.address = address
+        self.dev_type = dev_type
+        self.dev_type_auto = self.dev_type == 'default'
+        self.last_dev_type = ''
         self.connection_timeout = connection_timeout
         self.retry = True
-        self.dev_type = dev_type
         self.disabledetect = False  # if True do not detect device22
         self.port = TCPPORT  # default - do not expect caller to pass in
         self.socket = None
@@ -716,6 +743,7 @@ class XenonDevice(object):
         self.received_wrong_cid_queue = []
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
+        self.payload_dict = None
 
         if not local_key:
             local_key = ""
@@ -755,12 +783,6 @@ class XenonDevice(object):
             # make sure we call our set_version() and not a subclass since some of
             # them (such as BulbDevice) make connections when called
             XenonDevice.set_version(self, 3.1)
-
-        if self.cid and self.dev_type == 'default':
-            self.dev_type = 'zigbee'
-        elif self.dev_type == 'zigbee' and not self.cid:
-            # this probably won't work, but it might
-            log.debug( 'Zigbee device but no cid/node_id given, using dev_id as the cid!' )
 
     def __del__(self):
         # In case we have a lingering socket connection, close it
@@ -1098,18 +1120,17 @@ class XenonDevice(object):
 
         found_child = False
         if self.children:
-            found_cid = want_cid = None
+            found_cid = None
             if result and 'cid' in result:
                 found_cid = result['cid']
                 for c in self.children:
                     if self.children[c].cid == result['cid']:
-                        want_cid = self.children[c].cid
                         result['device'] = found_child = self.children[c]
                         break
 
             if from_child and from_child is not True and from_child != found_child:
                 # async update from different CID, try again
-                log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, want_cid )
+                log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, from_child.cid )
                 if self.socketPersistent:
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
@@ -1351,8 +1372,9 @@ class XenonDevice(object):
         if child.id in self.children and child != self.children[child.id]:
             log.debug('Replacing existing child %r!', child.id)
         self.children[child.id] = child
-        # disable device22 detection as gateways return "json obj data unvalid" when the gateway is polled without a cid
+        # disable device22 detection as some gateways return "json obj data unvalid" when the gateway is polled without a cid
         self.disabledetect = True
+        self.payload_dict = None
 
     def receive(self):
         """
@@ -1386,6 +1408,12 @@ class XenonDevice(object):
                 data = self._send_receive(payload)
 
         return data
+
+    def subdev_query( self, nowait=False ):
+        """Query for a list of sub-devices and their status"""
+        # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
+        payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
+        return self._send_receive(payload, 0, getresponse=(not nowait))
 
     def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
@@ -1424,18 +1452,15 @@ class XenonDevice(object):
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
     def set_version(self, version): # pylint: disable=W0621
-        last_version = self.version
         self.version = version
+        self.version_str = "v" + str(version)
         self.version_bytes = str(version).encode('latin1')
         self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
+        self.payload_dict = None
         if version == 3.2: # 3.2 behaves like 3.3 with device22
             self.dev_type="device22"
             if self.dps_to_request == {}:
                 self.detect_available_dps()
-        elif version >= 3.4:
-            self.dev_type = "v" + str(version)
-        elif last_version >= 3.4 and self.dev_type[0] == "v":
-            self.dev_type = "default"
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
@@ -1489,7 +1514,7 @@ class XenonDevice(object):
         bcast_data = find_device(dev_id=did)
         return (bcast_data['ip'], bcast_data['version'])
 
-    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None):
+    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
         """
         Generate the payload to send.
 
@@ -1502,19 +1527,63 @@ class XenonDevice(object):
             devId(str, optional): Will be used for devId
             uid(str, optional): Will be used for uid
         """
+        # dicts will get referenced instead of copied if we don't do this
+        def _deepcopy(dict1):
+            result = {}
+            for k in dict1:
+                if isinstance( dict1[k], dict ):
+                    result[k] = _deepcopy( dict1[k] )
+                else:
+                    result[k] = dict1[k]
+            return result
+
+        # dict2 will be merged into dict1
+        # as dict2 is payload_dict['...'] we only need to worry about copying 2 levels deep,
+        #  the command id and "command"/"command_override" keys: i.e. dict2[CMD_ID]["command"]
+        def _merge_payload_dicts(dict1, dict2):
+            for cmd in dict2:
+                if cmd not in dict1:
+                    # make a deep copy so we don't get a reference
+                    dict1[cmd] = _deepcopy( dict2[cmd] )
+                else:
+                    for var in dict2[cmd]:
+                        if not isinstance( dict2[cmd][var], dict ):
+                            # not a dict, safe to copy
+                            dict1[cmd][var] = dict2[cmd][var]
+                        else:
+                            # make a deep copy so we don't get a reference
+                            dict1[cmd][var] = _deepcopy( dict2[cmd][var] )
+
+        # start merging down to the final payload dict
+        # later merges overwrite earlier merges
+        # "default" - ("gateway" if gateway) - ("zigbee" if sub-device) - [version string] - ('gateway_'+[version string] if gateway) -
+        #   'zigbee_'+[version string] if sub-device - [dev_type if not "default"]
+        if not self.payload_dict or self.last_dev_type != self.dev_type:
+            self.payload_dict = {}
+            _merge_payload_dicts( self.payload_dict, payload_dict['default'] )
+            if self.children:
+                _merge_payload_dicts( self.payload_dict, payload_dict['gateway'] )
+            if self.cid:
+                _merge_payload_dicts( self.payload_dict, payload_dict['zigbee'] )
+            if self.version_str in payload_dict:
+                _merge_payload_dicts( self.payload_dict, payload_dict[self.version_str] )
+            if self.children and ('gateway_'+self.version_str) in payload_dict:
+                _merge_payload_dicts( self.payload_dict, payload_dict['gateway_'+self.version_str] )
+            if self.cid and ('zigbee_'+self.version_str) in payload_dict:
+                _merge_payload_dicts( self.payload_dict, payload_dict['zigbee_'+self.version_str] )
+            if self.dev_type != 'default':
+                _merge_payload_dicts( self.payload_dict, payload_dict[self.dev_type] )
+            log.debug( 'final payload_dict for %r (%r/%r): %r', self.id, self.version_str, self.dev_type, self.payload_dict )
+            # save it so we don't have to calculate this again unless something changes
+            self.last_dev_type = self.dev_type
+
         json_data = command_override = None
 
-        if command in payload_dict[self.dev_type]:
-            if 'command' in payload_dict[self.dev_type][command]:
-                json_data = payload_dict[self.dev_type][command]['command']
-            if 'command_override' in payload_dict[self.dev_type][command]:
-                command_override = payload_dict[self.dev_type][command]['command_override']
-
-        if self.dev_type != 'default':
-            if json_data is None and command in payload_dict['default'] and 'command' in payload_dict['default'][command]:
-                json_data = payload_dict['default'][command]['command']
-            if command_override is None and command in payload_dict['default'] and 'command_override' in payload_dict['default'][command]:
-                command_override = payload_dict['default'][command]['command_override']
+        if command in self.payload_dict:
+            if 'command' in self.payload_dict[command]:
+                json_data = self.payload_dict[command]['command']
+            if 'command_override' in self.payload_dict[command]:
+                command_override = self.payload_dict[command]['command_override']
 
         if command_override is None:
             command_override = command
@@ -1526,7 +1595,7 @@ class XenonDevice(object):
         # make sure we don't modify payload_dict
         json_data = json_data.copy()
 
-        if "gwId" in json_data or self.parent:
+        if "gwId" in json_data:
             if gwId is not None:
                 json_data["gwId"] = gwId
             elif self.parent:
@@ -1545,21 +1614,26 @@ class XenonDevice(object):
                 json_data["uid"] = self.id
         if self.cid:
             json_data["cid"] = self.cid
+        #elif "cid" in json_data:
+        #    del json_data['cid']
         if "t" in json_data:
             if json_data['t'] == "int":
                 json_data["t"] = int(time.time())
             else:
                 json_data["t"] = str(int(time.time()))
-
-        if data is not None:
+        if rawData is not None and "data" in json_data:
+            json_data["data"] = rawData
+        elif data is not None:
             if "dpId" in json_data:
                 json_data["dpId"] = data
             elif "data" in json_data:
-                json_data["data"] = {"dps": data}
+                json_data["data"]["dps"] = data
             else:
                 json_data["dps"] = data
         elif self.dev_type == "device22" and command == DP_QUERY:
             json_data["dps"] = self.dps_to_request
+        if reqType and "reqType" in json_data:
+            json_data["reqType"] = reqType
 
         # Create byte buffer from hex data
         if json_data == "":
