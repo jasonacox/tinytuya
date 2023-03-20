@@ -16,6 +16,7 @@
 
  Functions
     json = status()                    # returns json payload
+    subdev_query(nowait)               # query sub-device status (only for gateway devices)
     set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
     set_socketPersistent(False/True)   # False [default] or True
     set_socketNODELAY(False/True)      # False or True [default]
@@ -37,7 +38,7 @@
     set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
     detect_available_dps()             # Return list of DPS available from device
-    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
+    generate_payload(command, data,...)# Generate TuyaMessage payload for command with data
     send(payload)                      # Send payload to device (do not wait for response)
     receive()                          # Receive payload from device
 
