@@ -157,14 +157,20 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         # Filter to only Name, ID and Key, IP and mac-address
         tuyadevices = cloud.filter_devices( json_data['result'] )
 
-    # The device list does not tell us which device is the parent for a sub-device, so we need to try and figure it out
+    # The device list does not (always) tell us which device is the parent for a sub-device, so we need to try and figure it out
     # The only link between parent and child appears to be the local key
+
+    # Result:
     # if 'parent' not in device: device is not a sub-device
     # if 'parent' in device: device is a sub-device
     #     if device['parent'] == '': device is a sub-device with an unknown parent
     #     else: device['parent'] == device_id of parent
     for dev in tuyadevices:
-        if 'sub' in dev and dev['sub']:
+        if 'gateway_id' in dev and dev['gateway_id']:
+            # if the Cloud gave us the parent then just use that
+            dev['parent'] = dev['gateway_id']
+        elif 'sub' in dev and dev['sub']:
+            # no parent from cloud, try to find it via the local key
             if 'parent' not in dev:
                 # Set 'parent' to an empty string in case we can't find it
                 dev['parent'] = ''

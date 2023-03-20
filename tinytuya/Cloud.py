@@ -213,6 +213,9 @@ class Cloud(object):
                 "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
             )
             response = requests.post(url, headers=headers, data=body)
+            log.debug(
+                "POST RESPONSE: code=%d text=%s token=%s", response.status_code, response.text, self.token
+            )
 
         # Check to see if token is expired
         if "token invalid" in response.text:
@@ -307,17 +310,48 @@ class Cloud(object):
             action = 'POST' if post else 'GET'
         return self._tuyaplatform(url, action=action, post=post, ver=None, query=query)
 
-    def _get_all_devices(self):
+    # merge device list 'result2' into 'result1'
+    # if result2 has a device which is not in result1 then it will be added
+    # if result2 has a key which does not exist or is empty in result1 then that key will be copied over
+    def _update_device_list( self, result1, result2 ):
+        for new_device in result2:
+            if 'id' not in new_device or not new_device['id']:
+                continue
+            found = False
+            for existing_device in result1:
+                if 'id' in existing_device and existing_device['id'] == new_device['id']:
+                    found = True
+                    for k in new_device:
+                        if k not in existing_device or not existing_device[k]:
+                            existing_device[k] = new_device[k]
+            if not found:
+                result1.append( new_device )
+
+    def _get_all_devices( self, uid=None, device_ids=None ):
         fetches = 0
         our_result = { 'result': [] }
         last_row_key = None
         has_more = True
         total = 0
-        query = {'size':'50'}
+
+        if uid:
+            # get device list for specified user id
+            query = {'page_size':'75', 'source_type': 'tuyaUser', 'source_id': uid}
+            # API docu: https://developer.tuya.com/en/docs/cloud/dc413408fe?id=Kc09y2ons2i3b
+            uri = '/v1.3/iot-03/devices'
+            if device_ids:
+                if isinstance( device_ids, tuple ) or isinstance( device_ids, list ):
+                    query['device_ids'] = ','.join(device_ids)
+                else:
+                    query['device_ids'] = device_ids
+        else:
+            # get all devices
+            query = {'size':'50'}
+            # API docu: https://developer.tuya.com/en/docs/cloud/fc19523d18?id=Kakr4p8nq5xsc
+            uri = '/v1.0/iot-01/associated-users/devices'
 
         while has_more:
-            # API docu: https://developer.tuya.com/en/docs/cloud/fc19523d18?id=Kakr4p8nq5xsc
-            result = self.cloudrequest( '/v1.0/iot-01/associated-users/devices', query=query )
+            result = self.cloudrequest( uri, query=query )
             fetches += 1
             has_more = False
 
@@ -330,7 +364,12 @@ class Cloud(object):
             # format it the same as before, basically just moves result->devices into result
             for i in result:
                 if i == 'result':
-                    our_result[i] += result[i]['devices']
+                    # by-user-id has the result in 'list' while all-devices has it in 'devices'
+                    if 'list' in result[i] and 'devices' not in result[i]:
+                        our_result[i] += result[i]['list']
+                    elif 'devices' in result[i]:
+                        our_result[i] += result[i]['devices']
+
                     if 'total' in result[i]: total = result[i]['total']
                     if 'last_row_key' in result[i]:
                         has_more = result[i]['has_more']
@@ -364,6 +403,17 @@ class Cloud(object):
             json_data = self._tuyaplatform(uri)
         else:
             json_data = self._get_all_devices()
+            users = {}
+            # loop through all devices and build a list of user IDs
+            for dev in json_data['result']:
+                if 'uid' in dev:
+                    users[dev['uid']] = True
+            if users:
+                # we have at least 1 user id, so fetch the device list again to make sure we have the local key
+                # this also gets us the gateway_id for child devices
+                for uid in users.keys():
+                    json_data2 = self._get_all_devices( uid=uid )
+                    self._update_device_list( json_data['result'], json_data2['result'] )
 
         if verbose:
             return json_data
