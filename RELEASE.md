@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.12.1 - TBD (Unreleased)
+
+* [[tinytuya.Cloud](https://github.com/jasonacox/tinytuya#tuya-cloud-access)] Added cloud `sendcommand()` parameter for URI by @Syrooo in https://github.com/jasonacox/tinytuya/pull/303
+
 ## v1.12.0 - Zigbee Gateway Updates
 
 * PyPI 1.12.0
