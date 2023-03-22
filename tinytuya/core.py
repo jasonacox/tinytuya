@@ -650,7 +650,7 @@ payload_dict = {
             "command": {"devId": "", "uid": "", "t": ""},
         },
     },
-    # v3.4+ devices do not need devId/gwId/uid
+    # v3.3+ devices do not need devId/gwId/uid
     "v3.4": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
@@ -661,10 +661,10 @@ payload_dict = {
         },
         DP_QUERY: {
             "command_override": DP_QUERY_NEW,
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {}
         },
         DP_QUERY_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {}
         },
     },
     # v3.5 is just a copy of v3.4
@@ -678,10 +678,10 @@ payload_dict = {
         },
         DP_QUERY: {
             "command_override": DP_QUERY_NEW,
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {}
         },
         DP_QUERY_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {}
         },
     },
     # placeholders, not yet needed

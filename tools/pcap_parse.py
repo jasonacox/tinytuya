@@ -337,7 +337,6 @@ def process_pcap( pcap_file, args ):
 
             if data:
                 flow_key = '%s_%s' % (dev_str, client_str)
-                #print( flow_key, devmac, from_dev )
 
                 if flow_key in ignore_flows:
                     continue
@@ -351,7 +350,7 @@ def process_pcap( pcap_file, args ):
                 if( flow_key not in flows ):
                     flow_count += 1
                     flows[flow_key] = { 'id': flow_key, 'idx': flow_count }
-                    print( '%s %04d %04d %s' % ( did, flow_count, 0, flow_key ) )
+                    print( '%s %04d %04d %s' % ( ip_devs[devip]['id'], flow_count, 0, flow_key ) )
 
 
                 if not ip_devs[devip]['key']:
