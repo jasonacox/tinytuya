@@ -242,7 +242,7 @@ def process_data( data, from_dev, devinfo, flow, args ):
                         print("Session IV:", iv)
                         flow['session_key'] = tinytuya.AESCipher( devinfo['key'] ).encrypt( flow['session_key'], use_base64=False, pad=False, iv=iv )[12:28]
 
-        if( len(packet.payload) == 0 and args.hide_zero_len ):
+        if( len(packet.payload) == 0 and args.hide_zero_len and packet.cmd == tinytuya.HEART_BEAT ):
             continue
         elif not packet.crc_good:
             print( output_prefix, packet )
@@ -368,7 +368,7 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser(description='Reads PCAP files created by tcpdump and prints the traffic to/from Tuya devices.  Local keys are loaded from devices.json.')
     arg_parser.add_argument('files', metavar='INFILE.pcap', nargs='+', help='Input file(s) to parse', type=argparse.FileType('rb'))
     arg_parser.add_argument('-d', '--devices', help='devices.json file to read local keys from', default='devices.json', metavar='devices.json', type=argparse.FileType('rb'))
-    arg_parser.add_argument('-z', '--hide-zero-len', help='Hide 0-length packets', action='store_true')
+    arg_parser.add_argument('-z', '--hide-zero-len', help='Hide 0-length heartbeat packets', action='store_true')
     arg_parser.add_argument('-s', '--sortable', help='Output data in a way which is sortable', action='store_true')
 
     args = arg_parser.parse_args()
