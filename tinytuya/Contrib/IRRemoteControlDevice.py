@@ -118,6 +118,8 @@ import time
 
 from ..core import Device, log, CONTROL
 
+classlog = log.getChild('IRRemoteControlDevice')
+
 class IRRemoteControlDevice(Device):
     CMD_SEND_KEY_CODE =	"send_ir"  # Command to start sending a key
     DP_SEND_IR        = "201"       # ir_send, send and report (read-write)
@@ -188,17 +190,17 @@ class IRRemoteControlDevice(Device):
             if status and 'dps' in status:
                 # original devices using DPS 201/202
                 if self.DP_SEND_IR in status['dps']:
-                    log.debug( 'Detected control type 1' )
+                    self.log.debug( 'Detected control type 1' )
                     self.control_type = 1
                     break
                 # newer devices using DPS 1-13
                 elif self.DP_MODE in status['dps']:
-                    log.debug( 'Detected control type 2' )
+                    self.log.debug( 'Detected control type 2' )
                     self.control_type = 2
                     break
             status = self._send_receive(None)
         if not self.control_type:
-            log.warning( 'Detect control type failed! control_type= must be set manually' )
+            self.log.warning( 'Detect control type failed! control_type= must be set manually' )
         elif status:
             # try and make sure no data is waiting to be read
             status = self._send_receive(None)
@@ -245,7 +247,7 @@ class IRRemoteControlDevice(Device):
         self.send_command( 'study_exit' )
 
     def receive_button( self, timeout=30 ):
-        log.debug("Receiving button")
+        self.log.debug("Receiving button")
         # Exit study mode in case it's enabled
         self.study_end()
         # Enable study mode
@@ -264,14 +266,14 @@ class IRRemoteControlDevice(Device):
                 if timeo < 1: timeo = 1
                 self.set_socketTimeout(timeo)
 
-                log.debug("Waiting for button...")
+                self.log.debug("Waiting for button...")
                 response = self._send_receive(None)
                 if response == None:
                     # Nothing received
-                    log.debug("Timeout")
+                    self.log.debug("Timeout")
                 elif type(response) != dict or "dps" not in response:
                     # Some unexpected result
-                    log.debug("Unexpected response: %r", response)
+                    self.log.debug("Unexpected response: %r", response)
                     response_code = response # Some error message? Pass it.
                     break
                 elif self.DP_LEARNED_ID in response["dps"]:
@@ -285,7 +287,7 @@ class IRRemoteControlDevice(Device):
                     break
                 else:
                     # Unknown DPS
-                    log.debug("Unknown DPS in response: %r", response)
+                    self.log.debug("Unknown DPS in response: %r", response)
                     response_code = response # Pass it if we do not get a response we like
                     # try again
         finally:
@@ -301,12 +303,12 @@ class IRRemoteControlDevice(Device):
         return response_code
 
     def send_button( self, base64_code ):
-        log.debug( 'Sending Learned Button: ' + base64_code)
+        self.log.debug( 'Sending Learned Button: ' + base64_code)
         self.print_pulses( base64_code )
         return self.send_command( 'send', {'base64_code': base64_code} )
 
     def send_key( self, head, key ):
-        log.debug( 'Sending Key: %r / %r', head, key )
+        self.log.debug( 'Sending Key: %r / %r', head, key )
         return self.send_command( 'send', { 'head': head, 'key': key } )
 
     @staticmethod
@@ -346,8 +348,8 @@ class IRRemoteControlDevice(Device):
         else:
             pulses = IRRemoteControlDevice.base64_to_pulses(base64_code)
         message = "Pulses and gaps (microseconds): " + ' '.join([f'{"p" if i % 2 == 0 else "g"}{pulses[i]}' for i in range(len(pulses))])
-        if log.getEffectiveLevel() <= logging.DEBUG:
-            log.debug( message )
+        if classlog.getEffectiveLevel() <= logging.DEBUG:
+            classlog.debug( message )
         return message
 
     @staticmethod
@@ -496,7 +498,7 @@ class IRRemoteControlDevice(Device):
 
     @staticmethod
     def pulses_to_head_key( pulses, fudge=0.1, freq=38 ):
-        mylog = log.getChild( 'pulses_to_head_key' )
+        mylog = classlog.getChild( 'pulses_to_head_key' )
 
         if len(pulses) < 2:
             return None
@@ -1070,10 +1072,10 @@ class IRRemoteControlDevice(Device):
     def pulses_to_width_encoded( pulses, start_mark=None, start_space=None, pulse_threshold=None, space_threshold=None ):
         ret = [ ]
         if len(pulses) < 68:
-            log.debug('Length of pulses must be a multiple of 68! (2 start + 64 data + 2 trailing)')
+            classlog.debug('Length of pulses must be a multiple of 68! (2 start + 64 data + 2 trailing)')
             return ret
         if (pulse_threshold is None) and (space_threshold is None):
-            log.debug('"pulse_threshold" and/or "space_threshold" must be supplied!')
+            classlog.debug('"pulse_threshold" and/or "space_threshold" must be supplied!')
             return ret
 
         if start_mark is not None:
@@ -1083,11 +1085,11 @@ class IRRemoteControlDevice(Device):
         while( len(pulses) >= 68 ):
             if start_mark is not None:
                 if pulses[0] < (start_mark * 0.75) or pulses[0] > (start_mark * 1.25):
-                    log.debug('The start mark is not the correct length')
+                    classlog.debug('The start mark is not the correct length')
                     return ret
             if start_space is not None:
                 if pulses[1] < (start_space * 0.75) or pulses[1] > (start_space * 1.25):
-                    log.debug('The start space is not the correct length')
+                    classlog.debug('The start space is not the correct length')
                     return ret
 
             pulses = pulses[2:]
@@ -1109,7 +1111,7 @@ class IRRemoteControlDevice(Device):
 
                 if (pulse_match is not None) and (space_match is not None):
                     if pulse_match != space_match:
-                        log.debug('Both "pulse_threshold" and "space_threshold" are supplied and bit %d conflicts with both!' % i)
+                        classlog.debug('Both "pulse_threshold" and "space_threshold" are supplied and bit %d conflicts with both!' % i)
                         return ret
                     res = space_match
                 elif pulse_match is None:

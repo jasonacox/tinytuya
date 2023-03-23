@@ -86,7 +86,7 @@ FSCAN_FINAL_POLL = 100
 
 
 # Logging
-log = logging.getLogger(__name__)
+log = tinytuya.log.getChild('scanner')
 
 # Helper Functions
 def getmyIP():
@@ -524,7 +524,7 @@ class ForceScannedDevice(DeviceDetect):
             if msg.cmd == tinytuya.SESS_KEY_NEG_RESP:
                 if not self.v34_negotiate_sess_key_step_2( msg ):
                     #if self.debug:
-                    print('odata:', odata)
+                    print('ForceScannedDevice: raw packet:', odata)
                     self.timeout()
                     return
                 self.read = False
@@ -840,7 +840,7 @@ class PollDevice(DeviceDetect):
 
             if msg.cmd == tinytuya.SESS_KEY_NEG_RESP:
                 if not self.v34_negotiate_sess_key_step_2( msg ):
-                    print('odata:', odata)
+                    print('PollDevice: raw packet:', odata)
                     self.timeout()
                     return
                 self.read = False

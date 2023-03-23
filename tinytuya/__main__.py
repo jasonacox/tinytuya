@@ -15,6 +15,7 @@
 
 # Modules
 import sys
+
 import tinytuya
 from . import wizard
 from . import scanner
@@ -27,6 +28,7 @@ force_list = []
 last_force = False
 broadcast_listen = True
 assume_yes = False
+debug = False
 
 for i in sys.argv:
     if i==sys.argv[0]:
@@ -52,7 +54,7 @@ for i in sys.argv:
     elif i.lower() == "-yes" or i.lower() == "-y":
         assume_yes = True
     elif i.lower() == "-debug" or i.lower() == "-d":
-        tinytuya.set_debug(True)
+        debug = True
     elif last_force and len(i) > 6:
         this_force = True
         force_list.append( i )
@@ -66,6 +68,8 @@ for i in sys.argv:
 
 if force and len(force_list) > 0:
     force = force_list
+
+tinytuya.set_debug(debug, color)
 
 # State 0 = Run Network Scan
 if state == 0:

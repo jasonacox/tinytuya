@@ -84,6 +84,7 @@ class Cloud(object):
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
         self.use_old_device_list = False
+        self.log = log.getChild('Cloud')
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -205,11 +206,11 @@ class Cloud(object):
         # Send Request to Cloud and Get Response
         if action == 'GET':
             response = requests.get(url, headers=headers)
-            log.debug(
+            self.log.debug(
                 "GET: URL=%s HEADERS=%s response code=%d text=%s token=%s", url, headers, response.status_code, response.text, self.token
             )
         else:
-            log.debug(
+            self.log.debug(
                 "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
             )
             response = requests.post(url, headers=headers, data=body)
@@ -220,12 +221,12 @@ class Cloud(object):
         # Check to see if token is expired
         if "token invalid" in response.text:
             if recursive is True:
-                log.debug("Failed 2nd attempt to renew token - Aborting")
+                self.log.debug("Failed 2nd attempt to renew token - Aborting")
                 return None
-            log.debug("Token Expired - Try to renew")
+            self.log.debug("Token Expired - Try to renew")
             self._gettoken()
             if not self.token:
-                log.debug("Failed to renew token")
+                self.log.debug("Failed to renew token")
                 return None
             else:
                 return self._tuyaplatform(uri, action, post, ver, True)
@@ -261,7 +262,7 @@ class Cloud(object):
             # round it to 2 minutes to try and factor out any processing delays
             self.server_time_offset = round( ((response_dict['t'] / 1000.0) - time.time()) / 120 )
             self.server_time_offset *= 120
-            log.debug("server_time_offset: %r", self.server_time_offset)
+            self.log.debug("server_time_offset: %r", self.server_time_offset)
 
         self.token = response_dict['result']['access_token']
         return self.token
@@ -283,7 +284,7 @@ class Cloud(object):
                 response_dict['code'] = -1
             if 'msg' not in response_dict:
                 response_dict['msg'] = 'Unknown Error'
-            log.debug(
+            self.log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
             return error_json(
@@ -356,10 +357,10 @@ class Cloud(object):
             has_more = False
 
             if type(result) == dict:
-                log.debug( 'Cloud response:' )
-                log.debug( json.dumps( result, indent=2 ) )
+                self.log.debug( 'Cloud response:' )
+                self.log.debug( json.dumps( result, indent=2 ) )
             else:
-                log.debug( 'Cloud response: %r', result )
+                self.log.debug( 'Cloud response: %r', result )
 
             # format it the same as before, basically just moves result->devices into result
             for i in result:
@@ -431,7 +432,7 @@ class Cloud(object):
             # returns id, mac, uuid (and sn if available)
             uri = 'devices/factory-infos?device_ids=%s' % (",".join(devices[:50]))
             result = self._tuyaplatform(uri)
-            log.debug( json.dumps( result, indent=2 ) )
+            self.log.debug( json.dumps( result, indent=2 ) )
             if 'result' in result:
                 for dev in result['result']:
                     if 'id' in dev:
@@ -492,7 +493,7 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri)
 
         if not response_dict['success']:
-            log.debug(
+            self.log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return response_dict
@@ -530,7 +531,7 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri, ver='v1.1')
 
         if not response_dict['success']:
-            log.debug(
+            self.log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return response_dict
@@ -550,7 +551,7 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri,action='POST',post=commands)
 
         if not response_dict['success']:
-            log.debug(
+            self.log.debug(
                 "Error from Tuya Cloud: %r", response_dict['msg'],
             )
         return response_dict
@@ -570,7 +571,7 @@ class Cloud(object):
         response_dict = self._tuyaplatform(uri, ver='v1.0')
 
         if not response_dict['success']:
-            log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
+            self.log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
         return(response_dict["result"]["online"])
 
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):

@@ -215,7 +215,7 @@
 import struct
 import base64
 
-from ..core import Device, log, HEART_BEAT, DP_QUERY, CONTROL
+from ..core import Device, HEART_BEAT, DP_QUERY, CONTROL
 
 class ThermostatDevice(Device):
     """
@@ -379,7 +379,7 @@ class ThermostatDevice(Device):
                     break
 
         if not dps:
-            log.warn( 'Requested key %r not found!' % key )
+            self.log.warn( 'Requested key %r not found!' % key )
             return False
 
         ddata = self.dps_data[dps]
@@ -392,7 +392,7 @@ class ThermostatDevice(Device):
 
         if 'enum' in ddata:
             if val not in ddata['enum']:
-                log.warn( 'Requested value %r for key %r/%r not in enum list %r !  Setting anyway...' % (val, dps, key, ddata['enum']) )
+                self.log.warn( 'Requested value %r for key %r/%r not in enum list %r !  Setting anyway...' % (val, dps, key, ddata['enum']) )
 
         if 'base64' in ddata:
             val = base64.b64encode( val ).decode('ascii')
@@ -455,7 +455,7 @@ class ThermostatDevice(Device):
             for k in self.dps_data:
                 if k in data['dps'] and 'high_resolution' in self.dps_data[k]:
                     self.high_resolution = self.dps_data[k]['high_resolution']
-                    log.info('ThermostatDevice: high-resolution is now %r' % self.high_resolution)
+                    self.log.info('ThermostatDevice: high-resolution is now %r' % self.high_resolution)
                     break
 
         for k in data['dps']:
@@ -491,7 +491,7 @@ class ThermostatDevice(Device):
 
                     if 'enum' in self.dps_data[k]:
                         if val not in self.dps_data[k]['enum']:
-                            log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
+                            self.log.warn( 'Received value %r for key %r/%r not in enum list %r !  Perhaps enum list needs to be updated?' % (val, k, name, self.dps_data[k]['enum']) )
 
                     if 'alt' in self.dps_data[k]:
                         data['changed'].append( self.dps_data[k]['alt'] )
@@ -616,7 +616,8 @@ class ThermostatDevice(Device):
                         coolto -= coolmod
                         if coolmod >= 25: coolto += 50
 
-                    log.info( 'CF is: %r %r %r cool: %r %r %r', cf, self.heatto, heatto / 100, self.coolto, coolto / 100, self.time )
+                    # FIXME: make a logger available here
+                    #log.info( 'CF is: %r %r %r cool: %r %r %r', cf, self.heatto, heatto / 100, self.coolto, coolto / 100, self.time )
 
                     # if self.time is a string then it needs to be in 24-hour HH:MM[:SS] format!
                     if isinstance( self.time, str ):
@@ -773,7 +774,7 @@ class ThermostatDevice(Device):
 
             if self.day_data[day][period][0] > 3 and self.day_data[day][period][1] < 1440:
                 if self.day_data[day][period][0] != 0xFF:
-                    log.warn('Selected participation flag is out of range, setting to %d', period)
+                    self.parent.log.warn('Selected participation flag is out of range, setting to %d', period)
                 self.day_data[day][period][0] = period & 3
 
         def setCF( self, cf ):
@@ -783,7 +784,7 @@ class ThermostatDevice(Device):
             self.have_data = False
 
             if len(data) % 7 != 0:
-                log.warn( 'Schedule data is in an unknown format, ignoring schedule' )
+                self.parent.log.warn( 'Schedule data is in an unknown format, ignoring schedule' )
                 return False
 
             cf = self.parent.getCF( self.cf )
@@ -793,7 +794,7 @@ class ThermostatDevice(Device):
                 day = data[offset:offset+daylen]
 
                 if len(day) % 7 != 0:
-                    log.warn( 'Schedule day data for day %d is in an unknown format, ignoring schedule' % dow )
+                    self.parent.log.warn( 'Schedule day data for day %d is in an unknown format, ignoring schedule' % dow )
                     return False
 
                 periods = len(day) / 7
@@ -804,7 +805,7 @@ class ThermostatDevice(Device):
                     perioddata = day[dayoffset:dayoffset+7]
 
                     if len(perioddata) != 7:
-                        log.warn( 'Schedule period data for period %d on day %d is in an unknown format, ignoring schedule' % (period, dow) )
+                        self.parent.log.warn( 'Schedule period data for period %d on day %d is in an unknown format, ignoring schedule' % (period, dow) )
                         return False
 
                     newdata = struct.unpack( '>BHhh', perioddata )
@@ -1143,6 +1144,6 @@ class ThermostatSensorList(object):
             try:
                 return struct.pack( self.struct_format, *(getattr(self, k) for k in self.keys) )
             except:
-                log.exception( 'Error while attempting to pack %s with %r/%r/%r/%r/%r/%r/%r/%r/%r/%r/%r/%r', self.struct_format, *(getattr(self, k) for k in self.keys) )
+                self.parent_sensorlist.parent_device.log.exception( 'Error while attempting to pack %s with %r/%r/%r/%r/%r/%r/%r/%r/%r/%r/%r/%r', self.struct_format, *(getattr(self, k) for k in self.keys) )
                 raise
 
