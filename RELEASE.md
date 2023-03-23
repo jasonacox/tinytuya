@@ -1,8 +1,10 @@
 # RELEASE NOTES
 
-## v1.12.1 - TBD (Unreleased)
+## v1.12.1 - Cloud & Wizard Updates
 
+* PyPI 1.12.1
 * [[tinytuya.Cloud](https://github.com/jasonacox/tinytuya#tuya-cloud-access)] Added cloud `sendcommand()` parameter for URI by @Syrooo in https://github.com/jasonacox/tinytuya/pull/303
+* Wizard and [tinytuya.Cloud](https://github.com/jasonacox/tinytuya#tuya-cloud-access) - Fetch the device list a 2nd time to make sure we have the local key by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/306 - Updated internal `_get_all_devices()` and  `_update_device_list()`
 
 ## v1.12.0 - Zigbee Gateway Updates
 
