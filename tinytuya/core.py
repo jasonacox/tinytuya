@@ -692,8 +692,16 @@ payload_dict = {
         CONTROL: { "command": {"t": "int", "cid": ""} },
         DP_QUERY: { "command": {"t": "int", "cid": ""} },
     },
-    "zigbee_v3.4": { },
-    "zigbee_v3.5": { },
+    "zigbee_v3.4": {
+        CONTROL_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {"cid":""}}
+        },
+    },
+    "zigbee_v3.5": {
+        CONTROL_NEW: {
+            "command": {"protocol":4, "t": "int", "data": {"cid":""}}
+        },
+    },
 }
 
 ########################################################
