@@ -1426,7 +1426,6 @@ class XenonDevice(object):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
         payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
-        #payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='LAN_HEARTBEAT')
         return self._send_receive(payload, 0, getresponse=(not nowait))
 
     def detect_available_dps(self):
