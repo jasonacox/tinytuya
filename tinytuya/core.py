@@ -693,13 +693,21 @@ payload_dict = {
         DP_QUERY: { "command": {"t": "int", "cid": ""} },
     },
     "zigbee_v3.4": {
+        CONTROL: {
+            "command_override": CONTROL_NEW,
+            "command": {"protocol":5, "t": "int", "data": {"cid":""}}
+        },
         CONTROL_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {"cid":""}}
+            "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
     },
     "zigbee_v3.5": {
+        CONTROL: {
+            "command_override": CONTROL_NEW,
+            "command": {"protocol":5, "t": "int", "data": {"cid":""}}
+        },
         CONTROL_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {"cid":""}}
+            "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
     },
 }
