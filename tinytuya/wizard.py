@@ -48,7 +48,7 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 
-def wizard(color=True, retries=None, forcescan=False, nocloud=False):
+def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=False):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
@@ -94,16 +94,18 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
     if (config['apiKey'] != '' and config['apiSecret'] != '' and
             config['apiRegion'] != ''):
         needconfigs = False
-        apiDeviceID = '<None>' if not config['apiDeviceID'] else config['apiDeviceID']
+        apiDeviceID = '<None>' if ('apiDeviceID' not in config or not config['apiDeviceID']) else config['apiDeviceID']
         print("    " + subbold + "Existing settings:" + dim +
               "\n        API Key=%s \n        Secret=%s\n        DeviceID=%s\n        Region=%s" %
               (config['apiKey'], config['apiSecret'], apiDeviceID,
                config['apiRegion']))
         print('')
-        answer = input(subbold + '    Use existing credentials ' +
-                       normal + '(Y/n): ')
-        if answer[0:1].lower() == 'n':
+        if quicklist:
             needconfigs = True
+        else:
+            answer = input(subbold + '    Use existing credentials ' + normal + '(Y/n): ')
+            if answer[0:1].lower() == 'n':
+                needconfigs = True
 
     if needconfigs:
         # Ask user for config settings
@@ -157,17 +159,28 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
         # Filter to only Name, ID and Key, IP and mac-address
         tuyadevices = cloud.filter_devices( json_data['result'] )
 
-    # The device list does not tell us which device is the parent for a sub-device, so we need to try and figure it out
+    # The device list does not (always) tell us which device is the parent for a sub-device, so we need to try and figure it out
     # The only link between parent and child appears to be the local key
+
+    # Result:
     # if 'parent' not in device: device is not a sub-device
     # if 'parent' in device: device is a sub-device
     #     if device['parent'] == '': device is a sub-device with an unknown parent
     #     else: device['parent'] == device_id of parent
     for dev in tuyadevices:
+        if 'gateway_id' in dev:
+            # if the Cloud gave us the parent then just use that
+            if dev['gateway_id']:
+                dev['parent'] = dev['gateway_id']
+            del dev['gateway_id']
+
         if 'sub' in dev and dev['sub']:
-            if 'parent' not in dev:
-                # Set 'parent' to an empty string in case we can't find it
-                dev['parent'] = ''
+            # no parent from cloud, try to find it via the local key
+            if 'parent' in dev and dev['parent']:
+                continue
+
+            # Set 'parent' to an empty string in case we can't find it
+            dev['parent'] = ''
 
             # Only try to find the parent if the device has a local key
             if 'key' in dev and dev['key']:
@@ -213,7 +226,10 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False):
             print('\n\n' + bold + 'Unable to save raw file' + dim )
 
     # Find out if we should poll all devices
-    answer = input(subbold + '\nPoll local devices? ' + normal + '(Y/n): ')
+    if quicklist:
+        answer = 'n'
+    else:
+        answer = input(subbold + '\nPoll local devices? ' + normal + '(Y/n): ')
     if answer.lower().find('n') < 0:
         result = tinytuya.scanner.poll_and_display( tuyadevices, color=color, scantime=retries, snapshot=True, forcescan=forcescan )
         iplist = {}
