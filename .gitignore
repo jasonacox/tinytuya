@@ -117,11 +117,3 @@ tuya-raw.json
 server/testproxy.sh
 server/uploadtest.sh
 devices.json.off
-
-# packet captures
-*.pcap
-*.pcapng
-
-# backup files
-*.bak
-*~
