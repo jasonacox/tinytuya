@@ -99,15 +99,15 @@ def process_data( data, from_dev, devinfo, flow, args ):
             else:
                 flow['ver'] = 0
 
-        src_str = ('from' if from_dev else 'to') + (' %r' % devinfo['id'])
-        cmd_str = 'cmd:% 3d (%02X) v%.1f' % (header.cmd, header.cmd, flow['ver'])
+        #src_str = ('from' if from_dev else 'to') + (' %r v%.1f' % (devinfo['id'], flow['ver']))
+        cmd_str = 'cmd:% 3d (%02X)' % (header.cmd, header.cmd)
         flow['packet_idx'] += 1
 
         if args.sortable:
             src_str = ('from' if from_dev else 'to  ')
-            output_prefix = '%s %04d %04d ' % ( devinfo['id'], flow['idx'], flow['packet_idx'] )
+            output_prefix = '%s %s/%s/%04d v%.1f' % ( devinfo['id'], args.fnum_str, flow['numstr'], flow['packet_idx'], flow['ver'] )
         else:
-            src_str = '%-29s' % (('from' if from_dev else 'to') + (' %r' % devinfo['id']))
+            src_str = '%-29s' % (('from' if from_dev else 'to  ') + (' %r v%.1f' % (devinfo['id'], flow['ver'])))
             output_prefix = ''
 
         if not flow['ver']:
@@ -269,6 +269,9 @@ def process_pcap( pcap_file, args ):
     flow_count = 0
     ip_devs = {}
 
+    if not args.sortable:
+        print( 'Processing file %d %r' % (args.fnum, pcap_file.name) )
+
     for ts, buf in dpkt.pcap.Reader(pcap_file):
         eth = dpkt.ethernet.Ethernet(buf)
         if not isinstance(eth.data, dpkt.ip.IP):
@@ -289,6 +292,31 @@ def process_pcap( pcap_file, args ):
                 except:
                     traceback.print_exc()
 
+        if( isinstance(eth.ip.data, dpkt.tcp.TCP) ):
+            data = None
+            if( eth.ip.tcp.dport == 6668 ):
+                data = eth.ip.tcp.data
+                devmac = mac_to_str( eth.dst )
+                devip = inet_to_str( eth.ip.dst )
+                dev_str = '%s:%d' % (devip, eth.ip.tcp.dport)
+                client_str = '%s:%d' % (inet_to_str( eth.ip.src ), eth.ip.tcp.sport)
+                from_dev = False
+            elif( eth.ip.tcp.sport == 6668 ):
+                data = eth.ip.tcp.data
+                devmac = mac_to_str( eth.src )
+                devip = inet_to_str( eth.ip.src )
+                dev_str = '%s:%d' % (devip, eth.ip.tcp.sport)
+                client_str = '%s:%d' % (inet_to_str( eth.ip.dst ), eth.ip.tcp.dport)
+                from_dev = True
+
+            if data:
+                flow_key = '%s_%s' % (dev_str, client_str)
+                if( flow_key not in flows ):
+                    flows[flow_key] = { 'id': flow_key, 'idx': flow_count }
+
+    total_flows = len(flows)
+    flownum_format = '%%0%dd' % len(str(args.ftot))
+    flows = {}
     pcap_file.seek(0)
     for ts, buf in dpkt.pcap.Reader(pcap_file):
         eth = dpkt.ethernet.Ethernet(buf)
@@ -329,9 +357,10 @@ def process_pcap( pcap_file, args ):
 
                 if( flow_key not in flows ):
                     flow_count += 1
-                    flows[flow_key] = { 'id': flow_key, 'idx': flow_count }
-                    print( '%s %04d %04d %s' % ( ip_devs[devip]['id'], flow_count, 0, flow_key ) )
-
+                    flownum_str = flownum_format % flow_count
+                    flows[flow_key] = { 'id': flow_key, 'idx': flow_count, 'numstr': flownum_str }
+                    if args.sortable:
+                        print( '%s %s/%s/%04d v    %s %r' % ( ip_devs[devip]['id'], args.fnum_str, flownum_str, 0, flow_key, pcap_file.name ) )
 
                 if not ip_devs[devip]['key']:
                     print( 'Missing device key for %s [MAC %s] [Flow %s], skipping' % (devip, devmac, flow_key) )
@@ -359,7 +388,15 @@ if __name__ == '__main__':
     args = arg_parser.parse_args()
     devices = json.load( args.devices )
 
+    args.fnum = 0
+    args.ftot = len(args.files)
+    #fnum_format = 'file-%%0%dd' % len(str(args.ftot))
+    fnum_format = '%%0%dd' % len(str(args.ftot))
+    args.fnum_str = fnum_format % args.fnum
+
     for pf in args.files:
+        args.fnum += 1
+        args.fnum_str = fnum_format % args.fnum
         process_pcap( pf, args )
 
     
