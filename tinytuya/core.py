@@ -654,10 +654,10 @@ payload_dict = {
     "v3.4": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {"protocol":5, "t": "int", "data": {}}
             },
         CONTROL_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {"protocol":5, "t": "int", "data": {}}
         },
         DP_QUERY: {
             "command_override": DP_QUERY_NEW,
@@ -671,10 +671,10 @@ payload_dict = {
     "v3.5": {
         CONTROL: {
             "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {"protocol":5, "t": "int", "data": {}}
         },
         CONTROL_NEW: {
-            "command": {"protocol":4, "t": "int", "data": {}}
+            "command": {"protocol":5, "t": "int", "data": {}}
         },
         DP_QUERY: {
             "command_override": DP_QUERY_NEW,
