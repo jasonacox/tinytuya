@@ -10,6 +10,7 @@
  Written by uzlonewolf (https://github.com/uzlonewolf) for the TinyTuya project https://github.com/jasonacox/tinytuya
 
  Call with "-h" for options.
+ The "-s" option is designed to make the output display nice when sorted, i.e. `python3 pcap_parse.py ... | sort`
 """
 
 try:
@@ -345,9 +346,10 @@ def process_pcap( pcap_file, args ):
 
 if __name__ == '__main__':
     disc = 'Reads PCAP files created by tcpdump and prints the traffic to/from Tuya devices.  Local keys are loaded from devices.json.'
-    arg_parser = argparse.ArgumentParser( description=disc )
+    epi = 'The "-s" option is designed to make the output display packets in the correct order when sorted, i.e. with `python3 pcap_parse.py ... | sort`'
+    arg_parser = argparse.ArgumentParser( description=disc, epilog=epi )
     arg_parser.add_argument( '-z', '--hide-zero-len', help='Hide 0-length heartbeat packets', action='store_true' )
-    arg_parser.add_argument( '-s', '--sortable', help='Output data in a way which is sortable', action='store_true' )
+    arg_parser.add_argument( '-s', '--sortable', help='Output data in a way which is sortable by device ID', action='store_true' )
     arg_parser.add_argument( '-d', '--devices', help='devices.json file to read local keys from', default='devices.json', metavar='devices.json', type=argparse.FileType('rb'), required=True )
     arg_parser.add_argument( 'files', metavar='INFILE.pcap', nargs='+', help='Input file(s) to parse', type=argparse.FileType('rb') )
 
