@@ -661,7 +661,7 @@ payload_dict = {
         },
         DP_QUERY: {
             "command_override": DP_QUERY_NEW,
-            "command": {}
+            "command": {} #"protocol":4, "t": "int", "data": {}}
         },
         DP_QUERY_NEW: {
             "command": {}
@@ -1124,8 +1124,12 @@ class XenonDevice(object):
             found_cid = None
             if result and 'cid' in result:
                 found_cid = result['cid']
+            elif result and 'data' in result and type(result['data']) == dict and 'cid' in result['data']:
+                found_cid = result['data']['cid']
+
+            if found_cid:
                 for c in self.children:
-                    if self.children[c].cid == result['cid']:
+                    if self.children[c].cid == found_cid:
                         result['device'] = found_child = self.children[c]
                         break
 
@@ -1414,6 +1418,7 @@ class XenonDevice(object):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
         payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
+        #payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='LAN_HEARTBEAT')
         return self._send_receive(payload, 0, getresponse=(not nowait))
 
     def detect_available_dps(self):
@@ -1615,6 +1620,9 @@ class XenonDevice(object):
                 json_data["uid"] = self.id
         if self.cid:
             json_data["cid"] = self.cid
+            if "data" in json_data:
+                json_data["data"]["cid"] = self.cid
+                json_data["data"]["ctype"] = 0
         #elif "cid" in json_data:
         #    del json_data['cid']
         if "t" in json_data:
