@@ -164,6 +164,7 @@ Functions:
   Device Commands:
 
     status()                           # Fetch status of device (json payload)
+    subdev_query(nowait)               # query sub-device list and online status (only for gateway devices)
     detect_available_dps()             # Return list of DPS available from device
     set_status(on, switch=1, nowait)   # Control status of the device to 'on' or 'off' (bool)
                                        # nowait (default False) True to send without waiting for response
@@ -213,7 +214,7 @@ Functions:
         getfunctions(deviceid)
         getproperties(deviceid)
         getdps(deviceid)
-        sendcommand(deviceid, commands)
+        sendcommand(deviceid, commands [, uri])
 	getconnectstatus(deviceid)
 	getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=0, max_fetches=50, start_row_key=None, params={})
 ```
