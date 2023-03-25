@@ -24,9 +24,28 @@ API Functions - The server listens for GET requests on local port 8888:
     /offline                        - List of registered devices that are offline
 ```
 
-Docker: docker pull [jasonacox/tinytuya](https://hub.docker.com/r/jasonacox/tinytuya)
-
 ## Quick Start
+
+This folder contains the `server.py` script that runs a simple python based webserver that makes the TinyTuya API calls.  Make sure the `device.json` file is the same directory where you start the server.
+
+```bash
+# Start Server - use Control-C to Stop
+python3 server.py
+
+# Start Server in Debug Mode
+python3 server.py -d
+```
+
+```
+TinyTuya (Server) [1.10.0t4]
+
+[Loaded devices.json - 39 devices]
+
+Starting threads...
+ - API and UI Endpoint on http://localhost:8888
+```
+
+## Docker Container
 
 1. Run the Server as a Docker Container listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
 
@@ -75,24 +94,6 @@ docker stop tinytuya
 
 # Start the server
 docker start tinytuya
-```
-
-## Run without Docker
-
-This folder contains the `server.py` script that runs a simple python based webserver that makes the TinyTuya API calls.  Make sure the `device.json` file is the same directory where you start the server.
-
-```bash
-python3 server.py
-```
-
-```
-TinyTuya (Server) [1.5.0]
-
-[Loaded devices.json - 34 devices]
-
-Starting threads...
- - API and UI Endpoint on http://localhost:8888
- - Discovered Devices: 34  
 ```
 
 ## Control Panel
