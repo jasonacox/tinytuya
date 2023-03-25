@@ -55,6 +55,7 @@ Starting threads...
     -p 8888:8888 \
     -p 6666:6666/udp \
     -p 6667:6667/udp \
+    -e DEBUG='no' \
     --mount type=bind,source="$(pwd)"/devices.json,target=/app/devices.json \
     --mount type=bind,source="$(pwd)"/tinytuya.json,target=/app/tinytuya.json \
     --name tinytuya \

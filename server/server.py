@@ -59,7 +59,7 @@ except:
 
 import tinytuya
 
-BUILD = "t4"
+BUILD = "t5"
 
 # Defaults
 APIPORT = 8888
@@ -78,13 +78,16 @@ RETRYTIME = 30
 RETRYCOUNT = 5
 SAVEDEVICEFILE = True
 
-# Static Assets
-web_root = os.path.join(os.path.dirname(__file__), "web")
+# Check for Environmental Overrides
+debugmode = os.getenv("DEBUG", "no")
+if debugmode.lower() == "yes":
+    DEBUGMODE = True
 
 # Logging
 log = logging.getLogger(__name__)
 if len(sys.argv) > 1 and sys.argv[1].startswith("-d"):
     DEBUGMODE = True
+if DEBUGMODE:
     logging.basicConfig(
         format="\x1b[31;1m%(levelname)s [%(asctime)s]:%(message)s\x1b[0m", level=logging.DEBUG, 
         datefmt='%d/%b/%y %H:%M:%S'
@@ -92,6 +95,9 @@ if len(sys.argv) > 1 and sys.argv[1].startswith("-d"):
     log.setLevel(logging.DEBUG)
     log.debug("TinyTuya Server [%s]", BUILD)
     tinytuya.set_debug(True)
+
+# Static Assets
+web_root = os.path.join(os.path.dirname(__file__), "web")
 
 # Global Stats
 serverstats = {}
