@@ -92,4 +92,13 @@ TinyTuya (Server) [1.5.0]
 
 Starting threads...
  - API and UI Endpoint on http://localhost:8888
+ - Discovered Devices: 34  
 ```
+
+## Control Panel
+
+The UI at http://localhost:8888 allows you to view and control the devices.
+
+![image](https://user-images.githubusercontent.com/836718/227736045-adb6e359-c0c1-44b9-b9ad-7e978f6b7b84.png)
+
+![image](https://user-images.githubusercontent.com/836718/227736057-e5392c13-554f-457e-9082-43c4d41a98ed.png)
