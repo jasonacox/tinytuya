@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <title>TinyTuya API Server - Device Details</title>
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <link rel="stylesheet" href="tinytuya.css">
 </head>
 
 <body>
@@ -102,14 +103,14 @@
             var key = data.key;
             var product = data.productKey;
             var mac = data.mac;
-            var output = 
-                "Name: " + name + "<br>" +
-                "Device ID: " + id + "<br>" +
-                "IP: " + ip + "<br>" +
-                "MAC: " + mac + "<br>" +
-                "Version: " + version + "<br>" +
-                "Key: " + key + "<br>" +
-                "Product: " + product + "<br>";
+            var output = "<table>" +
+                "<tr><td>Name</td><td><div class='value'>" + name + "</div></td><tr>" +
+                "<tr><td>Device ID</td><td><div class='value'>" + id + "</div></td><tr>" +
+                "<tr><td>IP</td><td><div class='value'>" + ip + "</div></td><tr>" +
+                "<tr><td>MAC</td><td><div class='value'>" + mac + "</div></td><tr>" +
+                "<tr><td>Version</td><td><div class='value'>" + version + "</div></td><tr>" +
+                "<tr><td>Key</td><td><div class='value'>" + key + "</div></td><tr>" +
+                "<tr><td>Product</td><td><div class='value'>" + product + "</div></td><tr>";
             $(".device").html(output);
         });
 

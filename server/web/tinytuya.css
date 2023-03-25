@@ -1,0 +1,68 @@
+
+body {
+    font-family: sans-serif;
+    font-size: small;
+}
+.title {
+    font-size: large;
+    font-weight: bold;
+}
+.address, .onlinetext {
+    color: green;
+}
+.id {
+    color: darkblue;
+}
+.offlinetext {
+    color: red;
+}
+.version {
+    color: rgb(200, 200, 3);
+}
+table {
+    border-collapse: collapse;
+}
+tr {
+    border: 1px solid black;
+}
+td, th {
+    padding-left: 5px;
+    padding-right: 5px;
+}
+tbody tr:nth-child(even) {
+    background-color: #eeeeee;
+}
+thead {
+    background-color: gray;
+    color: white;
+    text-align: left;
+    padding: auto;
+}
+a:link, a:visited {
+    color: black;
+    text-decoration: underline;
+}
+a:hover, a:active {
+    background-color: black;
+    color: white;
+}
+.lcolumn {
+    flex: 60%;
+    padding: 5px;
+}
+.rcolumn {
+    flex: 40%;
+    padding: 5px;
+}
+.row {
+    display: flex;
+  }
+/* Clear floats after the columns */
+.row:after {
+    content: "";
+    display: table;
+    clear: both;
+}
+.value {
+    color: rgb(73, 73, 73);
+}
