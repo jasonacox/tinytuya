@@ -38,6 +38,7 @@ import requests
 import resource
 import sys
 import os
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
 
@@ -71,6 +72,7 @@ TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
 UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
 UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
+UDPPORTAPP = tinytuya.UDPPORTAPP    # Tuya App
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 RETRYTIME = 30
 RETRYCOUNT = 5
@@ -81,6 +83,15 @@ web_root = os.path.join(os.path.dirname(__file__), "web")
 
 # Logging
 log = logging.getLogger(__name__)
+if len(sys.argv) > 1 and sys.argv[1].startswith("-d"):
+    DEBUGMODE = True
+    logging.basicConfig(
+        format="\x1b[31;1m%(levelname)s [%(asctime)s]:%(message)s\x1b[0m", level=logging.DEBUG, 
+        datefmt='%d/%b/%y %H:%M:%S'
+    )
+    log.setLevel(logging.DEBUG)
+    log.debug("TinyTuya Server [%s]", BUILD)
+    tinytuya.set_debug(True)
 
 # Global Stats
 serverstats = {}
@@ -120,11 +131,6 @@ def tuyaLookup(deviceid):
 def appenddevice(newdevice, devices):
     if newdevice["id"] in devices:
         return True
-    """
-    for i in devices:
-        if i['ip'] == newdevice['ip']:
-                return True
-    """
     devices[newdevice["id"]] = newdevice
     return False
 
@@ -219,9 +225,6 @@ def tuyaLoadConfig():
 tuyadevices = tuyaLoadJson()
 cloudconfig = tuyaLoadConfig()
 
-# Debug Mode
-tinytuya.set_debug(DEBUGMODE)
-
 def tuyaCloudRefresh():
     log.debug("Calling Cloud Refresh")
     if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
@@ -243,6 +246,7 @@ def tuyalisten(port):
     Thread to listen for Tuya devices UDP broadcast on port 
     """
     log.debug("Started tuyalisten thread on %d", port)
+    print(" - tuyalisten %d Running" % port)
 
     # Enable UDP listening broadcasting mode on UDP port 
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -291,7 +295,8 @@ def tuyalisten(port):
                 # If fetching the key failed, save it to retry later
                 retrydevices[result["id"]] = RETRYCOUNT
                 newdevices.append(result["id"])
-    print('tuyalisten', port, 'Exit')
+    print(' - tuyalisten', port, 'Exit')
+    log.debug("tuyalisten server thread on %d stopped", port)
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
@@ -360,14 +365,17 @@ class handler(BaseHTTPRequestHandler):
                 # ['', 'set', 'deviceid', 'key', 'value']
                 (ignore1, ignore2, id, dpsKey, dpsValue) = self.path.split('/')
                 # convert to correct types
+                dpsValue = urllib.parse.unquote(dpsValue)
                 if dpsValue.lower() == "true":
                     dpsValue = True
-                if dpsValue.lower() == "false":
+                elif dpsValue.lower() == "false":
                     dpsValue = False
-                if dpsValue.isnumeric():
+                elif dpsValue.isnumeric():
                     dpsValue = int(dpsValue)
+                log.debug("Set dpsKey: %s dpsValue: %s" % (dpsKey,dpsValue))
             except:
                 message = json.dumps({"Error": "Syntax error in set command URL.", "url": self.path})
+                log.debug("Syntax error in set command URL: %s" % self.path)
             if(id in deviceslist):
                 d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                 d.set_version(float(deviceslist[id]["version"]))
@@ -375,6 +383,7 @@ class handler(BaseHTTPRequestHandler):
                 d.close()
             else:
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
+                log.debug("Device ID not found: %s" % id)
         elif self.path.startswith('/device/'):
             id = self.path.split('/device/')[1]
             if(id in deviceslist):
@@ -390,6 +399,7 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps(jout)
                 else:
                     message = json.dumps({"Error": "Device ID not found.", "id": id})
+                    log.debug("Device ID not found: %s" % id)
         elif self.path.startswith('/turnoff/'):
             id = self.path.split('/turnoff/')[1]
             sw = 1
@@ -399,6 +409,7 @@ class handler(BaseHTTPRequestHandler):
                 except:
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in turnoff command.", "url": self.path})
+                    log.debug("Syntax error in in turnoff command: %s" % self.path)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -407,8 +418,10 @@ class handler(BaseHTTPRequestHandler):
                     d.close()
                 except:
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
+                    log.debug("Error sending command to device: %s" % id)
             elif id != "":
-                message = json.dumps({"Error": "Device ID not found.", "id": id})            
+                message = json.dumps({"Error": "Device ID not found.", "id": id})      
+                log.debug("Device ID not found: %s" % id)      
         elif self.path.startswith('/delayoff/'):
             id = self.path.split('/delayoff/')[1]
             sw = 1
@@ -419,6 +432,7 @@ class handler(BaseHTTPRequestHandler):
                 except:
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in delayoff command.", "url": self.path})
+                    log.debug("Syntax error in in delayoff command: %s" % self.path)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -430,8 +444,10 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"OK": "Turning of in %s seconds." % (delay), "url": self.path})
                 except:
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
+                    log.debug("Error sending command to device %s" % id)
             elif id != "":
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
+                log.debug("Device ID not found: %s" % id)
         elif self.path.startswith('/turnon/'):
             id = self.path.split('/turnon/')[1]
             sw = 1
@@ -441,6 +457,7 @@ class handler(BaseHTTPRequestHandler):
                 except:
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in turnon command.", "url": self.path})
+                    log.debug("Syntax error in turnon command URL: %s" % self.path)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -449,8 +466,10 @@ class handler(BaseHTTPRequestHandler):
                     d.close()
                 except:
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
+                    log.debug("Error sending command to device %s" % id)
             elif id != "":
-                message = json.dumps({"Error": "Device ID not found.", "id": id})             
+                message = json.dumps({"Error": "Device ID not found.", "id": id})     
+                log.debug("Device ID not found: %s" % id)        
         elif self.path == '/numdevices':
             jout = {}
             jout["found"] = len(deviceslist)
@@ -466,8 +485,10 @@ class handler(BaseHTTPRequestHandler):
                     d.close()
                 except:
                     message = json.dumps({"Error": "Error polling device.", "id": id})
+                    log.debug("Error polling device %s" % id)
             else:
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
+                log.debug("Device ID not found: %s" % id)  
         elif self.path == '/sync':
             message = json.dumps(tuyaCloudRefresh())
             retrytimer = time.time() + RETRYTIME
@@ -477,6 +498,7 @@ class handler(BaseHTTPRequestHandler):
             cfg = cfgstr.split('/')
             if len(cfg) != 4:
                 message = json.dumps({"Error": "Syntax error in cloud config command URL."})
+                log.debug("Syntax error in cloud config command URL %s" % self.path)
             else:
                 cloudconfig['apiKey'] = cfg[0]
                 cloudconfig['apiSecret'] = cfg[1]
@@ -512,7 +534,8 @@ def api(port):
     """
     API Server - Thread to listen for commands on port 
     """
-    log.debug("Started API server thread on %d", port)
+    log.debug("Started api server thread on %d", port)
+    print(" - api %d Running" % port)
 
     with ThreadingHTTPServer(('', port), handler) as server:
         try:
@@ -521,13 +544,15 @@ def api(port):
                 server.handle_request()
         except:
             print(' CANCEL \n')
-    print('api Exit')
+    print(' - api', port, 'Exit')
+    log.debug("API server thread on %d stopped", port)
 
 # MAIN Thread
 if __name__ == "__main__":
     # creating thread
     tuyaUDP = threading.Thread(target=tuyalisten, args=(UDPPORT,))
     tuyaUDPs = threading.Thread(target=tuyalisten, args=(UDPPORTS,))
+    tuyaUDP7 = threading.Thread(target=tuyalisten, args=(UDPPORTAPP,))
     apiServer = threading.Thread(target=api, args=(APIPORT,))
     
     print(
@@ -541,15 +566,18 @@ if __name__ == "__main__":
 
     # start threads
     print("Starting threads...")
+    log.debug("Starting threads")
     tuyaUDP.start()
     tuyaUDPs.start()
+    tuyaUDP7.start()
     apiServer.start()
 
-    print(" - API and UI Endpoint on http://localhost:%d" % APIPORT)
+    print(" * API and UI Endpoint on http://localhost:%d" % APIPORT)
+    log.debug("Server URL http://localhost:%d" % APIPORT)
     
     try:
         while(True):
-            print("\r - Discovered Devices: %d   " % len(deviceslist), end='')
+            log.debug("Discovered Devices: %d   " % len(deviceslist))
 
             if retrytimer <= time.time() or '*' in retrydevices:
                 if len(retrydevices) > 0:
@@ -589,9 +617,6 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, SystemExit):
         running = False
         # Close down API thread
+        print("Stopping threads...")
+        log.debug("Stoppping threads")
         requests.get('http://localhost:%d/stop' % APIPORT)
-        print("End")
-
-    # both threads completely executed
-    print(json.dumps(deviceslist, indent=4, sort_keys=True))
-    print("Done!")
