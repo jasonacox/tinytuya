@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.12.2 - Gateway/Sub-device Update
+
+* PyPI 1.12.2
+* Gateway/sub-device updates, payload_dict reworked, and `subdev_query()` added by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/308
+* Add [tools/pcap_parse.py](https://github.com/jasonacox/tinytuya/tree/master/tools) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/311
+
 ## v1.12.1 - Cloud & Wizard Updates
 
 * PyPI 1.12.1
