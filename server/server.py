@@ -59,7 +59,7 @@ except:
 
 import tinytuya
 
-BUILD = "t5"
+BUILD = "t6"
 
 # Defaults
 APIPORT = 8888
@@ -376,6 +376,8 @@ class handler(BaseHTTPRequestHandler):
                     dpsValue = True
                 elif dpsValue.lower() == "false":
                     dpsValue = False
+                elif dpsValue.startswith('"'):
+                    dpsValue = dpsValue.split('"')[1]
                 elif dpsValue.isnumeric():
                     dpsValue = int(dpsValue)
                 log.debug("Set dpsKey: %s dpsValue: %s" % (dpsKey,dpsValue))
