@@ -1,0 +1,21 @@
+{
+  "garden_scene_front": {
+    "101": [
+      {
+        "num_changed_dps_limit": 1,
+        "set": [
+          [
+            "garden_flouro_01",
+            "multi",
+            {
+              "1": false,
+              "2": true,
+              "3": true,
+              "4": false
+            }
+          ]
+	]
+      }
+    ]
+  }
+}

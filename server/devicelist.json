@@ -1,0 +1,8 @@
+[
+    { "name": "kitchen_track_10", "id": "eb...", "key": "...", "object": "BulbDevice", "dev_type": "default" },
+    { "name": "kitchen_cab_lts",  "id": "83...", "key": "...", "object": "OutletDevice" },
+
+    { "name": "garden_scene",     "id": "37...", "key": "...", "object": "Device" },
+    { "name": "garden_flouro_01", "id": "eb...", "key": "..." },
+    { "name": "garden_flouro_02", "id": "eb...", "key": "..." },
+]
