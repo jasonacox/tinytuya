@@ -1,0 +1,179 @@
+<html>
+<head>
+<title>Test Websocket</title>
+<style type="text/css">
+A:link {text-decoration: none}
+A:visited {text-decoration: none}
+A:active {text-decoration: none}
+A:hover {text-decoration: underline overline; color: red;}
+
+#gt-div
+{
+	border-style: solid;
+	border-width: 10px;
+	border-color: #FFFFFF;
+	border-radius: 25px;
+	background: #000000;
+	padding: 20px;
+	text-align: center;
+}
+
+.gt-time
+{
+	font-size: 22em;
+}
+
+.gt-tot-time
+{
+	font-size: 5em;
+}
+
+.gt-status
+{
+	margin-right: 20px;
+	margin-left: 20px;
+	margin-top: 30px;
+	font-size: 5em;
+}
+
+.gt-left
+{
+	float: left;
+}
+
+.gt-right
+{
+	float: right;
+}
+
+</style>
+<!-- script type="text/javascript" language="JavaScript" src="jquery-2.1.3.min.js"></script -->
+<!-- script type="text/javascript" language="JavaScript" src="jquery-ui.js"></script -->
+<script type="text/javascript">
+  var gwsData = { "host": "localhost", "port": 9997, "token": "" };
+  var gwsSocket = null;
+  var gwsExtraData = { };
+  var gwsNeedClear = true;
+  var gwsConnectTimeout = 5505;
+  var gwsGUID = (Math.random() * 10000).toString(16);
+  var gwsCmdFunctions = { };
+  var gwsOpenFunctions = [ ];
+  var gwsCloseFunctions = [ ];
+  var gwsSendBuf = [ ];
+  var gwsLoggingEnabled = true;
+  var gwsLogCount = 0;
+
+  function connect_gws_socket()
+  {
+      console.log( 'Attempting GWS Connect...' );
+
+      if( gwsSocket != null )
+	  return; // already loaded!
+
+      if( gwsData == null )
+	  return;
+
+      gwsLoggingEnabled = true;
+      gwsLogCount = 0
+      const ws_url = "wss://" + gwsData.host + ":" + gwsData.port + "/";
+      console.log( 'GWS Connect: ' + ws_url );
+
+      try {
+	  gwsSocket = new WebSocket( ws_url );
+      } catch(e) {
+	  if(e.name !== "SecurityError") {
+	      console.log( 'GWS Connect: other error!' );
+	      //throw e;
+	      console.log( e );
+	      gwsSocket = null;
+	      setTimeout( connect_gws, gwsConnectTimeout );
+	  }
+
+	  console.log( 'GWS Connect: SecurityError! Cannot connect!' );
+	  return false;
+      }
+
+      //gwsSocket.binaryType = "arraybuffer";
+
+      gwsSocket.onopen = function( e ) {
+	  console.log("GWS Socket opened");
+	  gwsNeedClear = true;
+	  gwsSocket.send('{"cmd": ""}');
+	  gwsConnectTimeout = 1505; // reduce reconnect time if we connected but then closed
+
+	  for (var i = 0; i < gwsOpenFunctions.length; i++)
+	  {
+	      gwsOpenFunctions[i]();
+	  }
+
+          var j = gwsSendBuf.length;
+          for( var i = 0; i < j; i++ )
+          {
+              console.log( 'WebSock now open, sending buffered data:' );
+              console.log( gwsSendBuf[i] );
+              gws_send( gwsSendBuf[i][0], gwsSendBuf[i][1] );
+          }
+
+          gwsSendBuf = [ ];
+      }
+
+      gwsSocket.onmessage = function( e ) {
+	  console.warn( typeof e.data );
+	  console.warn( e );
+	  if (typeof e.data == "string")
+	  {
+	      if( gwsLoggingEnabled )
+	      {
+		  console.log( "GWS got: " + e.data );
+		  if( gwsLogCount++ >= 1000 )
+		  {
+		      console.warn( 'GWS log limit, stopping logging' );
+		      gwsLoggingEnabled = false;
+		  }
+	      }
+
+	      document.getElementById( 'main-div' ).innerHTML += e.data + '<br />';
+	  }
+      }
+
+      gwsSocket.onclose = function( e ) {
+	  console.log("GWS Socket closed!");
+	  gwsSocket = null;
+	  setTimeout( connect_gws, gwsConnectTimeout );
+
+	  for (var i = 0; i < gwsCloseFunctions.length; i++)
+	  {
+	      gwsCloseFunctions[i]();
+	  }
+      }
+
+      gwsSocket.onerror = function( e ) {
+	  console.log("GWS Socket error!");
+
+	  try
+	  {
+	      gwsSocket.close();
+	  }
+	  catch( f )
+	  {
+
+	  }
+
+	  gwsSocket = null;
+	  setTimeout( connect_gws, gwsConnectTimeout );
+      }
+
+  }
+
+  //$( document ).ready( connect_gws_socket )
+  if (document.readyState !== 'loading')
+      connect_gws_socket();
+  else
+      document.addEventListener('DOMContentLoaded', connect_gws_socket);
+
+</script>
+</head>
+<body bgcolor="#000000" style="margin-top: 0px;">
+<div id="main-div"></div>
+</body>
+</html>
