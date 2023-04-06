@@ -7,9 +7,12 @@ import time
 import json
 import socket
 import select
+import ssl
 from datetime import datetime
 from hashlib import md5,sha256
 from collections import namedtuple
+
+import SimpleWebSocketServer.SimpleWebSocketServer
 
 #logging.basicConfig( encoding='utf-8', level=logging.DEBUG )
 logging.basicConfig( encoding='utf-8', level=logging.INFO )
@@ -22,8 +25,12 @@ import tinytuya.scanner
 heartbeat_time = 10
 refresh_counter = 6
 
-bind_host = '::1'
+bind_host = '::'
 bind_port = 9997
+
+ssl_cert = '/etc/letsencrypt/live/this_site/fullchain.pem'
+ssl_key = '/etc/letsencrypt/live/this_site/privkey.pem'
+ssl_key_passwd = None
 
 tuyadevs = {}
 #tuyadevs['dev1'] = tinytuya.Device( 'eb...v', '172.20.10.', '...key...', version=3.4 )
@@ -72,6 +79,29 @@ else:
 
 SetMessage = namedtuple( 'SetMessage', 'device dps value')
 
+if ssl_cert and ssl_key:
+    try:
+        # python 3.6+ only
+        ssl_ctx = ssl.SSLContext( ssl.PROTOCOL_TLS_SERVER )
+    except:
+        ssl_ctx = ssl.SSLContext()
+
+    ssl_ctx.options |= ssl.OP_SINGLE_DH_USE
+    ssl_ctx.options |= ssl.OP_SINGLE_ECDH_USE
+
+    # minimum_version / maximum_version only available in python 3.7+
+    try:
+        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    except:
+        ssl_ctx.options |= ssl.OP_NO_SSLv2
+        ssl_ctx.options |= ssl.OP_NO_SSLv3
+        ssl_ctx.options |= ssl.OP_NO_TLSv1
+        ssl_ctx.options |= ssl.OP_NO_TLSv1_1
+
+    ssl_ctx.load_cert_chain(ssl_cert, keyfile=ssl_key, password=ssl_key_passwd)
+    ##ssl_ctx.load_verify_locations(cafile='/etc/pki/tls/certs/.ca.crt') #, capath=None, cadata=None)
+    #ss = ssl_ctx.wrap_socket(s, server_side=True, do_handshake_on_connect=True, suppress_ragged_eofs=True) #, server_hostname='aacs.zonehead.com')
+
 
 srv = socket.socket( socket.AF_INET6, socket.SOCK_STREAM )
 #srv.setblocking( False )
@@ -79,12 +109,126 @@ srv.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1 )
 srv.bind( (bind_host, bind_port) )
 srv.listen()
 
+CLIENT_PROTO_NONE      = 0
+CLIENT_PROTO_TCP       = 1
+CLIENT_PROTO_WEBSOCKET = 2
+CLIENT_PROTO_UNKNOWN   = 3
+
+Websocket_CLOSE = 0x8
+
 class clientobj(object):
     def __init__( self, sock, addr ):
         self.sock = sock
         self.addr = addr
         self.buf = b''
         self.want_status = True
+        self.is_ssl = False
+        self.need_ssl_detect = True
+        self.need_ssl_handshake = True
+        self.proto = 0
+        self.time_connected = time.time()
+
+    def send_message( self, msg ):
+        if not self.proto:
+            log.debug( 'No client proto, not sending msg' )
+        elif self.proto == CLIENT_PROTO_TCP or self.proto == CLIENT_PROTO_UNKNOWN:
+            # raw or JSON
+            try:
+                self.sock.sendall( msg + b"\n" )
+            except:
+                log.exception( 'Client send msg failed! addr:%r msg:%r', self.addr, msg )
+        elif self.proto == CLIENT_PROTO_WEBSOCKET:
+            try:
+                if type(msg) == bytes:
+                    msg = msg.decode()
+            except:
+                pass
+
+            if self.websocket.closed:
+                return
+            elif self.websocket.opened:
+                self.websocket.sendMessage( msg )
+                self.websocket.trySend()
+            else:
+                self.websocket.send_queue.append( msg )
+        else:
+            log.debug( 'Unknown client proto %r, not sending msg', self.proto )
+
+    def send_all_device_status( self, tuyadevs ):
+        for dname in tuyadevs:
+            self.send_message( current_status( tuyadevs[dname] ) )
+
+def ssl_peekable_recv( self, want_bytes, flags=0 ):
+    print(self)
+    print(want_bytes, flags)
+    if flags == socket.MSG_PEEK:
+        if want_bytes > len(self._ssl_peekable_recv_buf):
+            self._ssl_peekable_recv_buf += self._orig_recv( (want_bytes - len(self._ssl_peekable_recv_buf)), 0 )
+        return self._ssl_peekable_recv_buf
+    elif flags:
+        return self._orig_recv( want_bytes, flags )
+
+    if want_bytes < len( self._ssl_peekable_recv_buf ):
+        ret = self._ssl_peekable_recv_buf[:want_bytes]
+        self._ssl_peekable_recv_buf = self._ssl_peekable_recv_buf[want_bytes:]
+        return ret
+
+    ret = self._ssl_peekable_recv_buf
+    self._ssl_peekable_recv_buf = b''
+    self.ssl_peekable_recv_finished	= True
+
+    if want_bytes == len( self._ssl_peekable_recv_buf ):
+        return ret
+
+    return ret + self._orig_recv( (want_bytes - len(ret)), flags )
+
+class ClientWebSocket( SimpleWebSocketServer.SimpleWebSocketServer.WebSocket ):
+    def __init__( self, server, sock, address ):
+        super( ClientWebSocket, self ).__init__( server, sock, address )
+        self.messages = []
+        self.send_queue = []
+        self.opened = False
+        self.closed = False
+
+    def handleMessage(self):
+        log.debug( 'Websocket got message: %r', self.data )
+        self.messages.append( self.data )
+
+    def handleConnected(self):
+        self.opened = True
+        try:
+            log.debug( 'Websocket connected, addr:%r, path:%r', self.address, self.request.path )
+        except:
+            log.debug( 'Websocket connected, addr:%r, no path', self.address )
+
+        if self.send_queue:
+            for msg in self.send_queue:
+                self.sendMessage( msg )
+            self.send_queue = []
+
+    def handleClose(self):
+        log.debug( 'Websocket closed, addr:%r', self.address )
+        self.closed = True
+        try:
+            if self.client:
+                self.client.close()
+        except:
+            pass
+
+    def trySend(self):
+        if self.closed:
+            return
+
+        if self.sendq:
+            opcode, payload = self.sendq.popleft()
+            try:
+                remaining = self._sendBuffer( payload )
+                if remaining is not None:
+                    self.sendq.appendleft( (opcode, remaining) )
+                elif opcode == Websocket_CLOSE:
+                    self.handleClose()
+            except:
+                self.handleClose()
 
 def socket_opened( tdev ):
     #log.info('opened: %r', tdev.socket)
@@ -97,7 +241,7 @@ def socket_opened( tdev ):
     else:
         log.warning( 'socket_opened(): socket not open! device %r', tdev.name )
         tdev.readable = False
-        tdev.errmsg = json.dumps( {'device':tdev.name, "error": "Connect to device failed"} ).encode( 'utf8' ) + b"\n"
+        tdev.errmsg = json.dumps( {'device':tdev.name, "error": "Connect to device failed"} ).encode( 'utf8' )
         tdev.reconnect_delay = 3
     tdev.writeable = False
     tdev.buf = b''
@@ -109,6 +253,14 @@ def socket_opened( tdev ):
     tdev.start_time = time.time()
     tdev.last_send_time = time.time()
     tdev.last_msg_time = time.time()
+
+def current_status( tdev ):
+    if tdev.socket and tdev.readable:
+        return json.dumps( {'device':tdev.name, 'dps': tdev.state} ).encode( 'utf8' )
+    else:
+        if not tdev.errmsg:
+            tdev.errmsg = json.dumps( {'device':tdev.name, "error": "No connection to device"} ).encode( 'utf8' )
+        return tdev.errmsg
 
 def request_status( tdev ):
     if tdev.socket and tdev.readable:
@@ -125,9 +277,16 @@ def request_status_from_all( tuyadevs, sock=None ):
             tuyadevs[dname].need_status = True
         else:
             if not tuyadevs[dname].errmsg:
-                tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' ) + b"\n"
+                tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' )
             if sock:
-                sock.sendall( tuyadevs[dname].errmsg )
+                try:
+                    sock.sendall( tuyadevs[dname].errmsg )
+                except:
+                    logging.exception( 'sock send failed!' )
+                    try:
+                        sock.close()
+                    except:
+                        pass
 
 def dev_send( tdev ):
     if not tdev.send_queue:
@@ -275,6 +434,13 @@ while running:
             heartbeat_timer = time.time() + heartbeat_time
             refresh_counter -= 1
             log.debug( '                  HB                , poll in %r', refresh_counter )
+
+            for sock in clients:
+                if clients[sock].proto == CLIENT_PROTO_NONE:
+                    if (clients[sock].time_connected + 6) < time.time():
+                        clients[sock].proto = CLIENT_PROTO_UNKNOWN
+                        clients[sock].send_all_device_status( tuyadevs )
+
             if refresh_counter == 0:
                 refresh_counter = 6
                 for dname in tuyadevs:
@@ -307,8 +473,7 @@ while running:
                     else:
                         for csock in clients:
                             if clients[csock].want_status:
-                                csock.sendall( tuyadevs[dname].errmsg )
-
+                                clients[csock].send_message( tuyadevs[dname].errmsg )
                 else:
                     log.info( 'Socket for %r not open, delaying reopen for %r', dname, tuyadevs[dname].reconnect_delay )
                     tuyadevs[dname].reconnect_delay -= 1
@@ -316,6 +481,7 @@ while running:
 
         inputs = list( clients.keys() ) + [srv] + [tuyadevs[dname].socket for dname in tuyadevs if tuyadevs[dname].socket and tuyadevs[dname].readable]
         outputs = [tuyadevs[dname].socket for dname in tuyadevs if tuyadevs[dname].socket and tuyadevs[dname].writeable]
+        outputs += [sock for sock in clients if clients[sock].proto == CLIENT_PROTO_WEBSOCKET and clients[sock].websocket.sendq]
         timeo = heartbeat_timer - time.time()
 
         if timeo <= 0:
@@ -325,6 +491,16 @@ while running:
             readable, writable, _ = select.select( inputs, outputs, [], timeo )
 
         for s in writable:
+            log.info( 'FIXME: got a writable socket' )
+            if sock in clients:
+                if clients[sock].proto == CLIENT_PROTO_WEBSOCKET:
+                    clients[sock].websocket.trySend()
+
+                    if clients[sock].websocket.closed:
+                        del clients[sock].websocket
+                        del clients[sock]
+                continue
+
             log.info( 'FIXME: got a writable socket' )
             for dname in tuyadevs:
                 if tuyadevs[dname].socket == s:
@@ -340,21 +516,119 @@ while running:
                 newsock, addr = sock.accept()
                 log.info( 'new client connected: %r', addr )
                 clients[newsock] = clientobj( newsock, addr )
-
-                for dname in tuyadevs:
-                    if tuyadevs[dname].socket and tuyadevs[dname].readable:
-                        newsock.sendall( json.dumps( {'device':dname, 'dps': tuyadevs[dname].state} ).encode( 'utf8' ) + b"\n" )
-                    else:
-                        if not tuyadevs[dname].errmsg:
-                            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' ) + b"\n"
-                        newsock.sendall( tuyadevs[dname].errmsg )
-
                 continue
+
+            if sock in clients:
+                if clients[sock].need_ssl_detect:
+                    clients[sock].need_ssl_detect = False
+                    try:
+                        # read the 5-byte TLS header
+                        peek = sock.recv( 5, socket.MSG_PEEK )
+                        # 0 = record type
+                        # 1-2 = version
+                        # 3-4 = length
+                        if peek[0] in (0x16, chr(0x16)) and peek[1] in (0x03, chr(0x03)):
+                            ssl_sock = ssl_ctx.wrap_socket(sock, server_side=True, do_handshake_on_connect=False, suppress_ragged_eofs=True)
+                            clients[ssl_sock] = clients[sock]
+                            del clients[sock]
+                            sock = ssl_sock
+                            clients[sock].is_ssl = True
+                            clients[sock].need_ssl_handshake = True
+                            sock.ssl_peekable_recv_finished = False
+                            log.debug( 'Client is SSL: %r %r', vars(clients[sock]), vars(sock) )
+                    except:
+                        log.exception( 'Exception in client SSL detect' )
+
+                if clients[sock].is_ssl:
+                    if clients[sock].need_ssl_handshake:
+                        try:
+                            sock.do_handshake()
+                            clients[sock].need_ssl_handshake = False
+                            sock._ssl_peekable_recv_buf = b''
+                            sock.ssl_peekable_recv_finished = False
+                            sock._orig_recv = sock.recv
+                            sock.recv = lambda want_bytes, flags=0: ssl_peekable_recv( sock, want_bytes, flags )
+                            log.info( 'client SSL handshake complete!' )
+                            # we probably don't have any data yet, so go back to select()
+                            continue
+                        except:
+                            log.exception( 'Exception in client SSL handshake' )
+                            continue
+                    elif sock.ssl_peekable_recv_finished:
+                        sock.ssl_peekable_recv_finished = False
+                        # FIXME need lambda wrapper as well?
+                        sock.recv = sock._orig_recv
+
+                if not clients[sock].proto:
+                    log.info( 'need client proto. %r', vars(clients[sock]) )
+                    peek = sock.recv( 5, socket.MSG_PEEK )
+                    if len(peek) < 5:
+                        log.debug( 'Not enough client data to peek' )
+                        continue
+                    if peek == b'GET /':
+                        # websocket
+                        log.debug( 'Client wants websocket' )
+                        clients[sock].proto = CLIENT_PROTO_WEBSOCKET
+                        clients[sock].websocket = ClientWebSocket( clients[sock], sock, clients[sock].addr )
+                        clients[sock].send_all_device_status( tuyadevs )
+                    elif clients[sock].buf[0] in (ord('{'), '{'):
+                        log.debug( 'Client wants JSON' )
+                        clients[sock].proto = CLIENT_PROTO_TCP
+                        clients[sock].send_all_device_status( tuyadevs )
+                    else:
+                        log.debug( 'Unknown client wants, %r', peek )
+                        clients[sock].proto = CLIENT_PROTO_TCP #CLIENT_PROTO_UNKNOWN
+                        clients[sock].send_all_device_status( tuyadevs )
+
+                #if clients[sock].proto == CLIENT_PROTO_TCP:
+                #    # raw or JSON
+                #    pass
+                if clients[sock].proto == CLIENT_PROTO_WEBSOCKET:
+                    try:
+                        clients[sock].websocket._handleData()
+                    except Exception as n:
+                        log.exception( 'Exception in websocket._handleData()' )
+                        try:
+                            clients[sock].close()
+                        except:
+                            pass
+                        clients[sock].websocket.closed = True
+
+                    if clients[sock].websocket.messages:
+                        for msg in clients[sock].websocket.messages:
+                            log.debug( 'Websock client sent message: %r', msg )
+                        clients[sock].websocket.messages = []
+
+                    if clients[sock].websocket.closed:
+                        del clients[sock].websocket
+                        del clients[sock]
+                    else:
+                        clients[sock].websocket.trySend()
+                        log.debug( '.websocket.trySend()' )
+
+                    continue
+                #else:
+                #    data = sock.recv( 5000 )
+                #    log.debug( 'Unknown client sent: %r', data )
+                #    continue
+
+                log.info('client: %r', vars(clients[sock]) )
+
+                #for dname in tuyadevs:
+                #    if tuyadevs[dname].socket and tuyadevs[dname].readable:
+                #        newsock.sendall( json.dumps( {'device':dname, 'dps': tuyadevs[dname].state} ).encode( 'utf8' ) + b"\n" )
+                #    else:
+                #        if not tuyadevs[dname].errmsg:
+                #            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' ) + b"\n"
+                #        newsock.sendall( tuyadevs[dname].errmsg )
 
             try:
                 data = sock.recv( 5000 )
+            except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                # SSL socket not ready yet, try again later
+                log.debug( 'SSL socket not ready yet, try again later' )
+                continue
             except:
-
                 data = None
 
             if sock in clients:
@@ -365,6 +639,13 @@ while running:
                     continue
                 clients[sock].buf += data
                 log.info( "rec'd: %r", clients[sock].buf)
+
+                if not clients[sock].proto:
+                    if clients[sock].buf[0] in (ord('{'), '{'):
+                        clients[sock].proto = 1
+                elif clients[sock].proto > 2:
+                    pass
+
                 pos = clients[sock].buf.find( b"\x04" )
                 if pos >= 0:
                     log.info('pos: %r', pos)
@@ -417,28 +698,28 @@ while running:
                     dname = cmd['device']
                     if dname not in tuyadevs:
                         log.warning( 'client sent bad device id! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Bad Device ID"} ).encode( 'utf8' ) + b"\n"
-                        sock.sendall( errstr )
+                        errstr = json.dumps( {'device':dname, "error": "Bad Device ID"} ).encode( 'utf8' )
+                        clients[sock].send_message( errstr )
                         continue
 
                     if 'dps' not in cmd or not cmd['dps']:
                         log.warning( 'client did not send dps! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Missing dps"} ).encode( 'utf8' ) + b"\n"
-                        sock.sendall( errstr )
+                        errstr = json.dumps( {'device':dname, "error": "Missing dps"} ).encode( 'utf8' )
+                        clients[sock].send_message( errstr )
                         continue
 
                     if 'value' not in cmd:
                         log.warning( 'client did not send value! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Missing value"} ).encode( 'utf8' ) + b"\n"
-                        sock.sendall( errstr )
+                        errstr = json.dumps( {'device':dname, "error": "Missing value"} ).encode( 'utf8' )
+                        clients[sock].send_message( errstr )
                         continue
 
                     if not (tuyadevs[dname].socket and tuyadevs[dname].readable):
                         log.warning( 'device connection not open! %r', cmd )
                         if not tuyadevs[dname].errmsg:
-                            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' ) + b"\n"
+                            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' )
                         for csock in clients:
-                            csock.sendall( tuyadevs[dname].errmsg )
+                            clients[csock].send_message( tuyadevs[dname].errmsg )
                         continue
 
                     dev_msg( SetMessage( dname, cmd['dps'], cmd['value'] ) )
@@ -459,10 +740,10 @@ while running:
                     tuyadevs[dname].readable = False
                     tuyadevs[dname].buf = b''
                     errmsg = {'device':dname, "error": "Lost connection to device", 'ts': datetime.now().isoformat(), 'last_msg': round(time.time() - tuyadevs[dname].last_msg_time, 3) }
-                    tuyadevs[dname].errmsg = json.dumps( errmsg ).encode( 'utf8' ) + b"\n"
+                    tuyadevs[dname].errmsg = json.dumps( errmsg ).encode( 'utf8' )
                     log.warning( tuyadevs[dname].errmsg )
                     for csock in clients:
-                        csock.sendall( tuyadevs[dname].errmsg )
+                        clients[csock].send_message( tuyadevs[dname].errmsg )
                     break
 
                 data = tuyadevs[dname].buf + data
@@ -544,11 +825,11 @@ while running:
                     if 'last_msg' not in send:
                         send['last_msg'] = last_msg
 
-                    send = json.dumps( send ).encode( 'utf8' ) + b"\n"
+                    send = json.dumps( send ).encode( 'utf8' )
 
                     for csock in clients:
                         if (not is_poll_response) or clients[csock].want_status:
-                            csock.sendall( send )
+                            clients[csock].send_message( send )
 
                 tuyadevs[dname].buf = data
                 break
