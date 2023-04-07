@@ -120,8 +120,9 @@ class clientobj(object):
     def __init__( self, sock, addr ):
         self.sock = sock
         self.addr = addr
+        self.closed = False
         self.buf = b''
-        self.want_status = True
+        self.want_repeat = False
         self.is_ssl = False
         self.need_ssl_detect = True
         self.need_ssl_handshake = True
@@ -129,7 +130,9 @@ class clientobj(object):
         self.time_connected = time.time()
 
     def send_message( self, msg ):
-        if not self.proto:
+        if self.closed:
+            log.debug( 'Client already closed, not sending msg' )
+        elif not self.proto:
             log.debug( 'No client proto, not sending msg' )
         elif self.proto == CLIENT_PROTO_TCP or self.proto == CLIENT_PROTO_UNKNOWN:
             # raw or JSON
@@ -155,8 +158,24 @@ class clientobj(object):
             log.debug( 'Unknown client proto %r, not sending msg', self.proto )
 
     def send_all_device_status( self, tuyadevs ):
-        for dname in tuyadevs:
-            self.send_message( current_status( tuyadevs[dname] ) )
+        if self.closed:
+            log.debug( 'Client already closed, not sending all' )
+        elif not self.proto:
+            log.debug( 'No client proto, not sending all' )
+        else:
+            for dname in tuyadevs:
+                self.send_message( current_status( tuyadevs[dname] ) )
+
+    def close( self ):
+        self.closed = True
+        if self.proto == CLIENT_PROTO_WEBSOCKET:
+            self.websocket.close()
+            return
+
+        try:
+            self.sock.close()
+        except:
+            pass
 
 def ssl_peekable_recv( self, want_bytes, flags=0 ):
     print(self)
@@ -271,22 +290,12 @@ def request_status( tdev ):
         return True
     return False
 
-def request_status_from_all( tuyadevs, sock=None ):
+def request_status_from_all( tuyadevs, client=None ):
     for dname in tuyadevs:
         if tuyadevs[dname].socket and tuyadevs[dname].readable:
             tuyadevs[dname].need_status = True
-        else:
-            if not tuyadevs[dname].errmsg:
-                tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' )
-            if sock:
-                try:
-                    sock.sendall( tuyadevs[dname].errmsg )
-                except:
-                    logging.exception( 'sock send failed!' )
-                    try:
-                        sock.close()
-                    except:
-                        pass
+        elif client:
+            client.send_message( current_status( tuyadevs[dname] ) )
 
 def dev_send( tdev ):
     if not tdev.send_queue:
@@ -408,6 +417,86 @@ def dps_changed( dname, dps, sent=False ):
 
     return have_change
 
+def client_data( client, data, clients, tuyadevs ):
+    pos = client.buf.find( b"\x04" )
+    if pos >= 0:
+        log.debug( 'client sent <ctrl>-d, pos: %r', pos )
+        client.close()
+        client.buf = client.buf[:pos] + b"\n"
+
+    pos = client.buf.find( b"\n" )
+    while pos >= 0:
+        cmdstr = client.buf[:pos].strip()
+        client.buf = client.buf[pos+1:]
+        pos = client.buf.find( b"\n" )
+
+        if not cmdstr:
+            continue
+
+        log.info( 'client sent cmd: %r', cmdstr )
+
+        if cmdstr[0] in (ord('{'), '{'):
+            try:
+                cmd = json.loads( cmdstr )
+            except:
+                log.warning( 'client sent malformed cmd! %r', cmdstr )
+                continue
+        else:
+            cmd = { 'cmd': cmdstr.decode() }
+
+        client_json_command( client, cmd, clients, tuyadevs )
+
+
+def client_json_command( client, cmd, clients, tuyadevs ):
+    if 'cmd' in cmd:
+        log.info( 'client sent json cmd: %r', cmd['cmd'] )
+        if cmd['cmd'] == 'refresh':
+            request_status_from_all( tuyadevs, client )
+        elif cmd['cmd'] == 'norepeat':
+            client.want_repeat = False
+        elif cmd['cmd'] == 'repeat':
+            client.want_repeat = True
+        elif cmd['cmd'] == 'exit' or cmd['cmd'] == 'quit':
+            client.close()
+        elif cmd['cmd'] == 'DiE':
+            running = False
+
+        return
+
+    if not (cmd and 'device' in cmd and cmd['device']):
+        log.warning( 'client did not send device! %r', cmd )
+        return
+
+    dname = cmd['device']
+    if dname not in tuyadevs:
+        log.warning( 'client sent bad device id! %r', cmd )
+        errstr = json.dumps( {'device':dname, "error": "Bad Device ID"} ).encode( 'utf8' )
+        clients[sock].send_message( errstr )
+        return
+
+    if 'dps' not in cmd or not cmd['dps']:
+        log.warning( 'client did not send dps! %r', cmd )
+        errstr = json.dumps( {'device':dname, "error": "Missing dp"} ).encode( 'utf8' )
+        clients[sock].send_message( errstr )
+        return
+
+    if 'value' not in cmd:
+        log.warning( 'client did not send value! %r', cmd )
+        errstr = json.dumps( {'device':dname, "error": "Missing value"} ).encode( 'utf8' )
+        clients[sock].send_message( errstr )
+        return
+
+    if not (tuyadevs[dname].socket and tuyadevs[dname].readable):
+        log.warning( 'device connection not open! %r', cmd )
+        if not tuyadevs[dname].errmsg:
+            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' )
+        for csock in clients:
+            clients[csock].send_message( tuyadevs[dname].errmsg )
+        return
+
+    dev_msg( SetMessage( dname, cmd['dps'], cmd['value'] ) )
+
+
 # this is gonna block
 # it can be written not to, I just don't have the time right now
 for dname in tuyadevs:
@@ -438,7 +527,8 @@ while running:
             for sock in clients:
                 if clients[sock].proto == CLIENT_PROTO_NONE:
                     if (clients[sock].time_connected + 6) < time.time():
-                        clients[sock].proto = CLIENT_PROTO_UNKNOWN
+                        log.info( 'No data from no-proto client in 6 seconds, assuming raw TCP' )
+                        clients[sock].proto = CLIENT_PROTO_TCP #UNKNOWN
                         clients[sock].send_all_device_status( tuyadevs )
 
             if refresh_counter == 0:
@@ -472,7 +562,7 @@ while running:
                         request_status( tuyadevs[dname] )
                     else:
                         for csock in clients:
-                            if clients[csock].want_status:
+                            if clients[csock].want_repeat:
                                 clients[csock].send_message( tuyadevs[dname].errmsg )
                 else:
                     log.info( 'Socket for %r not open, delaying reopen for %r', dname, tuyadevs[dname].reconnect_delay )
@@ -532,6 +622,7 @@ while running:
                             clients[ssl_sock] = clients[sock]
                             del clients[sock]
                             sock = ssl_sock
+                            clients[sock].sock = sock
                             clients[sock].is_ssl = True
                             clients[sock].need_ssl_handshake = True
                             sock.ssl_peekable_recv_finished = False
@@ -563,9 +654,10 @@ while running:
                     log.info( 'need client proto. %r', vars(clients[sock]) )
                     peek = sock.recv( 5, socket.MSG_PEEK )
                     if len(peek) < 5:
-                        log.debug( 'Not enough client data to peek' )
-                        continue
-                    if peek == b'GET /':
+                        log.debug( 'Not enough client data to peek, assuming raw TCP' )
+                        clients[sock].proto = CLIENT_PROTO_TCP
+                        clients[sock].send_all_device_status( tuyadevs )
+                    elif peek == b'GET /':
                         # websocket
                         log.debug( 'Client wants websocket' )
                         clients[sock].proto = CLIENT_PROTO_WEBSOCKET
@@ -577,7 +669,7 @@ while running:
                         clients[sock].send_all_device_status( tuyadevs )
                     else:
                         log.debug( 'Unknown client wants, %r', peek )
-                        clients[sock].proto = CLIENT_PROTO_TCP #CLIENT_PROTO_UNKNOWN
+                        clients[sock].proto = CLIENT_PROTO_UNKNOWN
                         clients[sock].send_all_device_status( tuyadevs )
 
                 #if clients[sock].proto == CLIENT_PROTO_TCP:
@@ -586,10 +678,11 @@ while running:
                 if clients[sock].proto == CLIENT_PROTO_WEBSOCKET:
                     try:
                         clients[sock].websocket._handleData()
-                    except Exception as n:
+                    except: # Exception as e:
                         log.exception( 'Exception in websocket._handleData()' )
                         try:
-                            clients[sock].close()
+                            clients[sock].proto = CLIENT_PROTO_NONE
+                            sock.close()
                         except:
                             pass
                         clients[sock].websocket.closed = True
@@ -597,6 +690,13 @@ while running:
                     if clients[sock].websocket.messages:
                         for msg in clients[sock].websocket.messages:
                             log.debug( 'Websock client sent message: %r', msg )
+                            try:
+                                if type(msg) == str:
+                                    msg = msg.encode( 'utf8' )
+                                clients[sock].buf = msg + b"\n"
+                                client_data( clients[sock], msg, clients, tuyadevs )
+                            except:
+                                log.exception( 'Exception handling websocket command!' )
                         clients[sock].websocket.messages = []
 
                     if clients[sock].websocket.closed:
@@ -634,11 +734,12 @@ while running:
             if sock in clients:
                 if not data:
                     log.info( 'client socket closed' )
-                    sock.close()
+                    clients[sock].close()
                     del clients[sock]
                     continue
+
                 clients[sock].buf += data
-                log.info( "rec'd: %r", clients[sock].buf)
+                log.info( "TCP rec'd: %r", clients[sock].buf)
 
                 if not clients[sock].proto:
                     if clients[sock].buf[0] in (ord('{'), '{'):
@@ -646,90 +747,21 @@ while running:
                 elif clients[sock].proto > 2:
                     pass
 
-                pos = clients[sock].buf.find( b"\x04" )
-                if pos >= 0:
-                    log.info('pos: %r', pos)
-                    log.info( 'client sent <ctrl>-d' )
-                    sock.close()
+                client_data( clients[sock], data, clients, tuyadevs )
+
+                if clients[sock].closed:
                     del clients[sock]
-                    continue
-                pos = clients[sock].buf.find( b"\n" )
-                while pos >= 0:
-                    cmdstr = clients[sock].buf[:pos].strip()
-                    clients[sock].buf = clients[sock].buf[pos+1:]
-                    pos = clients[sock].buf.find( b"\n" )
-                    if not cmdstr:
-                        continue
-                    log.info( 'client sent cmd: %r', cmdstr )
-
-                    if cmdstr == b'refresh':
-                        request_status_from_all( tuyadevs, sock )
-                        continue
-                    elif cmdstr == b'nopoll':
-                        clients[sock].want_status = False
-                        continue
-                    elif cmdstr == b'poll':
-                        clients[sock].want_status = True
-                        continue
-                    elif (cmdstr == b'exit') or (cmdstr == b'quit'):
-                        sock.close()
-                        del clients[sock]
-                        break
-                    elif cmdstr == b'DiE':
-                        running = False
-                        break
-
-                    try:
-                        cmd = json.loads( cmdstr )
-                    except:
-                        log.warning( 'client sent malformed cmd! %r', cmdstr )
-                        continue
-
-                    if 'cmd' in cmd:
-                        log.info( 'client sent json cmd: %r', cmd['cmd'] )
-                        if cmd['cmd'] == 'refresh':
-                            request_status_from_all( tuyadevs, sock )
-                        continue
-
-                    if not (cmd and 'device' in cmd and cmd['device']):
-                        log.warning( 'client did not send device! %r', cmd )
-                        continue
-
-                    dname = cmd['device']
-                    if dname not in tuyadevs:
-                        log.warning( 'client sent bad device id! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Bad Device ID"} ).encode( 'utf8' )
-                        clients[sock].send_message( errstr )
-                        continue
-
-                    if 'dps' not in cmd or not cmd['dps']:
-                        log.warning( 'client did not send dps! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Missing dps"} ).encode( 'utf8' )
-                        clients[sock].send_message( errstr )
-                        continue
-
-                    if 'value' not in cmd:
-                        log.warning( 'client did not send value! %r', cmd )
-                        errstr = json.dumps( {'device':dname, "error": "Missing value"} ).encode( 'utf8' )
-                        clients[sock].send_message( errstr )
-                        continue
-
-                    if not (tuyadevs[dname].socket and tuyadevs[dname].readable):
-                        log.warning( 'device connection not open! %r', cmd )
-                        if not tuyadevs[dname].errmsg:
-                            tuyadevs[dname].errmsg = json.dumps( {'device':dname, "error": "No connection to device"} ).encode( 'utf8' )
-                        for csock in clients:
-                            clients[csock].send_message( tuyadevs[dname].errmsg )
-                        continue
-
-                    dev_msg( SetMessage( dname, cmd['dps'], cmd['value'] ) )
 
                 continue
 
+            tdname = None
             for	dname in tuyadevs:
-                if tuyadevs[dname].socket != sock:
-                    continue
+                if tuyadevs[dname].socket == sock:
+                    tdname = dname
+                    break
 
+            if tdname:
+                dname = tdname
                 #if dname == 'lobby_relays':
                 #    log.warning( '%r got data: %r', dname, data )
 
@@ -744,7 +776,7 @@ while running:
                     log.warning( tuyadevs[dname].errmsg )
                     for csock in clients:
                         clients[csock].send_message( tuyadevs[dname].errmsg )
-                    break
+                    continue
 
                 data = tuyadevs[dname].buf + data
 
@@ -828,11 +860,10 @@ while running:
                     send = json.dumps( send ).encode( 'utf8' )
 
                     for csock in clients:
-                        if (not is_poll_response) or clients[csock].want_status:
+                        if (not is_poll_response) or clients[csock].want_repeat:
                             clients[csock].send_message( send )
 
                 tuyadevs[dname].buf = data
-                break
 
     except KeyboardInterrupt:
         log.exception( 'Main Loop Keyboard Interrupt!' )
@@ -848,4 +879,4 @@ for dname in tuyadevs:
         tuyadevs[dname].socket.close()
 
 for s in clients:
-    s.close()
+    clients[s].close()

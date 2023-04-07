@@ -50,7 +50,8 @@ A:hover {text-decoration: underline overline; color: red;}
 <!-- script type="text/javascript" language="JavaScript" src="jquery-2.1.3.min.js"></script -->
 <!-- script type="text/javascript" language="JavaScript" src="jquery-ui.js"></script -->
 <script type="text/javascript">
-  var gwsData = { "host": "localhost", "port": 9997, "token": "" };
+  //var gwsData = { "host": "localhost", "port": 9997, "token": "" };
+  var gwsData = { "host": window.location.hostname, "port": 9997, "token": "" };
   var gwsSocket = null;
   var gwsExtraData = { };
   var gwsNeedClear = true;
@@ -98,7 +99,7 @@ A:hover {text-decoration: underline overline; color: red;}
       gwsSocket.onopen = function( e ) {
 	  console.log("GWS Socket opened");
 	  gwsNeedClear = true;
-	  gwsSocket.send('{"cmd": ""}');
+	  gwsSocket.send('{"cmd": "norepeat"}');
 	  gwsConnectTimeout = 1505; // reduce reconnect time if we connected but then closed
 
 	  for (var i = 0; i < gwsOpenFunctions.length; i++)
