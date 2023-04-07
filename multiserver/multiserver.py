@@ -41,17 +41,35 @@ log.setLevel( logging.DEBUG )
 
 
 searchdevs = {}
-with open('devicelist.json', 'r') as fp:
-    searchlist = json.load( fp )
+searchlist = None
 
+try:
+    with open('devicelist.json', 'r') as fp:
+        searchlist = json.load( fp )
+except:
+    pass
+
+if (not searchlist) and (not tuyadevs):
+    try:
+        with open('devices.json', 'r') as fp:
+            searchlist = json.load( fp )
+except:
+    pass
+
+if (not searchlist) and (not tuyadevs):
+    raise Exception( 'devicelist.json or devices.json must be present' )
+
+if searchlist:
     for i in searchlist:
         k = i['id']
         searchdevs[k] = i
-
     del searchlist
 
-with open('actions.json', 'r') as fp:
-    actions = json.load( fp )
+try:
+    with open('actions.json', 'r') as fp:
+        actions = json.load( fp )
+except:
+    actions = {}
 
 searchlist = list(searchdevs.keys())
 notfound = {}
