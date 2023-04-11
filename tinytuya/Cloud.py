@@ -392,15 +392,16 @@ class Cloud(object):
         """
         if self.apiDeviceID and self.use_old_device_list:
             json_data = {}
-            device_ids = self.apiDeviceID.split(',')
             uid_list = {}
 
-            for dev_id in device_ids:
+            # apiDeviceID can be a comma-separated list, so process them all
+            for dev_id in self.apiDeviceID.split(','):
                 dev_id = dev_id.strip()
                 if not dev_id:
                     continue
                 uid = self._getuid( dev_id )
                 if not uid:
+                    # no user for this device?
                     continue
                 if isinstance( uid, dict ):
                     # it's an error_json dict
@@ -418,10 +419,13 @@ class Cloud(object):
                 # Use UID to get list of all Devices for User
                 uri = 'users/%s/devices' % uid
                 json_run = self._tuyaplatform(uri)
+                # merge the dicts
                 for k in json_run:
                     if (k not in json_data) or (k != 'result'):
+                        # replace if key is not 'result'
                         json_data[k] = json_run[k]
                     else:
+                        # merge 'result' keys
                         json_data[k] += json_run[k]
         else:
             json_data = self._get_all_devices()
