@@ -347,7 +347,7 @@ class ThermostatDevice(Device):
         return self.setValue( 'hold', hold )
 
     def setFanRuntime( self, rt ):
-        return self.setValue( 'fan_runtime', int(rt) )
+        return self.setValue( 'fan_run_time', int(rt) )
 
     def setValue( self, key, val ):
         dps, val = self.parseValue( key, val )
