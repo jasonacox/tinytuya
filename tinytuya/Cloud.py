@@ -42,7 +42,7 @@ from .core import * # pylint: disable=W0401, W0614
 ########################################################
 
 class Cloud(object):
-    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None):
+    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None, **extrakw):
         """
         Tuya Cloud IoT Platform Access
 
@@ -83,7 +83,7 @@ class Cloud(object):
         self.error = None
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
-        self.use_old_device_list = False
+        self.use_old_device_list = True
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -127,7 +127,7 @@ class Cloud(object):
         if self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
 
-    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None):
+    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type='application/json'):
         """
         Handle GET and POST requests to Tuya Cloud
         """
@@ -141,9 +141,10 @@ class Cloud(object):
         headers = {}
         body = {}
         sign_url = url
+        if content_type:
+            headers['Content-type'] = content_type
         if post is not None:
             body = json.dumps(post)
-            headers['Content-type'] = 'application/json'
         if action not in ('GET', 'POST', 'PUT', 'DELETE'):
             action = 'POST' if post else 'GET'
         if query:
@@ -198,6 +199,7 @@ class Cloud(object):
         headers['sign'] = signature
         headers['t'] = str(now)
         headers['sign_method'] = 'HMAC-SHA256'
+        headers['mode'] = 'cors'
 
         if self.token is not None:
             headers['access_token'] = self.token
@@ -389,18 +391,42 @@ class Cloud(object):
         details.
         """
         if self.apiDeviceID and self.use_old_device_list:
-            uid = self._getuid(self.apiDeviceID)
-            if uid is None:
+            json_data = {}
+            uid_list = {}
+
+            # apiDeviceID can be a comma-separated list, so process them all
+            for dev_id in self.apiDeviceID.split(','):
+                dev_id = dev_id.strip()
+                if not dev_id:
+                    continue
+                uid = self._getuid( dev_id )
+                if not uid:
+                    # no user for this device?
+                    continue
+                if isinstance( uid, dict ):
+                    # it's an error_json dict
+                    return uid
+                else:
+                    uid_list[uid] = True
+
+            if not uid_list:
                 return error_json(
                     ERR_CLOUD,
                     "Unable to get uid for device list"
                 )
-            elif isinstance( uid, dict):
-                return uid
 
-            # Use UID to get list of all Devices for User
-            uri = 'users/%s/devices' % uid
-            json_data = self._tuyaplatform(uri)
+            for uid in uid_list:
+                # Use UID to get list of all Devices for User
+                uri = 'users/%s/devices' % uid
+                json_run = self._tuyaplatform(uri)
+                # merge the dicts
+                for k in json_run:
+                    if (k not in json_data) or (k != 'result'):
+                        # replace if key is not 'result'
+                        json_data[k] = json_run[k]
+                    else:
+                        # merge 'result' keys
+                        json_data[k] += json_run[k]
         else:
             json_data = self._get_all_devices()
             users = {}
