@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.12.3 - Fix Cloud Device List
+
+* PyPI 1.12.3
+* Fix fan_run_time typo in Contrib/ThermostatDevice by @elockman in https://github.com/jasonacox/tinytuya/pull/326
+* Cloud device list and Content-Type update by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/324 Bug Fix for https://github.com/jasonacox/tinytuya/issues/323
+
 ## v1.12.2 - Gateway/Sub-device Update
 
 * PyPI 1.12.2
