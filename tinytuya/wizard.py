@@ -115,8 +115,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         config['apiSecret'] = input(subbold + "    Enter " + bold + "API Secret" + subbold +
                                     " from tuya.com: " + normal)
         config['apiDeviceID'] = input(subbold +
-                                      "    (Optional) Enter " + bold + "any Device ID" + subbold +
-                                      " currently registered in Tuya App (used to pull full list): " + normal)
+                                      "    Enter " + bold + "any Device ID" + subbold +
+                                      " currently registered in Tuya App (used to pull full list) or 'scan' to scan for one: " + normal)
         # TO DO - Determine apiRegion based on Device - for now, ask
         print("\n      " + subbold + "Region List" + dim +
               "\n        cn\tChina Data Center" +
@@ -138,6 +138,18 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         with open(DEVICEFILE, "r") as infile:
             tuyadevices = json.load( infile )
     else:
+        if 'apiDeviceID' in config and config['apiDeviceID'] and config['apiDeviceID'].strip().lower() == 'scan':
+            config['apiDeviceID'] = ''
+            print( '\nScanning to find a Device ID...' )
+            dev = tinytuya.scanner.devices( verbose=False, poll=False, byID=True, show_timer=False, maxdevices=1 )
+            for devid in dev:
+                print( '\nScan found Device ID %r' % devid )
+                config['apiDeviceID'] = devid
+                break
+            if not config['apiDeviceID']:
+                print('\n\n' + bold + 'Scan failed to detect a device, please enter a Device ID manually' )
+                return
+
         cloud = tinytuya.Cloud( **config )
 
         # on auth error getdevices() will implode
