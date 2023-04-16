@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.12.4 - Wizard Scan for ID
+
+* PyPI 1.12.4
+* Adds option allowing wizard to scan for a Device ID by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/331 - Related to Tuya IoT permission denied issue https://github.com/jasonacox/tinytuya/issues/330 and https://github.com/jasonacox/tinytuya/issues/323
+
 ## v1.12.3 - Fix Cloud Device List
 
 * PyPI 1.12.3
