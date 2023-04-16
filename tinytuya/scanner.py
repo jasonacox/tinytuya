@@ -952,7 +952,7 @@ def _print_device_info( result, note, term, extra_message=None ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[]): # pylint: disable=W0621, W0102
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], maxdevices=0): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -967,9 +967,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         discover = True or False, when False, UDP broadcast packets will be ignored
         wantips = A list of IP addresses we want.  Scan will stop early if all are found
         wantids = A list of Device IDs we want.  Scan will stop early if all are found
-        snapshot = True or False, save snapshot once finished
+        snapshot = A dict of devices with IP addresses as keys.  These devices will be force-scanned
         assume_yes = True or False, do not prompt to confirm auto-detected network ranges
         tuyadevices = contents of devices.json, to prevent re-loading it if we already have it
+        maxdevices = Stop scanning after this many devices are found.  0 for no limit
 
     Response:
         devices = Dictionary of all devices found
@@ -1397,6 +1398,18 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     wantips.remove(ip)
                 if broadcasted_devices[ip].deviceinfo['gwId'] in wantids:
                     wantids.remove( broadcasted_devices[ip].deviceinfo['gwId'] )
+                if maxdevices:
+                    maxdevices -= 1
+                    if maxdevices == 0:
+                        if verbose:
+                            print('Found all the devices we wanted, ending scan early')
+                        ip_wantips = False
+                        ip_wantids = False
+                        ip_force_wants_end = True
+                        scan_end_time = 0
+                        for dev in devicelist:
+                            if (not dev.remove) and (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
+                                device_end_time = dev.timeo + 1.0
 
                 for dev in devicelist:
                     if dev.ip == ip:
