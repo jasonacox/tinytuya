@@ -138,7 +138,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         with open(DEVICEFILE, "r") as infile:
             tuyadevices = json.load( infile )
     else:
-        if 'apiDeviceID' in config and config['apiDeviceID'] and config['apiDeviceID'].trim().lower() == 'scan':
+        if 'apiDeviceID' in config and config['apiDeviceID'] and config['apiDeviceID'].strip().lower() == 'scan':
             config['apiDeviceID'] = ''
             print( '\nScanning to find a Device ID...' )
             dev = tinytuya.scanner.devices( verbose=False, poll=False, byID=True, show_timer=False, maxdevices=1 )
