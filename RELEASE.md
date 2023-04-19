@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.12.5 - Scanner Update
+
+* Remove requirement for PyCryptodome in scanner (allows pyaes for devices < 3.5) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/332
+* Added AES library details to debug output.
+
 ## v1.12.4 - Wizard Scan for ID
 
 * PyPI 1.12.4
