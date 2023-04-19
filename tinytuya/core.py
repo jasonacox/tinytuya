@@ -1812,17 +1812,14 @@ class Device(XenonDevice):
 def pad(s):
     return s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
 
-
 def unpad(s):
     return s[: -ord(s[len(s) - 1 :])]
 
-
 def encrypt(msg, key):
-    return AES.new(key, AES.MODE_ECB).encrypt(pad(msg).encode())
-
+    return AESCipher( key ).encrypt( msg, use_base64=False, pad=True )
 
 def decrypt(msg, key):
-    return unpad(AES.new(key, AES.MODE_ECB).decrypt(msg)).decode()
+    return AESCipher( key ).decrypt( msg, use_base64=False, decode_text=True )
 
 #def decrypt_gcm(msg, key):
 #    nonce = msg[:12]
