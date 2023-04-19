@@ -240,6 +240,7 @@ class AESCipher(object):
                 raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
 
             _ = self._pad(raw)
+            # pylint: disable-next=used-before-assignment
             cipher = pyaes.blockfeeder.Encrypter(
                 pyaes.AESModeOfOperationECB(self.key),
                 pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE
@@ -334,7 +335,8 @@ def set_debug(toggle=True, color=True):
         log.debug("TinyTuya [%s]\n", __version__)
         log.debug("Python %s on %s", sys.version, sys.platform)
         if Crypto is None:
-            log.debug("Using pyaes version %r", pyaes.VERSION)  # pylint: disable=E0601
+            # pylint: disable-next=used-before-assignment
+            log.debug("Using pyaes version %r", pyaes.VERSION)
         else:
             log.debug("Using PyCrypto %r", Crypto.version_info)
     else:
