@@ -127,7 +127,7 @@ class Cloud(object):
         if self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
 
-    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type='application/json'):
+    def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type=None):
         """
         Handle GET and POST requests to Tuya Cloud
         """
@@ -141,12 +141,14 @@ class Cloud(object):
         headers = {}
         body = {}
         sign_url = url
-        if content_type:
-            headers['Content-type'] = content_type
         if post is not None:
             body = json.dumps(post)
         if action not in ('GET', 'POST', 'PUT', 'DELETE'):
             action = 'POST' if post else 'GET'
+        if action == 'POST' and content_type is None:
+            content_type = 'application/json'
+        if content_type:
+            headers['Content-type'] = content_type
         if query:
             # note: signature must be calculated before URL-encoding!
             if type(query) == str:
