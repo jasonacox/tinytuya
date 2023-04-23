@@ -827,3 +827,4 @@ Please feel free to submit a PR or open an issue to add your project.
 * https://github.com/mafrosis/tinytuya2mqtt - A bridge between TinyTuya and Home Assistant via MQTT
 * https://github.com/Whytey/pymoebot - A Python library intended to monitor and control the MoeBot robotic lawn mowers.
 * https://github.com/make-all/tuya-local - Local support for Tuya devices in Home Assistant
+* https://github.com/teejo75/mtghs - Provides an HTTP service for Moonraker to control Tuya outlets.
