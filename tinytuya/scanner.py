@@ -68,7 +68,7 @@ SCANTIME = tinytuya.SCANTIME        # How many seconds to wait before stopping
 max_parallel = 300
 connect_timeout = 3
 
-devinfo_keys = ('ip', 'mac', 'name', 'key', 'gwId', 'active', 'ablilty', 'encrypt', 'productKey', 'version', 'token', 'wf_cfg' )
+devinfo_keys = ('ip', 'mac', 'name', 'key', 'gwId', 'active', 'ability', 'encrypt', 'productKey', 'version', 'token', 'wf_cfg' )
 # id ver
 
 TermColors = namedtuple("TermColors", "bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow")
@@ -170,6 +170,10 @@ class DeviceDetect(object):
 
         if not deviceinfo:
             deviceinfo = {}
+        # some devices report "ability" but most have this as the typo "ablilty"
+        if 'ablilty' in deviceinfo and 'ability' not in deviceinfo:
+            deviceinfo['ability'] = deviceinfo['ablilty']
+            del deviceinfo['ablilty']
         self.deviceinfo = deviceinfo
         for k in devinfo_keys:
             if k not in deviceinfo:
