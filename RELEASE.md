@@ -4,6 +4,8 @@
 
 * Remove requirement for PyCryptodome in scanner (allows pyaes for devices < 3.5) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/332
 * Added AES library details to debug output.
+* README update - Add link to Moonraker support project by @teejo75 in https://github.com/jasonacox/tinytuya/pull/335
+* Misc minor updates by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/336: Normalize ability/ablilty in scanner #333 - Fix examples/getstatus.py - Cloud device list and Content-Type update #324 - Rework examples/async_send_receive.py
 
 ## v1.12.4 - Wizard Scan for ID
 
