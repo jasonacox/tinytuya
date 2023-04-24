@@ -26,5 +26,5 @@ d.set_version(3.3)
 
 # Get the status of the device 
 # e.g. {'devId': '0071299988f9376255b', 'dps': {'1': True, '3': 208, '101': False}}
-data = d.get_status()
+data = d.status()
 print(data)
