@@ -113,7 +113,7 @@ import tinytuya
 # Connect to Device
 d = tinytuya.OutletDevice(
     dev_id='DEVICE_ID_HERE',
-    address='IP_ADDRESS_HERE',
+    address='IP_ADDRESS_HERE',      # Or set to 'Auto' to auto-discover IP address
     local_key='LOCAL_KEY_HERE', 
     version=3.3)
 
