@@ -2,6 +2,7 @@
 
 ## v1.12.5 - Scanner Update
 
+* PyPI 1.12.5
 * Remove requirement for PyCryptodome in scanner (allows pyaes for devices < 3.5) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/332
 * Added AES library details to debug output.
 * README update - Add link to Moonraker support project by @teejo75 in https://github.com/jasonacox/tinytuya/pull/335
