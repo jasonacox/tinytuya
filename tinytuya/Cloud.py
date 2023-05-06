@@ -376,8 +376,9 @@ class Cloud(object):
 
                     if 'total' in result[i]: total = result[i]['total']
                     if 'last_row_key' in result[i]:
-                        has_more = result[i]['has_more']
                         query['last_row_key'] = result[i]['last_row_key']
+                    if 'has_more' in result[i]:
+                        has_more = result[i]['has_more']
                 else:
                     our_result[i] = result[i]
 
