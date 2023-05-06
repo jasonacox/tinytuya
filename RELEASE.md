@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.12.6 - Minor Fixes
+
+* PyPI 1.12.6
+* Cloud - Bug Fix KeyError: 'has_more' by @Liborsaf in https://github.com/jasonacox/tinytuya/pull/342
+* Add Contrib support for IR+RF devices such as the S11 by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/343
+
 ## v1.12.5 - Scanner Update
 
 * PyPI 1.12.5
