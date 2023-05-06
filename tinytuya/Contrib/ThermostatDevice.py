@@ -341,7 +341,7 @@ class ThermostatDevice(Device):
         if hold is True:
             return self.setValue( 'hold', 'permhold' )
 
-        if hold	is False:
+        if hold is False:
             return self.setValue( 'hold', 'followschedule' )
 
         return self.setValue( 'hold', hold )
@@ -626,7 +626,7 @@ class ThermostatDevice(Device):
                         else:
                             ptime = int(tparts[0])
                     elif isinstance( self.time, int ):
-                        ptime =	self.time
+                        ptime = self.time
                     else:
                         ptime = int(self.time)
 
@@ -765,7 +765,7 @@ class ThermostatDevice(Device):
             if 'time' in kwargs:
                 self.day_data[day][period].time = kwargs['time']
 
-            if 'heatto'	in kwargs:
+            if 'heatto' in kwargs:
                 self.day_data[day][period].heatto = kwargs['heatto']
 
             if 'coolto' in kwargs:
