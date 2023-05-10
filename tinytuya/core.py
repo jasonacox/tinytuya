@@ -1452,8 +1452,8 @@ class XenonDevice(object):
                 log.exception("Failed to get status: %s", ex)
                 raise
             if data is not None and "dps" in data:
-                data["dps"] = {k: None for k in data["dps"]}
-                self.dps_cache.update(data["dps"])
+                for k in data["dps"]:
+                    self.dps_cache[k] = None
 
             if self.dev_type == "default":
                 self.dps_to_request = self.dps_cache
