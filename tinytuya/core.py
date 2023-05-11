@@ -87,7 +87,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 12, 6)
+version_tuple = (1, 12, 7)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -1452,7 +1452,8 @@ class XenonDevice(object):
                 log.exception("Failed to get status: %s", ex)
                 raise
             if data is not None and "dps" in data:
-                self.dps_cache.update(data["dps"])
+                for k in data["dps"]:
+                    self.dps_cache[k] = None
 
             if self.dev_type == "default":
                 self.dps_to_request = self.dps_cache
