@@ -41,6 +41,7 @@ import os
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
+import urllib.parse
 
 # Required module: pycryptodome
 try:
@@ -349,13 +350,13 @@ class handler(BaseHTTPRequestHandler):
         elif self.path == '/help':
             # show available commands
             cmds = [("/devices","List all devices discovered with metadata"),
-                    ("/device/{DeviceID}", "List specific device metadata"),
+                    ("/device/{DeviceID}|{DeviceName}", "List specific device metadata"),
                     ("/numdevices", "List current number of devices discovered"),
-                    ("/status/{DeviceID}", "List current device status"),
-                    ("/set/{DeviceID}/{Key}/{Value}", "Set DPS {Key} with {Value}"),
-                    ("/turnon/{DeviceID}/{SwitchNo}", "Turn on device, optional {SwtichNo}"),
-                    ("/turnoff/{DeviceID}/{SwitchNo}", "Turn off device, optional {SwtichNo}"),
-                    ("/delayoff/{DeviceID}/{SwitchNo}/{Time}", "Turn off device with delay of 10 secs, optional {SwitchNo}/{Time}"),
+                    ("/status/{DeviceID}|{DeviceName}", "List current device status"),
+                    ("/set/{DeviceID}|{DeviceName}/{Key}/{Value}", "Set DPS {Key} with {Value}"),
+                    ("/turnon/{DeviceID}|{DeviceName}/{SwitchNo}", "Turn on device, optional {SwtichNo}"),
+                    ("/turnoff/{DeviceID}|{DeviceName}/{SwitchNo}", "Turn off device, optional {SwtichNo}"),
+                    ("/delayoff/{DeviceID}|{DeviceName}/{SwitchNo}/{Time}", "Turn off device with delay of 10 secs, optional {SwitchNo}/{Time}"),
                     ("/sync", "Fetches the device list and local keys from the Tuya Cloud API"),
                     ("/cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}", "Sets the Tuya Cloud API login info"),
                     ("/offline", "List of registered devices that are offline")]
@@ -384,6 +385,11 @@ class handler(BaseHTTPRequestHandler):
             except:
                 message = json.dumps({"Error": "Syntax error in set command URL.", "url": self.path})
                 log.debug("Syntax error in set command URL: %s" % self.path)
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if(id in deviceslist):
                 d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                 d.set_version(float(deviceslist[id]["version"]))
@@ -394,6 +400,11 @@ class handler(BaseHTTPRequestHandler):
                 log.debug("Device ID not found: %s" % id)
         elif self.path.startswith('/device/'):
             id = self.path.split('/device/')[1]
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if(id in deviceslist):
                 message = json.dumps(deviceslist[id])
             else:
@@ -418,6 +429,11 @@ class handler(BaseHTTPRequestHandler):
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in turnoff command.", "url": self.path})
                     log.debug("Syntax error in in turnoff command: %s" % self.path)
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -441,6 +457,11 @@ class handler(BaseHTTPRequestHandler):
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in delayoff command.", "url": self.path})
                     log.debug("Syntax error in in delayoff command: %s" % self.path)
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -466,6 +487,11 @@ class handler(BaseHTTPRequestHandler):
                     id = ""
                     message = json.dumps({"Error": "Invalid syntax in turnon command.", "url": self.path})
                     log.debug("Syntax error in turnon command URL: %s" % self.path)
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -485,6 +511,11 @@ class handler(BaseHTTPRequestHandler):
             message = json.dumps(jout)
         elif self.path.startswith('/status/'):
             id = self.path.split('/status/')[1]
+            if(id not in deviceslist):
+                for key in deviceslist:
+                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
+                        id = deviceslist[key]['id']
+                        break
             if(id in deviceslist):
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
