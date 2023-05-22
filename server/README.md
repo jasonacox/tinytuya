@@ -25,7 +25,7 @@ API Functions - The server listens for GET requests on local port 8888:
     /offline                                   - List of registered devices that are offline
 ```
 
-Note! If oyu use {DeviceName} instead of {DeviceID}, make sure your Device Names are absolutely unique! Otherwise you will get funny results.
+Note! If you use {DeviceName} instead of {DeviceID}, make sure your Device Names are absolutely unique! Otherwise you will get funny results.
 
 ## Quick Start
 
