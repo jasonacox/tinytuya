@@ -9,21 +9,24 @@ For more information see https://github.com/jasonacox/tinytuya
 
 Description
     Server continually listens for Tuya UDP discovery packets and updates the database of devices
-    and uses devices.json to determine metadata about devices. 
+    and uses devices.json to determine metadata about devices.
     Server listens for GET requests on local port 8888:
-        /devices                        - List all devices discovered with metadata   
-        /device/{DeviceID}              - List specific device metadata
+        /devices                        - List all devices discovered with metadata
+        /device/{DeviceID}|{DeviceName} - List specific device metadata
         /numdevices                     - List current number of devices discovered
-        /status/{DeviceID}              - List current device status
-        /set/{DeviceID}/{Key}/{Value}   - Set DPS {Key} with {Value} 
-        /turnon/{DeviceID}/{SwitchNo}   - Turn on device, optional {SwtichNo}
-        /turnoff/{DeviceID}/{SwitchNo}  - Turn off device, optional {SwtichNo}
+        /status/{DeviceID}|{DeviceName} - List current device status
+        /set/{DeviceID}|{DeviceName}/{Key}/{Value}
+                                        - Set DPS {Key} with {Value}
+        /turnon/{DeviceID}|{DeviceName}/{SwitchNo}
+                                        - Turn on device, optional {SwtichNo}
+        /turnoff/{DeviceID}|{DeviceName}/{SwitchNo}
+                                        - Turn off device, optional {SwtichNo}
         /sync                           - Fetches the device list and local keys from the Tuya Cloud API
-        /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
+        /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}
                                         - Sets the Tuya Cloud API login info
         /offline                        - List of registered devices that are offline
-
-        /delayoff/{DeviceID}/{Time} - Turn off device with delay
+        /delayoff/{DeviceID}|{DeviceName}/{Time}
+                                        - Turn off device with delay
 
 """
 
@@ -247,6 +250,15 @@ def tuyaCloudRefresh():
     tuyaSaveJson()
     return {'devices': tuyadevices}
 
+def getDeviceIdByName(name):
+    id = False
+    nameuq = urllib.parse.unquote(name)
+    for key in deviceslist:
+        if deviceslist[key]['name'] == nameuq:
+            id = deviceslist[key]['id']
+            break
+    return (id)
+
 # Threads
 def tuyalisten(port):
     """
@@ -386,10 +398,7 @@ class handler(BaseHTTPRequestHandler):
                 message = json.dumps({"Error": "Syntax error in set command URL.", "url": self.path})
                 log.debug("Syntax error in set command URL: %s" % self.path)
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if(id in deviceslist):
                 d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                 d.set_version(float(deviceslist[id]["version"]))
@@ -401,10 +410,7 @@ class handler(BaseHTTPRequestHandler):
         elif self.path.startswith('/device/'):
             id = self.path.split('/device/')[1]
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if(id in deviceslist):
                 message = json.dumps(deviceslist[id])
             else:
@@ -430,10 +436,7 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Invalid syntax in turnoff command.", "url": self.path})
                     log.debug("Syntax error in in turnoff command: %s" % self.path)
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -458,10 +461,7 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Invalid syntax in delayoff command.", "url": self.path})
                     log.debug("Syntax error in in delayoff command: %s" % self.path)
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -488,10 +488,7 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Invalid syntax in turnon command.", "url": self.path})
                     log.debug("Syntax error in turnon command URL: %s" % self.path)
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if id in deviceslist:
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
@@ -512,10 +509,7 @@ class handler(BaseHTTPRequestHandler):
         elif self.path.startswith('/status/'):
             id = self.path.split('/status/')[1]
             if(id not in deviceslist):
-                for key in deviceslist:
-                    if deviceslist[key]['name'] == urllib.parse.unquote(id):
-                        id = deviceslist[key]['id']
-                        break
+                id = getDeviceIdByName(id)
             if(id in deviceslist):
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
