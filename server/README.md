@@ -9,20 +9,23 @@ The TinyTuya API Server provides a central service to access all your Tuya devic
 API Functions - The server listens for GET requests on local port 8888:
 
 ```
-    /help                           - List all available commands
-    /devices                        - List all devices discovered with metadata   
-    /device/{DeviceID}              - List specific device metadata
-    /numdevices                     - List current number of devices discovered
-    /status/{DeviceID}              - List current device status
-    /set/{DeviceID}/{Key}/{Value}   - Set DPS {Key} with {Value} 
-    /turnon/{DeviceID}/{SwitchNo}   - Turn on device, optional {SwtichNo}
-    /turnoff/{DeviceID}/{SwitchNo}  - Turn off device, optional {SwtichNo}
-    /delayedoff/{DeviceID}/{SwitchNo}/{Seconds} - Turn off device with a delay, optional {SwitchNo}/{Delay}
-    /sync                           - Fetches the device list and local keys from the Tuya Cloud API
+    /help                                      - List all available commands
+    /devices                                   - List all devices discovered with metadata   
+    /device/{DeviceID}|{DeviceName}            - List specific device metadata
+    /numdevices                                - List current number of devices discovered
+    /status/{DeviceID}|{DeviceName}            - List current device status
+    /set/{DeviceID}|{DeviceName}/{Key}/{Value} - Set DPS {Key} with {Value} 
+    /turnon/{DeviceID}/{SwitchNo}              - Turn on device, optional {SwtichNo}
+    /turnoff/{DeviceID}/{SwitchNo}             - Turn off device, optional {SwtichNo}
+    /delayedoff/{DeviceID}|{DeviceName}/{SwitchNo}/{Seconds} 
+                                               - Turn off device with a delay, optional {SwitchNo}/{Delay}
+    /sync                                      - Fetches the device list and local keys from the Tuya Cloud API
     /cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}   
-                                    - Sets the Tuya Cloud API login info
-    /offline                        - List of registered devices that are offline
+                                               - Sets the Tuya Cloud API login info
+    /offline                                   - List of registered devices that are offline
 ```
+
+Note! If you use {DeviceName} instead of {DeviceID}, make sure your Device Names are absolutely unique! Otherwise you will get funny results.
 
 ## Quick Start
 
@@ -104,3 +107,21 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 ![image](https://user-images.githubusercontent.com/836718/227736045-adb6e359-c0c1-44b9-b9ad-7e978f6b7b84.png)
 
 ![image](https://user-images.githubusercontent.com/836718/227736057-e5392c13-554f-457e-9082-43c4d41a98ed.png)
+
+## Release Notes
+
+### t7 - Add Control by Name
+
+* Use {`DeviceName`} in addition to {`DeviceID`} for API commands by @mschlenstedt in https://github.com/jasonacox/tinytuya/pull/352
+
+```bash
+# by DeviceID
+$ curl http://localhost:8888/status/xxxxxxxxxxxxxxxxxx01
+{"devId": "xxxxxxxxxxxxxxxxxx01", "dps": {"1": true, "9": 0}}
+
+# by DeviceName
+$ curl http://localhost:8888/status/Kitchen%20Light
+{"devId": "xxxxxxxxxxxxxxxxxx01", "dps": {"1": true, "9": 0}}
+$ curl http://localhost:8888/status/SmartBulb                                
+{"devId": "xxxxxxxxxxxxxxxxxx02", "dps": {"20": true, "21": "white", "22": 1000, "24": "000003e803e8", "25":"07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000", "26": 0}}
+```
