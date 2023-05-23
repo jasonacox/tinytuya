@@ -45,7 +45,6 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
 import urllib.parse
-import yaml
 
 # Required module: pycryptodome
 try:
