@@ -45,6 +45,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
 import urllib.parse
+import yaml
 
 # Required module: pycryptodome
 try:
@@ -102,6 +103,7 @@ if DEBUGMODE:
 
 # Static Assets
 web_root = os.path.join(os.path.dirname(__file__), "web")
+MAPPINGFILE = os.path.join(os.path.dirname(__file__), "mappings", "mappings.json")
 
 # Global Stats
 serverstats = {}
@@ -117,6 +119,7 @@ serverstats['start'] = int(time.time())      # Timestamp for Start
 running = True
 tuyadevices = []
 deviceslist = {}
+dpsmappings = {}
 newdevices = []
 retrydevices = {}
 retrytimer = 0
@@ -232,8 +235,30 @@ def tuyaLoadConfig():
 
     return config
 
+def tuyaLoadMappings(productid=False):
+    # Check to see if we have DPS Key Mappings
+    try:
+        # Load mappings
+        with open(MAPPINGFILE) as f:
+            mappings = json.load(f)
+        log.debug("loaded=%s [%d mappings]", MAPPINGFILE, len(mappings))
+        if productid == False:
+          for d in tuyadevices:
+              if d['product_id'] in mappings:
+                  dpsmappings[d['id']] = mappings[d['product_id']]
+        else:
+              if productid in mappings:
+                  dpsmappings[productid] = mappings[productid]
+        mappings.clear()
+    except:
+        # No Mappings
+        log.debug("Mappings file %s could not be loaded", MAPPINGFILE)
+
+    return True
+
 tuyadevices = tuyaLoadJson()
 cloudconfig = tuyaLoadConfig()
+tuyaLoadMappings()
 
 def tuyaCloudRefresh():
     log.debug("Calling Cloud Refresh")
@@ -248,6 +273,7 @@ def tuyaCloudRefresh():
         return cloud.error
     tuyadevices = cloud.getdevices(False)
     tuyaSaveJson()
+    tuyaLoadMappings()
     return {'devices': tuyadevices}
 
 def getDeviceIdByName(name):
@@ -514,7 +540,12 @@ class handler(BaseHTTPRequestHandler):
                 try:
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                     d.set_version(float(deviceslist[id]["version"]))
-                    message = formatreturn(d.status())
+                    response = d.status()
+                    if id in dpsmappings:
+                        response["dps_scheme"] = dpsmappings[id]
+                    else:
+                        response["dps_scheme"] = []
+                    message = formatreturn(response)
                     d.close()
                 except:
                     message = json.dumps({"Error": "Error polling device.", "id": id})
