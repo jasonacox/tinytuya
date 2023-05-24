@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 
-# Import DPS mappings from other projects and create mappings file
+"""
+TinyTuya Tool to Import DPS mappings from other projects and create mappings file
+
+Author: Michael Schlenstedt
+Date: May 23, 2023
+For more information see https://github.com/jasonacox/tinytuya
+"""
 
 import json
 import urllib.request
