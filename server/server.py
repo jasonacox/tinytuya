@@ -15,8 +15,8 @@ Description
         /device/{DeviceID}|{DeviceName} - List specific device metadata
         /numdevices                     - List current number of devices discovered
         /status/{DeviceID}|{DeviceName} - List current device status
-        /set/{DeviceID}|{DeviceName}/{Key}/{Value}
-                                        - Set DPS {Key} with {Value}
+        /set/{DeviceID}|{DeviceName}/{Key}|{Code}/{Value}
+                                        - Set DPS {Key} or {Code} with {Value}
         /turnon/{DeviceID}|{DeviceName}/{SwitchNo}
                                         - Turn on device, optional {SwtichNo}
         /turnoff/{DeviceID}|{DeviceName}/{SwitchNo}
@@ -390,7 +390,7 @@ class handler(BaseHTTPRequestHandler):
                     ("/device/{DeviceID}|{DeviceName}", "List specific device metadata"),
                     ("/numdevices", "List current number of devices discovered"),
                     ("/status/{DeviceID}|{DeviceName}", "List current device status"),
-                    ("/set/{DeviceID}|{DeviceName}/{Key}/{Value}", "Set DPS {Key} with {Value}"),
+                    ("/set/{DeviceID}|{DeviceName}/{Key}|{Code}/{Value}", "Set DPS {Key} or {Code} with {Value}"),
                     ("/turnon/{DeviceID}|{DeviceName}/{SwitchNo}", "Turn on device, optional {SwtichNo}"),
                     ("/turnoff/{DeviceID}|{DeviceName}/{SwitchNo}", "Turn off device, optional {SwtichNo}"),
                     ("/delayoff/{DeviceID}|{DeviceName}/{SwitchNo}/{Time}", "Turn off device with delay of 10 secs, optional {SwitchNo}/{Time}"),
@@ -418,20 +418,26 @@ class handler(BaseHTTPRequestHandler):
                     dpsValue = dpsValue.split('"')[1]
                 elif dpsValue.isnumeric():
                     dpsValue = int(dpsValue)
+                if not dpsKey.isnumeric():
+                    if id in dpsmappings:
+                        for x in dpsmappings[id]:
+                            if x['code'] == str(dpsKey):
+                                dpsKey = int(x['id'])
+                                break
                 log.debug("Set dpsKey: %s dpsValue: %s" % (dpsKey,dpsValue))
+                if(id not in deviceslist):
+                    id = getDeviceIdByName(id)
+                if(id in deviceslist):
+                    d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
+                    d.set_version(float(deviceslist[id]["version"]))
+                    message = formatreturn(d.set_value(dpsKey,dpsValue,nowait=True))
+                    d.close()
+                else:
+                    message = json.dumps({"Error": "Device ID not found.", "id": id})
+                    log.debug("Device ID not found: %s" % id)
             except:
                 message = json.dumps({"Error": "Syntax error in set command URL.", "url": self.path})
                 log.debug("Syntax error in set command URL: %s" % self.path)
-            if(id not in deviceslist):
-                id = getDeviceIdByName(id)
-            if(id in deviceslist):
-                d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
-                d.set_version(float(deviceslist[id]["version"]))
-                message = formatreturn(d.set_value(dpsKey,dpsValue,nowait=True))
-                d.close()
-            else:
-                message = json.dumps({"Error": "Device ID not found.", "id": id})
-                log.debug("Device ID not found: %s" % id)
         elif self.path.startswith('/device/'):
             id = self.path.split('/device/')[1]
             if(id not in deviceslist):
