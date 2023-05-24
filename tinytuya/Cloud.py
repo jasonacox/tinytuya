@@ -84,6 +84,7 @@ class Cloud(object):
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
         self.use_old_device_list = True
+        self.mappings = None
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -737,3 +738,71 @@ class Cloud(object):
         elif len(str(ts)) == 10:
             ts *= 1000
         return ts
+
+    @staticmethod
+    def _build_mapping( src, dst ):
+        for mapp in src:
+            try:
+                code = mapp['code']
+                dp_id = str(mapp['dp_id'])
+                if dp_id in dst:
+                    continue
+                data = { 'name': code, 'type': mapp['type'] }
+                try:
+                    values = json.loads( mapp['values'] )
+                except:
+                    values = {}
+                if values and 'unit' in values:
+                    if values['unit']:
+                        values['unit'] = values['unit'].replace('℉','°F').replace('℃','°C').replace('f','°F').replace('c','°C').replace('秒','s') #.replace('份','')
+                data['values'] = values
+                dst[dp_id] = data
+            except:
+                log.debug( 'Parse mapping item failed!', exc_info=True )
+
+    def getmapping( self, productid, deviceid=None ):
+        if not self.mappings:
+            self.mappings = {} #load_mappings()
+
+        if productid in self.mappings:
+            return self.mappings[productid]
+
+        if deviceid:
+            result = self.getdps(deviceid)
+            if result:
+                if 'result' in result:
+                    result = result['result']
+                    dps = {}
+                    if 'status' in result:
+                        self._build_mapping( result['status'], dps )
+                    if 'functions' in result:
+                        self._build_mapping( result['functions'], dps )
+                    self.mappings[productid] = dps
+                    log.debug( 'Loaded mapping for device %r: $r', deviceid, dps)
+                elif ('code' in result and result['code'] == 2009) or ('msg' in result and result['msg'] == 'not support this device'):
+                    self.mappings[productid] = {}
+
+        if productid in self.mappings:
+            return self.mappings[productid]
+
+        return None
+
+    def setmappings( self, mappings ):
+        if type(mappings) == dict:
+            self.mappings = mappings
+
+    def getmappings( self, devices ):
+        if not self.mappings:
+            self.mappings = {}
+
+        for dev in devices:
+            try:
+                devid = dev['id']
+                productid = dev['product_id']
+            except:
+                continue
+
+            if productid not in self.mappings:
+                self.getmapping( productid, devid )
+
+        return self.mappings

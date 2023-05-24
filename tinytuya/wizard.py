@@ -237,6 +237,14 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         except:
             print('\n\n' + bold + 'Unable to save raw file' + dim )
 
+    if (not nocloud) and (not quicklist):
+        answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '(y/N): ')
+        if answer.lower().find('y') >= 0:
+            cloud.setmappings( tinytuya.load_mappings() )
+            mappings = cloud.getmappings( tuyadevices )
+            tinytuya.save_mappings( mappings )
+            print( bold + "\n>> " + normal + "Saved mappings for %d product IDs to %s" % (len(mappings), tinytuya.DPMAPPINGSFILE) )
+
     # Find out if we should poll all devices
     if quicklist:
         answer = 'n'

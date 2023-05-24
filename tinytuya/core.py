@@ -109,6 +109,7 @@ CONFIGFILE = 'tinytuya.json'
 DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
+DPMAPPINGSFILE = 'mappings.json'
 
 DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn')
 
@@ -596,7 +597,7 @@ def device_info( dev_id ):
         with open(DEVICEFILE, 'r') as f:
             tuyadevices = json.load(f)
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-            for	dev in tuyadevices:
+            for dev in tuyadevices:
                 if 'id' in dev and dev['id'] == dev_id:
                     log.debug("Device %r found in %s", dev_id, DEVICEFILE)
                     devinfo = dev
@@ -606,6 +607,30 @@ def device_info( dev_id ):
         pass
 
     return devinfo
+
+def load_mappings( mappingsfile=None ):
+    if not mappingsfile:
+        mappingsfile = DPMAPPINGSFILE
+    try:
+        with open( mappingsfile, 'r' ) as f:
+            mappings = json.load(f)
+            log.debug( 'loaded %d mappings from %s', len(mappings), mappingsfile )
+    except:
+        mappings = {}
+
+    return mappings
+
+def save_mappings( mappings, mappingsfile=None ):
+    if not mappingsfile:
+        mappingsfile = DPMAPPINGSFILE
+    try:
+        with open( mappingsfile, 'w' ) as f:
+            json.dump( mappings, f, indent=4 )
+            log.debug( 'saved %d mappings to %s', len(mappings), mappingsfile )
+    except:
+        return False
+
+    return True
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
@@ -1266,7 +1291,7 @@ class XenonDevice(object):
 
         return MessagePayload(SESS_KEY_NEG_START, self.local_nonce)
 
-    def	_negotiate_session_key_generate_step_3( self, rkey ):
+    def _negotiate_session_key_generate_step_3( self, rkey ):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
             log.debug("session key negotiation failed on step 1")
