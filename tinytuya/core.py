@@ -26,7 +26,8 @@
     save_dp_mappings(mappings, mappingsfile=None)  # Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
     find_dp_mapping(product_id, mappingsfile=None) # Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for
                                                    #   the given device ID, and returns the mapping for that product/device
-    assign_dp_mappings(tuyadevices, mappingsfile=None)# Adds mappings to all the devices in the tuyadevices list (modified in place) using DPMAPPINGSFILE (usually mappings.json)
+    assign_dp_mappings(tuyadevices, mappings=None)  # Adds mappings to all the devices in the tuyadevices list
+                                                    #  mappings is either a dict containing the mappings or the name of a file to load them from (uses DPMAPPINGSFILE if empty)
     decrypt_udp(msg)                               # Decrypts a UDP network broadcast packet
 
  Device Functions
@@ -670,17 +671,18 @@ def find_dp_mapping( product_id, mappingsfile=None ):
     # not found!
     return None
 
-def assign_dp_mappings( tuyadevices, mappingsfile=None ):
-    """ Adds mappings to all the devices in the tuyadevices list using DPMAPPINGSFILE (usually mappings.json)
+def assign_dp_mappings( tuyadevices, mappings=None ):
+    """ Adds mappings to all the devices in the tuyadevices list
 
     Parameters:
         tuyadevices = list of devices
-        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
+        mappings = Optional, either a dict containing the mappings a string containing the mappings file to load.  Uses DPMAPPINGSFILE when empty
 
     Response:
         Nothing, modifies tuyadevices in place
     """
-    mappings = load_dp_mappings( mappingsfile )
+    if type(mappings) != dict:
+        mappings = load_dp_mappings( mappings )
     if (not mappings) or (not tuyadevices):
         return None
 
