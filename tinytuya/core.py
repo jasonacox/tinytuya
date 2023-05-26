@@ -662,7 +662,7 @@ def find_mapping( product_id, mappingsfile=None ):
     # if not, see if it is a device in devices.json
     devinfo = device_info( product_id )
     if devinfo and 'product_id' in devinfo:
-        product_id = devinfo:['product_id']
+        product_id = devinfo['product_id']
         if product_id in mappings:
             return mappings[product_id]
 
