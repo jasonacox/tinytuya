@@ -237,10 +237,14 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         except:
             print('\n\n' + bold + 'Unable to save raw file' + dim )
 
+    # Fetch the DP name mappings for all devices
     if (not nocloud) and (not quicklist):
+        # Default to 'no'
         answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '(y/N): ')
         if answer.lower().find('y') >= 0:
+            # load existing mappings so we only fetch mappings for newly-added devices
             cloud.setmappings( tinytuya.load_mappings() )
+            # fetch missing mappings
             mappings = cloud.getmappings( tuyadevices )
             tinytuya.save_mappings( mappings )
             print( bold + "\n>> " + normal + "Saved mappings for %d product IDs to %s" % (len(mappings), tinytuya.DPMAPPINGSFILE) )

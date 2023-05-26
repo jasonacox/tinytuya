@@ -741,57 +741,76 @@ class Cloud(object):
 
     @staticmethod
     def _build_mapping( src, dst ):
+        # merge multiple DPS sets from result['status'] and result['functions'] into a single result
         for mapp in src:
             try:
                 code = mapp['code']
                 dp_id = str(mapp['dp_id'])
                 if dp_id in dst:
                     continue
-                data = { 'name': code, 'type': mapp['type'] }
+                data = { 'code': code, 'type': mapp['type'] }
                 try:
                     values = json.loads( mapp['values'] )
                 except:
                     values = {}
                 if values and 'unit' in values:
                     if values['unit']:
-                        values['unit'] = values['unit'].replace('℉','°F').replace('℃','°C').replace('f','°F').replace('c','°C').replace('秒','s') #.replace('份','')
+                        # normalize some unicode and temperature units
+                        # not sure what a good replacement for '份' is (seen in a pet feeder)
+                        values['unit'] = values['unit'].replace('℉','°F').replace('℃','°C').replace('f','°F').replace('c','°C').replace('秒','s')
+
+                # Tuya's 'JSON' mapping type is an ordered dict, but python's dict is not!  so, save the raw value as well
+                if mapp['type'].lower() == 'json':
+                    data['raw_values'] = mapp['values']
                 data['values'] = values
                 dst[dp_id] = data
             except:
                 log.debug( 'Parse mapping item failed!', exc_info=True )
 
     def getmapping( self, productid, deviceid=None ):
+        # return a mapping for the given product id, or download it from the cloud using a device id
+        # Return value: None on failure, or a dict on success (may be an empty dict if device does not have DPs)
         if not self.mappings:
             self.mappings = {} #load_mappings()
 
         if productid in self.mappings:
+            # already have this product id, so just return it
             return self.mappings[productid]
 
         if deviceid:
+            # we do not have this product id yet, so download it via this device id
             result = self.getdps(deviceid)
+
             if result:
                 if 'result' in result:
                     result = result['result']
                     dps = {}
+                    # merge result['status'] and result['functions'] into a single result
                     if 'status' in result:
                         self._build_mapping( result['status'], dps )
                     if 'functions' in result:
                         self._build_mapping( result['functions'], dps )
                     self.mappings[productid] = dps
-                    log.debug( 'Loaded mapping for device %r: $r', deviceid, dps)
+                    log.debug( 'Downloaded mapping for device %r: %r', deviceid, dps)
                 elif ('code' in result and result['code'] == 2009) or ('msg' in result and result['msg'] == 'not support this device'):
+                    # this device does not have any DPs!
                     self.mappings[productid] = {}
 
         if productid in self.mappings:
+            # download success, so return it
             return self.mappings[productid]
 
+        # no device id, or download failed
         return None
 
     def setmappings( self, mappings ):
+        # sets an initial mapping set so we do not need to download everything
         if type(mappings) == dict:
             self.mappings = mappings
 
     def getmappings( self, devices ):
+        # get all mappings for all tuya devices
+        # returns a dict with product ids as keys
         if not self.mappings:
             self.mappings = {}
 
@@ -800,6 +819,7 @@ class Cloud(object):
                 devid = dev['id']
                 productid = dev['product_id']
             except:
+                # we need both the device id and the product id to download mappings!
                 continue
 
             if productid not in self.mappings:

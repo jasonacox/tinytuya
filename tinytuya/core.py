@@ -14,7 +14,21 @@
         XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False, cid/node_id=None, parent=None)
   * Device(XenonDevice) - Tuya Class for Devices
 
- Functions
+ Module Functions
+    set_debug(toggle, color)                    # Activate verbose debugging output
+    pack_message(msg, hmac_key=None)            # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
+    unpack_message(data, hmac_key=None, header=None, no_retcode=False)
+                                                # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
+    parse_header(data)                          # Unpacks just the header part of a message into a TuyaHeader()
+    find_device(dev_id=None, address=None)      # Scans network for Tuya devices with either ID = dev_id or IP = address
+    device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
+    load_mappings(mappingsfile=None)            # Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
+    find_mapping(product_id, mappingsfile=None) # Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for
+                                                #   the given device ID, and returns the mapping for that product/device
+    save_mappings(mappings, mappingsfile=None)  # Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
+    decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
+
+ Device Functions
     json = status()                    # returns json payload
     subdev_query(nowait)               # query sub-device status (only for gateway devices)
     set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
@@ -35,7 +49,6 @@
     turn_on(switch=1, nowait)          # Turn on device / switch #
     turn_off(switch=1, nowait)         # Turn off
     set_timer(num_secs, nowait)        # Set timer for num_secs
-    set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
     detect_available_dps()             # Return list of DPS available from device
     generate_payload(command, data,...)# Generate TuyaMessage payload for command with data
@@ -609,6 +622,14 @@ def device_info( dev_id ):
     return devinfo
 
 def load_mappings( mappingsfile=None ):
+    """Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
+
+    Parameters:
+        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
+
+    Response:
+        {dict} containing the contents of the mappings file
+    """
     if not mappingsfile:
         mappingsfile = DPMAPPINGSFILE
     try:
@@ -620,7 +641,44 @@ def load_mappings( mappingsfile=None ):
 
     return mappings
 
+def find_mapping( product_id, mappingsfile=None ):
+    """ Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for the given device ID, and returns the mapping for that product/device
+
+    Parameters:
+        product_id = Product ID to find, or Device ID to lookup in DEVICEFILE
+        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
+
+    Response:
+        {dict} containing the mapping for the product id
+    """
+    mappings = load_mappings( mappingsfile )
+    if not mappings:
+        return None
+
+    # first try by product id
+    if product_id in mappings:
+        return mappings[product_id]
+
+    # if not, see if it is a device in devices.json
+    devinfo = device_info( product_id )
+    if devinfo and 'product_id' in devinfo:
+        product_id = devinfo:['product_id']
+        if product_id in mappings:
+            return mappings[product_id]
+
+    # not found!
+    return None
+
 def save_mappings( mappings, mappingsfile=None ):
+    """ Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
+
+    Parameters:
+        mappings = dict containing the mappings to save
+        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
+
+    Response:
+        True on success, False on error
+    """
     if not mappingsfile:
         mappingsfile = DPMAPPINGSFILE
     try:
@@ -628,6 +686,7 @@ def save_mappings( mappings, mappingsfile=None ):
             json.dump( mappings, f, indent=4 )
             log.debug( 'saved %d mappings to %s', len(mappings), mappingsfile )
     except:
+        log.debug( 'Error saving mappings to file %r', mappingsfile, exc_info=True )
         return False
 
     return True
