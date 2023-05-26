@@ -15,18 +15,18 @@
   * Device(XenonDevice) - Tuya Class for Devices
 
  Module Functions
-    set_debug(toggle, color)                    # Activate verbose debugging output
-    pack_message(msg, hmac_key=None)            # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
+    set_debug(toggle, color)                       # Activate verbose debugging output
+    pack_message(msg, hmac_key=None)               # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
     unpack_message(data, hmac_key=None, header=None, no_retcode=False)
-                                                # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
-    parse_header(data)                          # Unpacks just the header part of a message into a TuyaHeader()
-    find_device(dev_id=None, address=None)      # Scans network for Tuya devices with either ID = dev_id or IP = address
-    device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
-    load_mappings(mappingsfile=None)            # Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
-    find_mapping(product_id, mappingsfile=None) # Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for
-                                                #   the given device ID, and returns the mapping for that product/device
-    save_mappings(mappings, mappingsfile=None)  # Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
-    decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
+                                                   # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
+    parse_header(data)                             # Unpacks just the header part of a message into a TuyaHeader()
+    find_device(dev_id=None, address=None)         # Scans network for Tuya devices with either ID = dev_id or IP = address
+    device_info(dev_id)                            # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
+    load_dp_mappings(mappingsfile=None)            # Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
+    save_dp_mappings(mappings, mappingsfile=None)  # Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
+    find_dp_mapping(product_id, mappingsfile=None) # Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for
+                                                   #   the given device ID, and returns the mapping for that product/device
+    decrypt_udp(msg)                               # Decrypts a UDP network broadcast packet
 
  Device Functions
     json = status()                    # returns json payload
@@ -621,7 +621,7 @@ def device_info( dev_id ):
 
     return devinfo
 
-def load_mappings( mappingsfile=None ):
+def load_dp_mappings( mappingsfile=None ):
     """Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
 
     Parameters:
@@ -641,7 +641,7 @@ def load_mappings( mappingsfile=None ):
 
     return mappings
 
-def find_mapping( product_id, mappingsfile=None ):
+def find_dp_mapping( product_id, mappingsfile=None ):
     """ Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for the given device ID, and returns the mapping for that product/device
 
     Parameters:
@@ -662,14 +662,14 @@ def find_mapping( product_id, mappingsfile=None ):
     # if not, see if it is a device in devices.json
     devinfo = device_info( product_id )
     if devinfo and 'product_id' in devinfo:
-        product_id = devinfo:['product_id']
+        product_id = devinfo['product_id']
         if product_id in mappings:
             return mappings[product_id]
 
     # not found!
     return None
 
-def save_mappings( mappings, mappingsfile=None ):
+def save_dp_mappings( mappings, mappingsfile=None ):
     """ Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
 
     Parameters:
