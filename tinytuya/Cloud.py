@@ -478,9 +478,8 @@ class Cloud(object):
                 continue
             if (('icon' not in old) and ('icon' in dev)) or (include_map and ('mapping' not in old or old['mapping'] is None)):
                 # icon or mapping added
-                #changed_devices.append( dev )
-                #continue
-                pass
+                changed_devices.append( dev )
+                continue
             is_same = True
             for k in DEVICEFILE_SAVE_VALUES:
                 if k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]:
