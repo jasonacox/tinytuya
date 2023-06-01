@@ -388,12 +388,18 @@ class Cloud(object):
 
         return our_result
 
-    def getdevices(self, verbose=False):
+    def getdevices(self, verbose=False, oldlist=[], include_map=False):
         """
         Return dictionary of all devices.
         If verbose is true, return full Tuya device
         details.
         """
+        old_devices = {}
+        if oldlist:
+            for dev in oldlist:
+                dev_id = dev['id']
+                old_devices[dev_id] = dev
+
         if self.apiDeviceID and self.use_old_device_list:
             json_data = {}
             uid_list = {}
@@ -452,9 +458,55 @@ class Cloud(object):
                 ERR_CLOUD,
                 "Unable to get device list"
             )
-        else:
-            # Filter to only Name, ID and Key
-            return self.filter_devices( json_data['result'] )
+
+        self.getdevices_raw = json_data
+        devs = json_data['result']
+        changed_devices = []
+        unchanged_devices = []
+
+        # chect to see if anything has changed.  if so, re-download factory-infos and DP mapping
+        for dev in devs:
+            dev_id = dev['id']
+            if dev_id not in old_devices:
+                # newly-added device
+                changed_devices.append( dev )
+                continue
+            old = old_devices[dev_id]
+            if 'key' not in old or old['key'] != dev['local_key']:
+                # local key changed
+                changed_devices.append( dev )
+                continue
+            if (('icon' not in old) and ('icon' in dev)) or (include_map and ('mapping' not in old or old['mapping'] is None)):
+                # icon or mapping added
+                #changed_devices.append( dev )
+                #continue
+                pass
+            is_same = True
+            for k in DEVICEFILE_SAVE_VALUES:
+                if k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]:
+                    is_same = False
+                    break
+            if not is_same:
+                changed_devices.append( dev )
+                continue
+            unchanged_devices.append( old )
+
+        if include_map:
+            mappings = self.getmappings( changed_devices )
+            for productid in mappings:
+                for dev in changed_devices:
+                    if 'product_id' in dev and dev['product_id'] == productid:
+                        dev['mapping'] = mappings[productid]
+                # also set unchanged devices just in case the mapping changed
+                for dev in unchanged_devices:
+                    if 'product_id' in dev and dev['product_id'] == productid:
+                        dev['mapping'] = mappings[productid]
+
+        log.debug( 'changed: %d', len(changed_devices) )
+        log.debug( 'unchanged: %d', len(unchanged_devices) )
+
+        # Filter to only Name, ID and Key
+        return self.filter_devices( changed_devices ) + unchanged_devices
 
     def _get_hw_addresses( self, maclist, devices ):
         while devices:
@@ -745,15 +797,18 @@ class Cloud(object):
         for mapp in src:
             try:
                 code = mapp['code']
-                dp_id = str(mapp['dp_id'])
+                dp_id = code if 'dp_id' not in mapp else str(mapp['dp_id'])
                 if dp_id in dst:
                     continue
                 data = { 'code': code, 'type': mapp['type'] }
-                try:
-                    values = json.loads( mapp['values'] )
-                except:
-                    values = {}
-                if values and 'unit' in values:
+                if mapp['type'].lower() == 'string':
+                    values = mapp['values']
+                else:
+                    try:
+                        values = json.loads( mapp['values'] )
+                    except:
+                        values = mapp['values']
+                if values and type(values) == dict and 'unit' in values:
                     if values['unit']:
                         # normalize some unicode and temperature units
                         # not sure what a good replacement for '份' is (seen in a pet feeder)

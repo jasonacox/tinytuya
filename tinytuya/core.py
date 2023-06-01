@@ -15,20 +15,15 @@
   * Device(XenonDevice) - Tuya Class for Devices
 
  Module Functions
-    set_debug(toggle, color)                       # Activate verbose debugging output
-    pack_message(msg, hmac_key=None)               # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
+    set_debug(toggle, color)                    # Activate verbose debugging output
+    pack_message(msg, hmac_key=None)            # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
     unpack_message(data, hmac_key=None, header=None, no_retcode=False)
-                                                   # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
-    parse_header(data)                             # Unpacks just the header part of a message into a TuyaHeader()
-    find_device(dev_id=None, address=None)         # Scans network for Tuya devices with either ID = dev_id or IP = address
-    device_info(dev_id)                            # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
-    load_dp_mappings(mappingsfile=None)            # Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
-    save_dp_mappings(mappings, mappingsfile=None)  # Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
-    find_dp_mapping(product_id, mappingsfile=None) # Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for
-                                                   #   the given device ID, and returns the mapping for that product/device
-    assign_dp_mappings(tuyadevices, mappings=None)  # Adds mappings to all the devices in the tuyadevices list
-                                                    #  mappings is either a dict containing the mappings or the name of a file to load them from (uses DPMAPPINGSFILE if empty)
-    decrypt_udp(msg)                               # Decrypts a UDP network broadcast packet
+                                                # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
+    parse_header(data)                          # Unpacks just the header part of a message into a TuyaHeader()
+    find_device(dev_id=None, address=None)      # Scans network for Tuya devices with either ID = dev_id or IP = address
+    device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
+    assign_dp_mappings(tuyadevices, mappings)   # Adds mappings to all the devices in the tuyadevices list
+    decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
 
  Device Functions
     json = status()                    # returns json payload
@@ -124,9 +119,8 @@ CONFIGFILE = 'tinytuya.json'
 DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
-DPMAPPINGSFILE = 'mappings.json'
 
-DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn')
+DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn', 'mapping')
 
 # Tuya Command Types
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
@@ -623,66 +617,19 @@ def device_info( dev_id ):
 
     return devinfo
 
-def load_dp_mappings( mappingsfile=None ):
-    """Loads DPMAPPINGSFILE (usually mappings.json) and returns the contents
-
-    Parameters:
-        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
-
-    Response:
-        {dict} containing the contents of the mappings file
-    """
-    if not mappingsfile:
-        mappingsfile = DPMAPPINGSFILE
-    try:
-        with open( mappingsfile, 'r' ) as f:
-            mappings = json.load(f)
-            log.debug( 'loaded %d mappings from %s', len(mappings), mappingsfile )
-    except:
-        mappings = {}
-
-    return mappings
-
-def find_dp_mapping( product_id, mappingsfile=None ):
-    """ Searches DPMAPPINGSFILE (usually mappings.json) for the given product_id, or DEVICEFILE for the given device ID, and returns the mapping for that product/device
-
-    Parameters:
-        product_id = Product ID to find, or Device ID to lookup in DEVICEFILE
-        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
-
-    Response:
-        {dict} containing the mapping for the product id
-    """
-    mappings = load_dp_mappings( mappingsfile )
-    if not mappings:
-        return None
-
-    # first try by product id
-    if product_id in mappings:
-        return mappings[product_id]
-
-    # if not, see if it is a device in devices.json
-    devinfo = device_info( product_id )
-    if devinfo and 'product_id' in devinfo:
-        product_id = devinfo['product_id']
-        if product_id in mappings:
-            return mappings[product_id]
-
-    # not found!
-    return None
-
-def assign_dp_mappings( tuyadevices, mappings=None ):
+def assign_dp_mappings( tuyadevices, mappings ):
     """ Adds mappings to all the devices in the tuyadevices list
 
     Parameters:
         tuyadevices = list of devices
-        mappings = Optional, either a dict containing the mappings a string containing the mappings file to load.  Uses DPMAPPINGSFILE when empty
+        mappings = dict containing the mappings
 
     Response:
         Nothing, modifies tuyadevices in place
     """
     if type(mappings) != dict:
-        mappings = load_dp_mappings( mappings )
+        raise ValueError( '\'mappings\' must be a dict' )
+
     if (not mappings) or (not tuyadevices):
         return None
 
@@ -700,28 +647,6 @@ def assign_dp_mappings( tuyadevices, mappings=None ):
         else:
             log.debug( 'Device %s has no mapping!', devid )
             dev['mapping'] = None
-
-def save_dp_mappings( mappings, mappingsfile=None ):
-    """ Saves the given mappings dict into DPMAPPINGSFILE (usually mappings.json)
-
-    Parameters:
-        mappings = dict containing the mappings to save
-        mappingsfile = Optional mappings.json file to use, uses DPMAPPINGSFILE when empty
-
-    Response:
-        True on success, False on error
-    """
-    if not mappingsfile:
-        mappingsfile = DPMAPPINGSFILE
-    try:
-        with open( mappingsfile, 'w' ) as f:
-            json.dump( mappings, f, indent=4 )
-            log.debug( 'saved %d mappings to %s', len(mappings), mappingsfile )
-    except:
-        log.debug( 'Error saving mappings to file %r', mappingsfile, exc_info=True )
-        return False
-
-    return True
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
