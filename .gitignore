@@ -117,6 +117,7 @@ tuya-raw.json
 server/testproxy.sh
 server/uploadtest.sh
 devices.json.off
+mappings.json
 
 # packet captures
 *.pcap

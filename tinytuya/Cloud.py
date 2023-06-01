@@ -84,6 +84,7 @@ class Cloud(object):
         self.new_sign_algorithm = new_sign_algorithm
         self.server_time_offset = 0
         self.use_old_device_list = True
+        self.mappings = None
 
         if (not apiKey) or (not apiSecret):
             try:
@@ -387,12 +388,18 @@ class Cloud(object):
 
         return our_result
 
-    def getdevices(self, verbose=False):
+    def getdevices(self, verbose=False, oldlist=[], include_map=False):
         """
         Return dictionary of all devices.
         If verbose is true, return full Tuya device
         details.
         """
+        old_devices = {}
+        if oldlist:
+            for dev in oldlist:
+                dev_id = dev['id']
+                old_devices[dev_id] = dev
+
         if self.apiDeviceID and self.use_old_device_list:
             json_data = {}
             uid_list = {}
@@ -451,9 +458,54 @@ class Cloud(object):
                 ERR_CLOUD,
                 "Unable to get device list"
             )
-        else:
-            # Filter to only Name, ID and Key
-            return self.filter_devices( json_data['result'] )
+
+        self.getdevices_raw = json_data
+        devs = json_data['result']
+        changed_devices = []
+        unchanged_devices = []
+
+        # chect to see if anything has changed.  if so, re-download factory-infos and DP mapping
+        for dev in devs:
+            dev_id = dev['id']
+            if dev_id not in old_devices:
+                # newly-added device
+                changed_devices.append( dev )
+                continue
+            old = old_devices[dev_id]
+            if 'key' not in old or old['key'] != dev['local_key']:
+                # local key changed
+                changed_devices.append( dev )
+                continue
+            if (('icon' not in old) and ('icon' in dev)) or (include_map and ('mapping' not in old or old['mapping'] is None)):
+                # icon or mapping added
+                changed_devices.append( dev )
+                continue
+            is_same = True
+            for k in DEVICEFILE_SAVE_VALUES:
+                if k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]:
+                    is_same = False
+                    break
+            if not is_same:
+                changed_devices.append( dev )
+                continue
+            unchanged_devices.append( old )
+
+        if include_map:
+            mappings = self.getmappings( changed_devices )
+            for productid in mappings:
+                for dev in changed_devices:
+                    if 'product_id' in dev and dev['product_id'] == productid:
+                        dev['mapping'] = mappings[productid]
+                # also set unchanged devices just in case the mapping changed
+                for dev in unchanged_devices:
+                    if 'product_id' in dev and dev['product_id'] == productid:
+                        dev['mapping'] = mappings[productid]
+
+        log.debug( 'changed: %d', len(changed_devices) )
+        log.debug( 'unchanged: %d', len(unchanged_devices) )
+
+        # Filter to only Name, ID and Key
+        return self.filter_devices( changed_devices ) + unchanged_devices
 
     def _get_hw_addresses( self, maclist, devices ):
         while devices:
@@ -737,3 +789,94 @@ class Cloud(object):
         elif len(str(ts)) == 10:
             ts *= 1000
         return ts
+
+    @staticmethod
+    def _build_mapping( src, dst ):
+        # merge multiple DPS sets from result['status'] and result['functions'] into a single result
+        for mapp in src:
+            try:
+                code = mapp['code']
+                dp_id = code if 'dp_id' not in mapp else str(mapp['dp_id'])
+                if dp_id in dst:
+                    continue
+                data = { 'code': code, 'type': mapp['type'] }
+                if mapp['type'].lower() == 'string':
+                    values = mapp['values']
+                else:
+                    try:
+                        values = json.loads( mapp['values'] )
+                    except:
+                        values = mapp['values']
+                if values and type(values) == dict and 'unit' in values:
+                    if values['unit']:
+                        # normalize some unicode and temperature units
+                        # not sure what a good replacement for '份' is (seen in a pet feeder)
+                        values['unit'] = values['unit'].replace('℉','°F').replace('℃','°C').replace('f','°F').replace('c','°C').replace('秒','s')
+
+                # Tuya's 'JSON' mapping type is an ordered dict, but python's dict is not!  so, save the raw value as well
+                if mapp['type'].lower() == 'json':
+                    data['raw_values'] = mapp['values']
+                data['values'] = values
+                dst[dp_id] = data
+            except:
+                log.debug( 'Parse mapping item failed!', exc_info=True )
+
+    def getmapping( self, productid, deviceid=None ):
+        # return a mapping for the given product id, or download it from the cloud using a device id
+        # Return value: None on failure, or a dict on success (may be an empty dict if device does not have DPs)
+        if not self.mappings:
+            self.mappings = {} #load_mappings()
+
+        if productid in self.mappings:
+            # already have this product id, so just return it
+            return self.mappings[productid]
+
+        if deviceid:
+            # we do not have this product id yet, so download it via this device id
+            result = self.getdps(deviceid)
+
+            if result:
+                if 'result' in result:
+                    result = result['result']
+                    dps = {}
+                    # merge result['status'] and result['functions'] into a single result
+                    if 'status' in result:
+                        self._build_mapping( result['status'], dps )
+                    if 'functions' in result:
+                        self._build_mapping( result['functions'], dps )
+                    self.mappings[productid] = dps
+                    log.debug( 'Downloaded mapping for device %r: %r', deviceid, dps)
+                elif ('code' in result and result['code'] == 2009) or ('msg' in result and result['msg'] == 'not support this device'):
+                    # this device does not have any DPs!
+                    self.mappings[productid] = {}
+
+        if productid in self.mappings:
+            # download success, so return it
+            return self.mappings[productid]
+
+        # no device id, or download failed
+        return None
+
+    def setmappings( self, mappings ):
+        # sets an initial mapping set so we do not need to download everything
+        if type(mappings) == dict:
+            self.mappings = mappings
+
+    def getmappings( self, devices ):
+        # get all mappings for all tuya devices
+        # returns a dict with product ids as keys
+        if not self.mappings:
+            self.mappings = {}
+
+        for dev in devices:
+            try:
+                devid = dev['id']
+                productid = dev['product_id']
+            except:
+                # we need both the device id and the product id to download mappings!
+                continue
+
+            if productid not in self.mappings:
+                self.getmapping( productid, devid )
+
+        return self.mappings

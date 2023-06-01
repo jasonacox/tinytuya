@@ -86,6 +86,13 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         # First Time Setup
         pass
 
+    try:
+        # Load the old device list, if available
+        with open(DEVICEFILE, "r") as infile:
+            old_devices = json.load( infile )
+    except:
+        old_devices = {}
+
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
@@ -100,9 +107,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
               (config['apiKey'], config['apiSecret'], apiDeviceID,
                config['apiRegion']))
         print('')
-        if quicklist:
-            needconfigs = True
-        else:
+        if not quicklist:
             answer = input(subbold + '    Use existing credentials ' + normal + '(Y/n): ')
             if answer[0:1].lower() == 'n':
                 needconfigs = True
@@ -135,8 +140,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         print(dim + json_object)
 
     if nocloud:
-        with open(DEVICEFILE, "r") as infile:
-            tuyadevices = json.load( infile )
+        tuyadevices = old_devices
     else:
         if 'apiDeviceID' in config and config['apiDeviceID'] and config['apiDeviceID'].strip().lower() == 'scan':
             config['apiDeviceID'] = ''
@@ -159,17 +163,21 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
             print('Check API Key and Secret')
             return
 
-        # Get UID from sample Device ID
-        json_data = cloud.getdevices( True )
+        # Fetch the DP name mappings for all devices
+        if quicklist:
+            answer = 'y'
+        else:
+            answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '(Y/n): ')
+        include_map = not bool( answer[0:1].lower() == 'n' )
 
-        if 'result' not in json_data:
-            err = json_data['Payload'] if 'Payload' in json_data else 'Unknown Error'
+        # Get UID from sample Device ID
+        tuyadevices = cloud.getdevices( False, oldlist=old_devices, include_map=include_map )
+
+        if type(tuyadevices) != list:
+            err = tuyadevices['Payload'] if 'Payload' in tuyadevices else 'Unknown Error'
             print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
             print('Check DeviceID and Region')
             return
-
-        # Filter to only Name, ID and Key, IP and mac-address
-        tuyadevices = cloud.filter_devices( json_data['result'] )
 
     # The device list does not (always) tell us which device is the parent for a sub-device, so we need to try and figure it out
     # The only link between parent and child appears to be the local key
@@ -224,7 +232,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
     if not nocloud:
         # Save raw TuyaPlatform data to tuya-raw.json
         print(bold + "\n>> " + normal + "Saving raw TuyaPlatform response to " + RAWFILE)
-        json_data['file'] = {
+        cloud.getdevices_raw['file'] = {
             'name': RAWFILE,
             'description': 'Full raw list of Tuya devices.',
             'account': cloud.apiKey,
@@ -233,7 +241,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         }
         try:
             with open(RAWFILE, "w") as outfile:
-                outfile.write(json.dumps(json_data, indent=4))
+                outfile.write(json.dumps(cloud.getdevices_raw, indent=4))
         except:
             print('\n\n' + bold + 'Unable to save raw file' + dim )
 
