@@ -234,30 +234,8 @@ def tuyaLoadConfig():
 
     return config
 
-def tuyaLoadMappings(productid=False):
-    # Check to see if we have DPS Key Mappings
-    try:
-        # Load mappings
-        with open(MAPPINGFILE) as f:
-            mappings = json.load(f)
-        log.debug("loaded=%s [%d mappings]", MAPPINGFILE, len(mappings))
-        if productid == False:
-          for d in tuyadevices:
-              if d['product_id'] in mappings:
-                  dpsmappings[d['id']] = mappings[d['product_id']]
-        else:
-              if productid in mappings:
-                  dpsmappings[productid] = mappings[productid]
-        mappings.clear()
-    except:
-        # No Mappings
-        log.debug("Mappings file %s could not be loaded", MAPPINGFILE)
-
-    return True
-
 tuyadevices = tuyaLoadJson()
 cloudconfig = tuyaLoadConfig()
-tuyaLoadMappings()
 
 def tuyaCloudRefresh():
     log.debug("Calling Cloud Refresh")
@@ -272,7 +250,6 @@ def tuyaCloudRefresh():
         return cloud.error
     tuyadevices = cloud.getdevices(False)
     tuyaSaveJson()
-    tuyaLoadMappings()
     return {'devices': tuyadevices}
 
 def getDeviceIdByName(name):
@@ -397,7 +374,6 @@ class handler(BaseHTTPRequestHandler):
                     ("/sync", "Fetches the device list and local keys from the Tuya Cloud API"),
                     ("/cloudconfig/{apiKey}/{apiSecret}/{apiRegion}/{apiDeviceID}", "Sets the Tuya Cloud API login info"),
                     ("/offline", "List of registered devices that are offline")]
-
             message = json.dumps(cmds)
         elif self.path == '/stats':
             # Give Internal Stats
@@ -418,15 +394,17 @@ class handler(BaseHTTPRequestHandler):
                     dpsValue = dpsValue.split('"')[1]
                 elif dpsValue.isnumeric():
                     dpsValue = int(dpsValue)
-                if not dpsKey.isnumeric():
-                    if id in dpsmappings:
-                        for x in dpsmappings[id]:
-                            if x['code'] == str(dpsKey):
-                                dpsKey = int(x['id'])
-                                break
-                log.debug("Set dpsKey: %s dpsValue: %s" % (dpsKey,dpsValue))
                 if(id not in deviceslist):
                     id = getDeviceIdByName(id)
+                if not dpsKey.isnumeric():
+                    for x in tuyadevices:
+                        if x['id'] == id:
+                            if 'mapping' in x:
+                                for i in x['mapping']:
+                                    if x['mapping'][i]['code'] == str(dpsKey):
+                                        dpsKey = i
+                                        break
+                log.debug("Set dpsKey: %s dpsValue: %s" % (dpsKey,dpsValue))
                 if(id in deviceslist):
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                     d.set_version(float(deviceslist[id]["version"]))
@@ -546,10 +524,13 @@ class handler(BaseHTTPRequestHandler):
                     d = tinytuya.OutletDevice(id, deviceslist[id]["ip"], deviceslist[id]["key"])
                     d.set_version(float(deviceslist[id]["version"]))
                     response = d.status()
-                    if id in dpsmappings:
-                        response["dps_scheme"] = dpsmappings[id]
-                    else:
-                        response["dps_scheme"] = []
+                    for x in tuyadevices:
+                        if x['id'] == id:
+                            if 'mapping' in x:
+                                response["dps_mapping"] = x['mapping']
+                            else:
+                                response["dps_mapping"] = []
+                            break
                     message = formatreturn(response)
                     d.close()
                 except:
