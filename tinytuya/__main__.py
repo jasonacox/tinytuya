@@ -73,7 +73,7 @@ if state == 0:
 
 # State 1 = Run Setup Wizard
 if state == 1:
-    wizard.wizard(color=color, retries=retries, forcescan=force)
+    wizard.wizard(color=color, retries=retries, forcescan=force, quicklist=assume_yes)
 
 # State 2 = Snapshot Display and Scan
 if state == 2:

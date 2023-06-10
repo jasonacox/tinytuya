@@ -1,5 +1,83 @@
 # RELEASE NOTES
 
+## v1.12.8 - Device DP Mapping
+
+* PyPI 1.12.8
+* [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] - Use {DeviceName} instead of {DeviceID} alternatively for API commands by @mschlenstedt in https://github.com/jasonacox/tinytuya/pull/352
+* Wizard - New Cloud functions to download DP Name mappings by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/356
+
+Example device from UPDATED `devices.json` showing new *"mapping"* data:
+
+```json
+    {
+        "name": "Smart Plug",
+        "id": "01234567890abcdef012",
+        "key": "abcdef0123456789",
+        "mac": "aa:bb:cc:dd:33:11",
+        "uuid": "01234567890abcdef012",
+        "category": "cz",
+        "product_name": "WP1-Smart Socket",
+        "product_id": "iXfg9AQVUPhlfyGw",
+        "biz_type": 18,
+        "model": "WP1/10A/\u5e26\u8ba1\u91cf/gosund",
+        "sub": false,
+        "icon": "https://images.tuyaus.com/smart/icon/1472009231_0.png",
+        "mapping": {
+            "1": {
+                "code": "switch",
+                "type": "Boolean",
+                "values": {}
+            },
+            "4": {
+                "code": "cur_current",
+                "type": "Integer",
+                "values": {
+                    "unit": "mA",
+                    "min": 0,
+                    "max": 30000,
+                    "scale": 0,
+                    "step": 1
+                }
+            },
+            "5": {
+                "code": "cur_power",
+                "type": "Integer",
+                "values": {
+                    "unit": "W",
+                    "min": 0,
+                    "max": 50000,
+                    "scale": 1,
+                    "step": 1
+                }
+            },
+            "6": {
+                "code": "cur_voltage",
+                "type": "Integer",
+                "values": {
+                    "unit": "V",
+                    "min": 0,
+                    "max": 5000,
+                    "scale": 1,
+                    "step": 1
+                }
+            },
+            "2": {
+                "code": "countdown_1",
+                "type": "Integer",
+                "values": {
+                    "unit": "s",
+                    "min": 0,
+                    "max": 86400,
+                    "scale": 0,
+                    "step": 1
+                }
+            }
+        },
+        "ip": "10.20.30.40",
+        "version": "3.1"
+    }
+```
+
 ## v1.12.7 - Status Bug Fix
 
 * PyPI 1.12.7

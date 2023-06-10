@@ -14,7 +14,18 @@
         XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False, cid/node_id=None, parent=None)
   * Device(XenonDevice) - Tuya Class for Devices
 
- Functions
+ Module Functions
+    set_debug(toggle, color)                    # Activate verbose debugging output
+    pack_message(msg, hmac_key=None)            # Packs a TuyaMessage() into a network packet, encrypting or adding a CRC if protocol requires
+    unpack_message(data, hmac_key=None, header=None, no_retcode=False)
+                                                # Unpacks a TuyaMessage() from a network packet, decrypting or checking the CRC if protocol requires
+    parse_header(data)                          # Unpacks just the header part of a message into a TuyaHeader()
+    find_device(dev_id=None, address=None)      # Scans network for Tuya devices with either ID = dev_id or IP = address
+    device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
+    assign_dp_mappings(tuyadevices, mappings)   # Adds mappings to all the devices in the tuyadevices list
+    decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
+
+ Device Functions
     json = status()                    # returns json payload
     subdev_query(nowait)               # query sub-device status (only for gateway devices)
     set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
@@ -35,7 +46,6 @@
     turn_on(switch=1, nowait)          # Turn on device / switch #
     turn_off(switch=1, nowait)         # Turn off
     set_timer(num_secs, nowait)        # Set timer for num_secs
-    set_debug(toggle, color)           # Activate verbose debugging output
     set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
     detect_available_dps()             # Return list of DPS available from device
     generate_payload(command, data,...)# Generate TuyaMessage payload for command with data
@@ -87,7 +97,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 12, 7)
+version_tuple = (1, 12, 8)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -110,7 +120,7 @@ DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
 
-DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn')
+DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn', 'mapping')
 
 # Tuya Command Types
 # Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
@@ -596,7 +606,7 @@ def device_info( dev_id ):
         with open(DEVICEFILE, 'r') as f:
             tuyadevices = json.load(f)
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-            for	dev in tuyadevices:
+            for dev in tuyadevices:
                 if 'id' in dev and dev['id'] == dev_id:
                     log.debug("Device %r found in %s", dev_id, DEVICEFILE)
                     devinfo = dev
@@ -606,6 +616,37 @@ def device_info( dev_id ):
         pass
 
     return devinfo
+
+def assign_dp_mappings( tuyadevices, mappings ):
+    """ Adds mappings to all the devices in the tuyadevices list
+
+    Parameters:
+        tuyadevices = list of devices
+        mappings = dict containing the mappings
+
+    Response:
+        Nothing, modifies tuyadevices in place
+    """
+    if type(mappings) != dict:
+        raise ValueError( '\'mappings\' must be a dict' )
+
+    if (not mappings) or (not tuyadevices):
+        return None
+
+    for dev in tuyadevices:
+        try:
+            devid = dev['id']
+            productid = dev['product_id']
+        except:
+            # we need both the device id and the product id to download mappings!
+            log.debug( 'Cannot add DP mapping, no device id and/or product id: %r', dev )
+            continue
+
+        if productid in mappings:
+            dev['mapping'] = mappings[productid]
+        else:
+            log.debug( 'Device %s has no mapping!', devid )
+            dev['mapping'] = None
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
@@ -1266,7 +1307,7 @@ class XenonDevice(object):
 
         return MessagePayload(SESS_KEY_NEG_START, self.local_nonce)
 
-    def	_negotiate_session_key_generate_step_3( self, rkey ):
+    def _negotiate_session_key_generate_step_3( self, rkey ):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
             log.debug("session key negotiation failed on step 1")
