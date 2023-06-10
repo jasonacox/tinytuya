@@ -102,7 +102,6 @@ if DEBUGMODE:
 
 # Static Assets
 web_root = os.path.join(os.path.dirname(__file__), "web")
-MAPPINGFILE = os.path.join(os.path.dirname(__file__), "mappings", "mappings.json")
 
 # Global Stats
 serverstats = {}
@@ -118,7 +117,6 @@ serverstats['start'] = int(time.time())      # Timestamp for Start
 running = True
 tuyadevices = []
 deviceslist = {}
-dpsmappings = {}
 newdevices = []
 retrydevices = {}
 retrytimer = 0
