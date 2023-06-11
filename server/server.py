@@ -1,4 +1,4 @@
-# TinyTuya Setup Wizard
+# TinyTuya API Server
 # -*- coding: utf-8 -*-
 """
 TinyTuya API Server for Tuya based WiFi smart devices
@@ -44,7 +44,6 @@ import os
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
-import urllib.parse
 
 # Required module: pycryptodome
 try:
