@@ -4,7 +4,7 @@
 TinyTuya API Server for Tuya based WiFi smart devices
 
 Author: Jason A. Cox
-Date: June 11, 2022
+Date: June 11, 2023
 For more information see https://github.com/jasonacox/tinytuya
 
 Description
