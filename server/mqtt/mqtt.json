@@ -1,0 +1,8 @@
+{
+   "broker" : "localhost",
+   "port" : 1883,
+   "username" : "Broker_Username",
+   "password" : "Broker_Password",
+   "topic" : "tinytuya",
+   "pollingtime" : 5
+}
