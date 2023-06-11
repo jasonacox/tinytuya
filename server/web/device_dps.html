@@ -43,16 +43,25 @@
       updateDPS(key,val);
     });
 
-    function buildHtmlTable(json) {
+    function buildHtmlTable(json,jsonscheme) {
       var table = "<table class=\"table data\">";
 
-      table = table + "<th>Index</th><th>Value</th>";
+      table = table + "<th>Index</th><th>Code</th><th>Value</th>";
 
       for (var key in json) {
         table = table + "<tr>";
 
         var cellValue = key;
         table = table + "<td class=\"key\">" + cellValue + "</td>";
+
+        var CellValue;
+        for (var i in jsonscheme) {
+          if (i === key) {
+            CellValue = jsonscheme[i]['code'];
+            break;
+          }
+        }
+        table = table + "<td class=\"code\">" + CellValue + "</td>";
 
         var cellValue = json[key];
         table = table + "<td class=\"data\">" + cellValue + "</td>";
@@ -118,7 +127,8 @@
         var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/status/" + id;
         $.getJSON(pwurl, function(data,textStatus,jqXHR) {
             var dps_json = jqXHR.responseJSON["dps"];
-            $(".dps").html(buildHtmlTable(dps_json));
+            var dps_scheme_json = jqXHR.responseJSON["dps_mapping"];
+            $(".dps").html(buildHtmlTable(dps_json,dps_scheme_json));
         });
     }
 
@@ -133,7 +143,7 @@
     // Display
     showversion();
     device_dps();
-    
+
     </script>
 
 <div class="controls">
