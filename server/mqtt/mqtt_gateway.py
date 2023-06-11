@@ -154,6 +154,8 @@ def set_dps(url):
     except:
         log.debug("Cannot read set dps %s", str(url))
 
+# Main
+
 if __name__ == "__main__":
 
     mqttconfig = readconfig()
@@ -188,7 +190,6 @@ if __name__ == "__main__":
     thread_local = threading.local()
     last = 0
     while(True):
-
         now = time.time()
         # Check for any subscribed messages in the queue
         while not q.empty():
@@ -200,13 +201,10 @@ if __name__ == "__main__":
             set_dps( str(message.topic).replace(mqttconfig['topic'] + "/set/", "") + "/" + str(message.payload.decode("utf-8")) )
             time.sleep(0.5)
             get_status(id)
-
         # Get status
         if last + mqttconfig['pollingtime'] < now:
-
             last = time.time()
             devices = getdevices()
             get_status_all(devices)
-
     # Slow down
     time.sleep(0.1)
