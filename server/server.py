@@ -1,10 +1,10 @@
-# TinyTuya Setup Wizard
+# TinyTuya API Server
 # -*- coding: utf-8 -*-
 """
 TinyTuya API Server for Tuya based WiFi smart devices
 
 Author: Jason A. Cox
-Date: June 11, 2022
+Date: June 11, 2023
 For more information see https://github.com/jasonacox/tinytuya
 
 Description
@@ -44,7 +44,6 @@ import os
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
-import urllib.parse
 
 # Required module: pycryptodome
 try:
