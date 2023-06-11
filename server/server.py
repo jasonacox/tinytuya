@@ -63,7 +63,7 @@ except:
 
 import tinytuya
 
-BUILD = "t7"
+BUILD = "t8"
 
 # Defaults
 APIPORT = 8888
