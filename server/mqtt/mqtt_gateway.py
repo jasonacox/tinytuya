@@ -56,7 +56,6 @@ if DEBUGMODE:
 running = True
 q=Queue()
 mqttconfig = {}
-update = 0
 last = 0
 devices = {}
 
@@ -203,15 +202,11 @@ if __name__ == "__main__":
             get_status(id)
 
         # Get status
-        if last + mqttconfig['pollingtime'] < now or update == 1:
+        if last + mqttconfig['pollingtime'] < now:
 
             last = time.time()
             devices = getdevices()
-
-            #for d in devices:
-            #    get_status(d)
             get_status_all(devices)
-            update = 0
 
     # Slow down
     time.sleep(0.1)
