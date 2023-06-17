@@ -75,7 +75,7 @@
 
     // Get Version
     function showversion() {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/stats";
+        var pwurl = window.location.protocol + "//" + window.location.host + "/stats";
         $.getJSON(pwurl, function(data) {
             var text = `TinyTuya API Server ${data.tinytuya}`
             $(".title").html(text);
@@ -104,7 +104,7 @@
         id = $_GET['id'];
 
         // Device Metadata
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/device/" + id;
+        var pwurl = window.location.protocol + "//" + window.location.host + "/device/" + id;
         $.getJSON(pwurl, function(data) {
             var ip = data.ip;
             var name = data.name;
@@ -124,7 +124,7 @@
         });
 
         // Device DPS
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/status/" + id;
+        var pwurl = window.location.protocol + "//" + window.location.host + "/status/" + id;
         $.getJSON(pwurl, function(data,textStatus,jqXHR) {
             var dps_json = jqXHR.responseJSON["dps"];
             var dps_scheme_json = jqXHR.responseJSON["dps_mapping"];
@@ -134,7 +134,7 @@
 
     // Get Version
     function updateDPS(key, val) {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/set/" + id + "/" + key + "/" + val;
+        var pwurl = window.location.protocol + "//" + window.location.host + "/set/" + id + "/" + key + "/" + val;
         $.getJSON(pwurl, function(data) {
             window.location.reload();
         });

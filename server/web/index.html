@@ -23,7 +23,7 @@
 
     // Get Version
     function showversion() {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/stats";
+        var pwurl = window.location.protocol + "//" + window.location.host + "/stats";
         $.getJSON(pwurl, function(data) {
             var text = `TinyTuya API Server ${data.tinytuya}`;
             $(".title").html(text);
@@ -33,7 +33,7 @@
 
     // Number of Devices
     function numdevices() {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/numdevices";
+        var pwurl = window.location.protocol + "//" + window.location.host + "/numdevices";
         $.getJSON(pwurl, function(data) {
             var text = `Number of Devices Found: ${data.found}` + 
             ` - Registered: ${data.registered}`;
@@ -50,7 +50,7 @@
 
     // Device List
     function devicelist() {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/devices";
+        var pwurl = window.location.protocol + "//" + window.location.host + "/devices";
         $.getJSON(pwurl, function(data) {
             // store entire array in deviceDB
             let deviceDB = [];
@@ -101,7 +101,7 @@
 
     // Device Offline List
     function offlinelist() {
-        var pwurl = window.location.protocol + "//" + window.location.hostname + ":8888/offline";
+        var pwurl = window.location.protocol + "//" + window.location.host + "/offline";
         $.getJSON(pwurl, function(data) {
             // store entire array in deviceDB
             let deviceDB = [];
