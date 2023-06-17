@@ -24,7 +24,7 @@ import concurrent.futures
 import threading
 from queue import Queue
 
-BUILD = "t1"
+BUILD = "t2"
 
 # Defaults
 DEBUGMODE = False
@@ -165,8 +165,9 @@ if __name__ == "__main__":
     client.will_set(mqttconfig['topic'] + "/running", str("0"), 0, True)
     client.connected_flag=False
     client.on_connect = on_connect
-    if mqttconfig['username'] and mqttconfig['password']:
-        client.username_pw_set(username = mqttconfig['username'],password = mqttconfig['password'])
+    if 'username' in mqttconfig and 'password' in mqttconfig:
+        if mqttconfig['username'] != "" and mqttconfig['password'] != "":
+            client.username_pw_set(username = mqttconfig['username'],password = mqttconfig['password'])
     log.debug("Connecting to Broker %s on port %s." % (mqttconfig['broker'], str(mqttconfig['port'])))
     client.connect(mqttconfig['broker'], port = int(mqttconfig['port']))
 
