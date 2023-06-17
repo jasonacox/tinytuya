@@ -203,7 +203,7 @@ if __name__ == "__main__":
             time.sleep(0.5)
             get_status(id)
         # Get status
-        if last + mqttconfig['pollingtime'] < now:
+        if last + int(mqttconfig['pollingtime']) < now:
             last = time.time()
             devices = getdevices()
             get_status_all(devices)
