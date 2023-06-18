@@ -19,9 +19,13 @@ d = Contrib.ThermostatDevice("abcdefghijklmnop123456", "172.28.321.475", "123456
 
 import time
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ModuleNotFoundError:
+    pass # dotenv not installed, ignore
 
 IHP_DEVICEID = os.getenv("IHP_DEVICEID", None)
 IHP_DEVICEIP = os.getenv("IHP_DEVICEIP", None)
