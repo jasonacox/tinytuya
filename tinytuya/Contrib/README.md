@@ -98,6 +98,29 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
         d.set_timer(2)
     ```
 
+### InverterHeatPumpDevice
+
+* InverterHeatPumpDevice - A community-contributed Python module to add support for Tuya WiFi smart inverter heat pump
+* Author: [Valentin Dusollier](https://github.com/valentindusollier)
+* Tested: Fairland Inverter+ 21kW (IPHR55)
+
+    ```python
+    from tinytuya import Contrib
+
+    device = Contrib.InverterHeatPumpDevice(dev_id="devid", address="ip", local_key="key", version="3.3")
+
+    device.set_unit(Contrib.TemperatureUnit.CELSIUS)
+
+    if device.get_fault() != Contrib.InverterHeatPumpFault.NOMINAL:
+        print("The inverter can't work normally. Turning off...")
+        device.turn_off()
+        exit()
+
+    if device.get_inlet_water_temp() < 26:
+        device.set_silence_mode(True)
+        device.set_target_water_temp(28)
+    ```
+
 ## Submit Your Device
 
 * We welcome new device modules!
