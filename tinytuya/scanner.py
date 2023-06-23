@@ -205,7 +205,7 @@ class DeviceDetect(object):
         key = self.cur_key.key if self.cur_key else self.deviceinfo['key']
         if key == "":
             key = 'f'*16 # use bogus key if missing
-        self.device = tinytuya.OutletDevice( self.deviceinfo['gwId'], self.ip, key, dev_type=self.deviceinfo['dev_type'], version=float(self.deviceinfo['version']))
+        self.device = tinytuya.MappedDevice( self.deviceinfo['gwId'], self.ip, key, dev_type=self.deviceinfo['dev_type'], version=float(self.deviceinfo['version']), mapping=self.deviceinfo.get('mapping', None))
         self.device.set_socketPersistent(True)
         self.device.socket = self.sock
 
@@ -609,6 +609,7 @@ class ForceScannedDevice(DeviceDetect):
 
             elif self.step == FSCAN_FINAL_POLL:
                 result = self.device._decode_payload( msg.payload )
+                result = self.device._process_response( result )
                 if self.debug:
                     print('ForceScannedDevice: Final Poll', self.ip, self.step, payload)
                     print(result)
@@ -857,6 +858,7 @@ class PollDevice(DeviceDetect):
                 # Data available: seqno cmd retcode payload crc
                 log.debug("PollDevice: raw unpacked message = %r", msg)
                 result = self.device._decode_payload(msg.payload)
+                result = self.device._process_response( result )
             except:
                 log.debug("PollDevice: error unpacking or decoding tuya JSON payload")
                 result = tinytuya.error_json(tinytuya.ERR_PAYLOAD)
@@ -998,8 +1000,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     def tuyaLookup(deviceid):
         for i in tuyadevices:
             if "id" in i and i["id"] == deviceid:
-                return (i["name"], i["key"], i["mac"] if "mac" in i else "")
-        return ("", "", "")
+                return (i["name"], i["key"], i.get("mac", ""), i.get('mapping', None))
+        return ("", "", "", None)
 
     havekeys = False
     if not tuyadevices:
@@ -1347,10 +1349,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             # check to see if we have seen this device before and add to devices array
             #if tinytuya.appenddevice(result, deviceslist) is False:
             if ip not in broadcasted_devices:
-                (dname, dkey, mac) = tuyaLookup(result['gwId'])
+                (dname, dkey, mac, mapping) = tuyaLookup(result['gwId'])
                 result["name"] = dname
                 result["key"] = dkey
                 result["mac"] = mac
+                result["mapping"] = mapping
 
                 if 'id' not in result:
                     result['id'] = result['gwId']

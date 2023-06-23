@@ -167,8 +167,11 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         if quicklist:
             answer = 'y'
         else:
-            answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '(Y/n): ')
+            answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '([Y]es/[n]o/[a]ll): ')
         include_map = not bool( answer[0:1].lower() == 'n' )
+        if answer[0:1].lower() == 'a':
+            for dev in old_devices:
+                dev['mapping'] = None
 
         # Get UID from sample Device ID
         tuyadevices = cloud.getdevices( False, oldlist=old_devices, include_map=include_map )
@@ -178,6 +181,9 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
             print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
             print('Check DeviceID and Region')
             return
+
+        # Sort it by id
+        tuyadevices.sort( key=lambda dev: dev['id'] if 'id' in dev else '' )
 
     # The device list does not (always) tell us which device is the parent for a sub-device, so we need to try and figure it out
     # The only link between parent and child appears to be the local key
@@ -220,13 +226,14 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
 
     # Display device list
     print("\n\n" + bold + "Device Listing\n" + dim)
-    output = json.dumps(tuyadevices, indent=4)  # sort_keys=True)
-    print(output)
+    print( json.dumps(tuyadevices[:15], indent=4) )
+    if len(tuyadevices) > 15:
+        print("%s(%d more devices hidden)" % (normal, (len(tuyadevices) - 15)))
 
     # Save list to devices.json
     print(bold + "\n>> " + normal + "Saving list to " + DEVICEFILE)
     with open(DEVICEFILE, "w") as outfile:
-        outfile.write(output)
+        json.dump(tuyadevices, outfile, indent=4)
     print(dim + "    %d registered devices saved" % len(tuyadevices))
 
     if not nocloud:

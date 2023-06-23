@@ -800,7 +800,7 @@ class Cloud(object):
                 if dp_id in dst:
                     continue
                 data = { 'code': code, 'type': mapp['type'] }
-                if mapp['type'].lower() == 'string':
+                if (mapp['type'].lower() == 'string') and (mapp['values'][0] != '{' or mapp['values'][-1] != '}'):
                     values = mapp['values']
                 else:
                     try:
@@ -827,7 +827,7 @@ class Cloud(object):
         if not self.mappings:
             self.mappings = {} #load_mappings()
 
-        if productid in self.mappings:
+        if productid and (productid in self.mappings):
             # already have this product id, so just return it
             return self.mappings[productid]
 
@@ -844,10 +844,14 @@ class Cloud(object):
                         self._build_mapping( result['status'], dps )
                     if 'functions' in result:
                         self._build_mapping( result['functions'], dps )
+                    if not productid:
+                        return dps
                     self.mappings[productid] = dps
                     log.debug( 'Downloaded mapping for device %r: %r', deviceid, dps)
                 elif ('code' in result and result['code'] == 2009) or ('msg' in result and result['msg'] == 'not support this device'):
                     # this device does not have any DPs!
+                    if not productid:
+                        return {}
                     self.mappings[productid] = {}
 
         if productid in self.mappings:
