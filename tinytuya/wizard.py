@@ -228,18 +228,20 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
     # Display device list
     if quicklist:
         answer = 's'
-    elif len(tuyadevices) <= 15:
-        answer = input(subbold + '\n%d devices downloaded, display? ' + normal + '(Y/n): ')
     else:
-        answer = input(subbold + '\n%d devices downloaded, display? ' + normal + '([Y]es/[n]o/[s]ome): ')
+        msg = '%s\n%d devices downloaded, display? %s' % (subbold, len(tuyadevices), normal)
+        if len(tuyadevices) <= 15:
+            answer = input(msg + '(Y/n): ')
+        else:
+            answer = input(msg + '([Y]es/[n]o/[s]ome): ')
 
     if answer[0:1].lower() == 'y':
-        print("\n\n" + bold + "Device Listing\n" + dim)
+        print("\n" + bold + "Device Listing\n" + dim)
         print( json.dumps(tuyadevices, indent=4) )
     elif answer[0:1].lower() == 's':
-        print("\n\n" + bold + "Device Listing, First 15 Devices:\n" + dim)
-        print( json.dumps(tuyadevices[:15], indent=4) )
-        print("%s(%d more devices hidden)" % (normal, (len(tuyadevices) - 15)))
+        print("\n" + bold + "Device Listing, First 10 Devices:\n" + dim)
+        print( json.dumps(tuyadevices[:10], indent=4) )
+        print("%s(%d more devices hidden)" % (normal, (len(tuyadevices) - 10)))
 
     # Save list to devices.json
     print(bold + "\n>> " + normal + "Saving list to " + DEVICEFILE)
