@@ -42,7 +42,18 @@ from .core import Device, log, device_info
 
 class _dp_type_raw():
     def __init__( self, data ):
-        pass
+        self._check_values( data )
+
+    def _check_values( self, data ):
+        if 'values' in data and type(data['values']) == dict:
+            self.values = data['values']
+        else:
+            self.values = {}
+
+        if 'unit' in self.values:
+            self.unit = self.values['unit']
+        else:
+            self.unit = None
 
     def parse_value( self, val ):
         return val
@@ -52,13 +63,14 @@ class _dp_type_raw():
 
 class _dp_type_bitmap( _dp_type_raw ):
     def __init__( self, data ):
+        self._check_values( data )
         opts = []
 
-        if 'values' in data and type(data['values']) == dict and 'label' in data['values'] and type(data['values']['label']) == list:
-            opts = data['values']['label']
+        if 'label' in self.values and type(self.values['label']) == list:
+            opts = self.values['label']
 
-        if 'values' in data and type(data['values']) == dict and 'maxlen' in data['values'] and type(data['values']['maxlen']) == int:
-            maxlen = int(data['values']['maxlen'])
+        if 'maxlen' in self.values and type(self.values['maxlen']) == int:
+            maxlen = int(self.values['maxlen'])
         else:
             maxlen = len(opts)
 
@@ -83,6 +95,9 @@ class _dp_type_bitmap( _dp_type_raw ):
 
     def encode_value( self, val ):
         if type(val) == int:
+            maxlen = (1 << self.bitmap_maxlen) - 1
+            if (val < 0) or (val > maxlen):
+                raise ValueError( 'Bitmap value out of range, max value is %d' % maxlen )
             return val
         newval = 0
         for i in val:
@@ -99,10 +114,11 @@ class _dp_type_boolean( _dp_type_raw ):
 
 class _dp_type_enum( _dp_type_raw ):
     def __init__( self, data ):
+        self._check_values( data )
         self.enum_range = []
 
-        if 'values' in data and type(data['values']) == dict and 'range' in data['values'] and type(data['values']['range']) == list:
-            self.enum_range = tuple(data['values']['range'])
+        if 'range' in self.values and type(self.values['range']) == list:
+            self.enum_range = tuple(self.values['range'])
 
     def parse_value( self, val ):
         if val not in self.enum_range:
@@ -114,21 +130,19 @@ class _dp_type_enum( _dp_type_raw ):
             return val
         if type(val) != str and str(val) in self.enum_range:
             return str(val)
-        return ''
+        raise ValueError( '%r is not a valid enum option (valid options are: %r)' % val, self.enum_range )
 
 class _dp_type_integer( _dp_type_raw ):
     def __init__( self, data ):
-        if 'values' in data and type(data['values']) == dict:
-            data = data['values']
-
+        self._check_values( data )
         for k in ('min', 'max', 'step'):
-            if k in data:
-                setattr( self, 'int_' + k, int( data[k] ) )
+            if k in self.values:
+                setattr( self, 'int_' + k, int( self.values[k] ) )
             else:
                 setattr( self, 'int_' + k, None )
 
-        if 'scale' in data:
-            self.int_scale = 10 ** int( data['scale'] )
+        if 'scale' in self.values:
+            self.int_scale = 10 ** int( self.values['scale'] )
         else:
             self.int_scale = 1
 
@@ -172,10 +186,11 @@ class _dp_type_json( _dp_type_raw ):
 
 class _dp_type_string( _dp_type_raw ):
     def __init__( self, data ):
-        if 'values' in data and type(data['values']) == dict and 'maxlen' in data['values']:
-            self.maxlen = int( data['values']['maxlen'] )
+        self._check_values( data )
+        if 'maxlen' in self.values:
+            self.string_maxlen = int( self.values['maxlen'] )
         else:
-            self.maxlen = None
+            self.string_maxlen = None
 
     def parse_value( self, val ):
         return str( val )
@@ -183,12 +198,13 @@ class _dp_type_string( _dp_type_raw ):
     def encode_value( self, val ):
         val = str(val)
 
-        if self.maxlen is not None and len( val ) > self.maxlen:
-            raise ValueError( 'Attempted to set string %r (length: %d) which is longer than maxlen %r' % (val, len( val ), self.maxlen) )
+        if self.string_maxlen is not None and len( val ) > self.string_maxlen:
+            raise ValueError( 'Attempted to set string %r (length: %d) which is longer than maxlen %r' % (val, len( val ), self.string_maxlen) )
 
         return val
 
 class _dp_object( object ):
+    EXPOSE_ITEMS = ( 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'bitmap_maxlen', 'string_maxlen' )
     def __init__( self, device, dp ):
         super( _dp_object, self ).__setattr__( 'device', device )
         super( _dp_object, self ).__setattr__( 'dp', dp )
@@ -211,7 +227,7 @@ class _dp_object( object ):
 
     def _update_obj( self, new_obj ):
         super( _dp_object, self ).__setattr__( 'obj', new_obj )
-        for k in ( 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'bitmap_maxlen' ):
+        for k in self.EXPOSE_ITEMS:
             super( _dp_object, self ).__setattr__( k, getattr( self.obj, k, None ) )
 
     def __setattr__( self, key, data, *args, **kwargs ):
@@ -222,13 +238,13 @@ class _dp_object( object ):
             return super( _dp_object, self ).__setattr__( key, data, *args, **kwargs )
         else:
             #return super( _dp_object, self ).__setattr__( key, data, *args, **kwargs )
-            raise AttributeError( 'Attempted to set %r but only "value" can be set' % key )
+            raise AttributeError( 'Attempted to set %r but only "value" can be set!' % key )
 
     def __repr__( self ):
         d = {}
-        for k in ( 'dp', 'name', 'names', 'raw_value', 'value', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'bitmap_maxlen' ):
+        for k in ( 'dp', 'name', 'names', 'raw_value', 'value' ) + self.EXPOSE_ITEMS:
             d[k] = getattr( self, k, None )
-        return '%r' % d
+        return repr(d)
 
 class mapped_dps_object( object ):
     def __init__( self, device ):
@@ -413,12 +429,11 @@ class MappedDevice(Device):
         #print('main __setitem__()')
         return self.set_value( key, new_value )
 
-    ## when looping through DPs, only return one object per DP no matter how many names are set
-    #def __iter__( self ):
-    #    for i in self._dp_data:
-    #        if i == self._dp_data[i].name or not self._dp_data[i].name:
-    #            # prefer primary name, or DP ID if no name set
-    #            yield self._dp_data[i]
+    # when looping through DPs, only return one name per DP no matter how many are set
+    def __iter__( self ):
+        for i in self.dps:
+            # prefer primary name, or DP ID if no name set
+            yield i.name if i.name else i.dp
 
     def set_nowait( self, nowait ):
         self.nowait = nowait
@@ -436,8 +451,16 @@ class MappedDevice(Device):
         return super(MappedDevice, self).set_value( obj.dp, new_value, nowait=nowait )
 
     def set_multiple_values(self, data, nowait=False):
-        # FIXME
-        raise NotImplementedError( 'set_multiple_values() is not implemented yet' )
+        newdata = {}
+        for k in data:
+            obj = self.dps[k]
+            if not obj:
+                # FIXME should we throw an error instead?
+                continue
+            newdata[obj.dp] = obj.encode_value( data[k] )
+        if nowait is None:
+            nowait = self.nowait
+        return super(MappedDevice, self).set_multiple_values( newdata, nowait=nowait )
 
     def set_timer(self, num_secs, dps_id=0, nowait=False):
         # FIXME

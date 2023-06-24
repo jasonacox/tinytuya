@@ -170,6 +170,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
             answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '([Y]es/[n]o/[a]ll): ')
         include_map = not bool( answer[0:1].lower() == 'n' )
         if answer[0:1].lower() == 'a':
+            # force re-downloading all mappings
             for dev in old_devices:
                 dev['mapping'] = None
 
@@ -225,9 +226,19 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
                     dev['parent'] = found['id']
 
     # Display device list
-    print("\n\n" + bold + "Device Listing\n" + dim)
-    print( json.dumps(tuyadevices[:15], indent=4) )
-    if len(tuyadevices) > 15:
+    if quicklist:
+        answer = 's'
+    elif len(tuyadevices) <= 15:
+        answer = input(subbold + '\n%d devices downloaded, display? ' + normal + '(Y/n): ')
+    else:
+        answer = input(subbold + '\n%d devices downloaded, display? ' + normal + '([Y]es/[n]o/[s]ome): ')
+
+    if answer[0:1].lower() == 'y':
+        print("\n\n" + bold + "Device Listing\n" + dim)
+        print( json.dumps(tuyadevices, indent=4) )
+    elif answer[0:1].lower() == 's':
+        print("\n\n" + bold + "Device Listing, First 15 Devices:\n" + dim)
+        print( json.dumps(tuyadevices[:15], indent=4) )
         print("%s(%d more devices hidden)" % (normal, (len(tuyadevices) - 15)))
 
     # Save list to devices.json
