@@ -42,10 +42,7 @@ from .core import Device, log, device_info
 
 class _dp_type_raw():
     def __init__( self, data ):
-        self._check_values( data )
-
-    def _check_values( self, data ):
-        if 'values' in data and type(data['values']) == dict:
+        if data and type(data) == dict and 'values' in data and type(data['values']) == dict:
             self.values = data['values']
         else:
             self.values = {}
@@ -63,7 +60,7 @@ class _dp_type_raw():
 
 class _dp_type_bitmap( _dp_type_raw ):
     def __init__( self, data ):
-        self._check_values( data )
+        super( _dp_type_bitmap, self ).__init__( data )
         opts = []
 
         if 'label' in self.values and type(self.values['label']) == list:
@@ -114,7 +111,7 @@ class _dp_type_boolean( _dp_type_raw ):
 
 class _dp_type_enum( _dp_type_raw ):
     def __init__( self, data ):
-        self._check_values( data )
+        super( _dp_type_enum, self ).__init__( data )
         self.enum_range = []
 
         if 'range' in self.values and type(self.values['range']) == list:
@@ -134,7 +131,7 @@ class _dp_type_enum( _dp_type_raw ):
 
 class _dp_type_integer( _dp_type_raw ):
     def __init__( self, data ):
-        self._check_values( data )
+        super( _dp_type_integer, self ).__init__( data )
         for k in ('min', 'max', 'step'):
             if k in self.values:
                 setattr( self, 'int_' + k, int( self.values[k] ) )
@@ -186,7 +183,7 @@ class _dp_type_json( _dp_type_raw ):
 
 class _dp_type_string( _dp_type_raw ):
     def __init__( self, data ):
-        self._check_values( data )
+        super( _dp_type_string, self ).__init__( data )
         if 'maxlen' in self.values:
             self.string_maxlen = int( self.values['maxlen'] )
         else:
