@@ -610,6 +610,11 @@ class ForceScannedDevice(DeviceDetect):
             elif self.step == FSCAN_FINAL_POLL:
                 result = self.device._decode_payload( msg.payload )
                 result = self.device._process_response( result )
+                if result and isinstance(result, dict):
+                    if 'changed' in result:
+                        del result['changed']
+                    #if 'dps_objects' in result:
+                    #    del result['dps_objects']
                 if self.debug:
                     print('ForceScannedDevice: Final Poll', self.ip, self.step, payload)
                     print(result)
@@ -859,6 +864,11 @@ class PollDevice(DeviceDetect):
                 log.debug("PollDevice: raw unpacked message = %r", msg)
                 result = self.device._decode_payload(msg.payload)
                 result = self.device._process_response( result )
+                if result and isinstance(result, dict):
+                    if 'changed' in result:
+                        del result['changed']
+                    #if 'dps_objects' in result:
+                    #    del result['dps_objects']
             except:
                 log.debug("PollDevice: error unpacking or decoding tuya JSON payload")
                 result = tinytuya.error_json(tinytuya.ERR_PAYLOAD)
@@ -1696,10 +1706,9 @@ def save_snapshotfile(fname, data, term=None):
     for itm in data:
         devices.append( _snapshot_save_item(itm) )
     current = {'timestamp' : time.time(), 'devices' : devices}
-    output = json.dumps(current, indent=4)
     print(bold + "\n>> " + norm + "Saving device snapshot data to " + fname + "\n")
     with open(fname, "w") as outfile:
-        outfile.write(output)
+        json.dump(current, outfile, indent=4, default=dict)
 
 # Scan Devices in snapshot.json
 def snapshot(color=True):

@@ -165,7 +165,7 @@ class _dp_type_base_class( object ):
 
 class _dp_type_array( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
-        print('parsing Array', type_lower, data)
+        #print('parsing Array', type_lower, data)
         super( _dp_type_array, self ).__init__( data, type_lower )
         #if 'elementTypeSpec' in self.values and isinstance( self.values['elementTypeSpec'], dict ) and 'type' in self.values['elementTypeSpec']:
         #    self.subtype = self.values['elementTypeSpec']['type'].lower()
@@ -367,13 +367,13 @@ class _dp_type_integer( _dp_type_base_class ):
 
 class _dp_type_json( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
-        print('parsing JSON', type_lower, data)
+        #print('parsing JSON', type_lower, data)
         super( _dp_type_json, self ).__init__( data, type_lower )
         self.items = {}
         self.value_len = 0
         for k in self.values:
             vtype = _detect_json_subtype( self.values[k] )
-            print('JSON key', k, 'subtype', vtype)
+            #print('JSON key', k, 'subtype', vtype)
             self.items[k] = _build_obj( {'type': vtype, 'values': self.values[k]} )
             if not self.items[k].value_len:
                 self.value_len = None
@@ -381,7 +381,7 @@ class _dp_type_json( _dp_type_base_class ):
                 self.value_len += self.items[k].value_len
         if not self.value_len:
             self.value_len = 0
-        print( 'Value len:', self.value_len, data )
+        #print( 'Value len:', self.value_len, data )
 
     def parse_value( self, val ):
         parsed = {}
@@ -433,7 +433,8 @@ class _dp_type_string( _dp_type_base_class ):
         return val
 
 class _dp_object( object ):
-    EXPOSE_ITEMS = ( 'value_type', 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'maxlen' )
+    COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'raw_value', 'value' )
+    OPTION_ITEMS = ( 'value_type', 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'maxlen' )
     def __init__( self, device, dp ):
         super( _dp_object, self ).__setattr__( 'device', device )
         super( _dp_object, self ).__setattr__( 'dp', dp )
@@ -457,7 +458,7 @@ class _dp_object( object ):
 
     def _update_obj( self, new_obj ):
         super( _dp_object, self ).__setattr__( 'obj', new_obj )
-        for k in self.EXPOSE_ITEMS:
+        for k in self.OPTION_ITEMS:
             super( _dp_object, self ).__setattr__( k, getattr( self.obj, k, None ) )
 
     def __setattr__( self, key, data, *args, **kwargs ):
@@ -481,11 +482,30 @@ class _dp_object( object ):
             #return super( _dp_object, self ).__setattr__( key, data, *args, **kwargs )
             raise AttributeError( 'Attempted to set %r but only "value" can be set!' % key )
 
-    def __repr__( self ):
+    def _as_dict( self ):
         d = {}
-        for k in ( 'dp', 'name', 'alt_name', 'names', 'raw_value', 'value' ) + self.EXPOSE_ITEMS:
+        for k in self.COMMON_ITEMS + self.OPTION_ITEMS:
             d[k] = getattr( self, k, None )
-        return repr(d)
+        return d
+
+    # override __dict__ (and vars())
+    @property
+    def __dict__(self):
+        return self._as_dict()
+
+    def __repr__( self ):
+        return repr(self._as_dict())
+
+    # allows dict()
+    def __iter__( self ):
+        for k in self.COMMON_ITEMS + self.OPTION_ITEMS:
+            yield (k, getattr( self, k, None ))
+
+    #def __getitem__( self, key ):
+    #    return getattr( self, key, None )
+
+    #def __dir__( self ):
+    #    return list(self.COMMON_ITEMS + self.OPTION_ITEMS)
 
 class mapped_dps_object( object ):
     def __init__( self, device ):
@@ -629,28 +649,29 @@ class MappedDevice(Device):
 
         new_dps = {}
         changed = []
+        all_dps = []
         for dp_id in data['dps']:
             dp_id_s = str(dp_id)
             has_changed, dst = self.dps._update_value( dp_id_s, data['dps'][dp_id] )
+            all_dps.append( dst )
 
             # set both primary and alt names
             if dst.name:
                 new_dps[dst.name] = dst.value
                 if (dst.alt_name) and (dst.alt_name != dst.name):
                     new_dps[dst.alt_name] = dst.value
-                    # prefer alt name
-                    if has_changed:
-                        changed.append( dst.alt_name )
-                elif has_changed:
+                if has_changed:
                     # only use name if no alt name
-                    changed.append( dst.name )
+                    changed.append( dst )
             else:
                 # no name, so use DP ID
                 new_dps[dst.dp] = dst.value
                 if has_changed:
-                    changed.append( dst.dp )
+                    changed.append( dst )
 
+        data['raw_dps'] = data['dps']
         data['dps'] = new_dps
+        data['dps_objects'] = all_dps
         data['changed'] = changed
         return data
 
@@ -727,7 +748,7 @@ class MappedDevice(Device):
                 if possible:
                     found = possible
                 else:
-                    # core's set_timer() says last DP ID is probably the timer, so use it
+                    # set_timer() in tinytuya.core says last DP ID is probably the timer, so use it
                     for obj in self.dps:
                         found = obj
             dps_id = found.dp
