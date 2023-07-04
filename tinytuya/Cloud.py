@@ -487,7 +487,7 @@ class Cloud(object):
                 continue
             is_same = True
             for k in DEVICEFILE_SAVE_VALUES:
-                if (k not in old) or (k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]):
+                if k in dev and k != 'icon' and k != 'last_ip' and (k not in old or old[k] != dev[k]):
                     is_same = False
                     break
             if not is_same:
