@@ -3,8 +3,11 @@
 ## v1.12.9 - Import Issue with urllib3
 
 * PyPI 1.12.9
-* Add graceful handling of issue where urllib3 v2.0 causes `ImportError: urllib3 v2.0 only supports OpenSSL 1.1.1+` error. See https://github.com/jasonacox/tinytuya/issues/377.
-* Fix bug in Cloud getdevices() that can error with older `devices.json` versions as raised in https://github.com/jasonacox/tinytuya/issues/381
+* Add graceful handling of issue where urllib3 v2.0 causes `ImportError: urllib3 v2.0 only supports OpenSSL 1.1.1+` error. See https://github.com/jasonacox/tinytuya/issues/377 & https://github.com/jasonacox/tinytuya/pull/379.
+* Fix bug in Cloud getdevices() that can error with older `devices.json` versions as raised in https://github.com/jasonacox/tinytuya/issues/381 & https://github.com/jasonacox/tinytuya/pull/382
+* [[Server](https://github.com/jasonacox/tinytuya/tree/master/server)] Mapping for DP IDs by @mschlenstedt in https://github.com/jasonacox/tinytuya/pull/353 and https://github.com/jasonacox/tinytuya/pull/363
+* [[MQTT Gateway for Server](https://github.com/jasonacox/tinytuya/blob/master/server/mqtt/mqtt_gateway.py)] by @mschlenstedt in https://github.com/jasonacox/tinytuya/pull/364, https://github.com/jasonacox/tinytuya/pull/367 and https://github.com/jasonacox/tinytuya/pull/366
+* Add Contrib support for Inverter Heat Pump such as Fairland IPHR55 by @valentindusollier in https://github.com/jasonacox/tinytuya/pull/368
 
 ## v1.12.8 - Device DP Mapping
 
