@@ -4,6 +4,7 @@
 
 * PyPI 1.12.9
 * Add graceful handling of issue where urllib3 v2.0 causes `ImportError: urllib3 v2.0 only supports OpenSSL 1.1.1+` error. See https://github.com/jasonacox/tinytuya/issues/377.
+* Fix bug in Cloud getdevices() that can error with older `devices.json` versions as raised in https://github.com/jasonacox/tinytuya/issues/381
 
 ## v1.12.8 - Device DP Mapping
 
