@@ -469,7 +469,7 @@ class Cloud(object):
         changed_devices = []
         unchanged_devices = []
 
-        # chect to see if anything has changed.  if so, re-download factory-infos and DP mapping
+        # check to see if anything has changed.  if so, re-download factory-infos and DP mapping
         for dev in devs:
             dev_id = dev['id']
             if dev_id not in old_devices:
@@ -487,7 +487,7 @@ class Cloud(object):
                 continue
             is_same = True
             for k in DEVICEFILE_SAVE_VALUES:
-                if k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]:
+                if (k not in old) or (k in dev and k != 'icon' and k != 'last_ip' and old[k] != dev[k]):
                     is_same = False
                     break
             if not is_same:
