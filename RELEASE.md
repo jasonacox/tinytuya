@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.12.9 - Import Issue with urllib3
+
+* PyPI 1.12.9
+* Add graceful handling of issue where urllib3 v2.0 causes `ImportError: urllib3 v2.0 only supports OpenSSL 1.1.1+` error. See https://github.com/jasonacox/tinytuya/issues/377.
+
 ## v1.12.8 - Device DP Mapping
 
 * PyPI 1.12.8

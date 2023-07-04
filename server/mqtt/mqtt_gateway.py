@@ -16,7 +16,12 @@ import paho.mqtt.client as mqtt
 import time
 import logging
 import json
-import requests
+try:
+    import requests
+except ImportError as impErr:
+    print("WARN: Unable to import requests library, Cloud functions will not work.")
+    print("WARN: Check dependencies. See https://github.com/jasonacox/tinytuya/issues/377")
+    print("WARN: Error: {}.".format(impErr.args[0]))
 import sys
 import os
 import copy
