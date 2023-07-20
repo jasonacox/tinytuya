@@ -70,7 +70,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
     ```
     NOTE: You will need to use one of the displayed *Device IDs* for step 4.
 
-3. TUYA ACCOUNT - Set up a Tuya Account (see [PDF Instructions](https://github.com/jasonacox/tinytuya/files/8145832/Tuya.IoT.API.Setup.pdf)):
+3. TUYA ACCOUNT - Set up a Tuya Account (see [PDF Instructions](https://github.com/jasonacox/tinytuya/files/12101705/Tuya.IoT.API.Setup.1.pdf)):
     * *NOTE: Tuya often changes their portal and services. Please open an [issue](https://github.com/jasonacox/tinytuya/issues) with screenshots if we need to update these instructions.*
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/). When it asks for the "Account Type", select "Skip this step..." (see [screenshot](https://user-images.githubusercontent.com/836718/213877860-34c39851-5671-4c9f-b4d5-251873f18c77.png)).  
     * Click on "Cloud" icon -> "Create Cloud Project"
@@ -84,7 +84,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Click "**Go to Authorize**" button
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
 
-4. WIZARD - Run Setup Wizard:
+5. WIZARD - Run Setup Wizard:
     * Tuya has changed their data center regions. Make sure you are using the latest version of TinyTuya (v1.2.10 or newer).
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
       ```bash
