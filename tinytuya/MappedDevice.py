@@ -49,7 +49,33 @@ if hexversion < 0x3070000:
 else:
     USE_ORDEREDDICT = False
 
-def _build_obj( map_item ):
+MAPPING_FIXUPS = [
+    {
+        "match_keys": {'h': {'max': 360}, 's': {'max': 1000}, 'v': {'max': 1000}},
+        "mapping": {
+            "type": "Json",
+            "values": "{\"h\":{\"min\":0,\"scale\":0,\"unit\":\"°\",\"max\":360,\"step\":1},\"s\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1},\"v\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1}}"
+        },
+    },
+    {
+        "dp_id": "24",
+        "code": ("colour_data","colour_data_v2"),
+        "mapping": {
+            "type": "Json",
+            "values": "{\"h\":{\"min\":0,\"scale\":0,\"unit\":\"°\",\"max\":360,\"step\":1},\"s\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1},\"v\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1}}"
+        },
+    },
+    {
+        "dp_id": "25",
+        "code": ("scene_data_v2","scene_data"),
+        "mapping": {
+            "type": "Json",
+            "raw_values": "{\"scene_num\":{\"min\":1,\"scale\":0,\"max\":8,\"step\":1},\"scene_units\": {\"step_duration\":{\"min\":0,\"scale\":0,\"max\":100,\"step\":1},\"unit_gradient_duration\":{\"min\":0,\"scale\":0,\"max\":100,\"step\":1},\"unit_change_mode\":{\"range\":[\"static\",\"jump\",\"gradient\"]},\"h\":{\"min\":0,\"scale\":0,\"unit\":\"°\",\"max\":360,\"step\":1},\"s\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1},\"v\":{\"min\":0,\"scale\":0,\"unit\":\"%\",\"max\":1000,\"step\":1},\"bright\":{\"min\":0,\"scale\":0,\"max\":1000,\"step\":1},\"temperature\":{\"min\":0,\"scale\":0,\"max\":1000,\"step\":1}}}"
+        }
+    },
+]
+
+def _build_obj( map_item, dp_id=None ):
     if 'type' not in map_item or (not map_item['type']):
         # default to 'base_class' if no type provided
         map_item['type'] = 'base_class'
@@ -63,6 +89,48 @@ def _build_obj( map_item ):
 
     # ignore case
     type_lower = map_item['type'].lower()
+
+    # fix some known mapping errors
+    for fixup in MAPPING_FIXUPS:
+        if 'dp_id' in fixup:
+            if fixup['dp_id'] != dp_id:
+                continue
+        if 'code' in fixup:
+            if 'code' not in map_item:
+                continue
+            if isinstance( fixup['code'], tuple ) or isinstance( fixup['code'], list ):
+                if map_item['code'] not in fixup['code']:
+                    continue
+            elif fixup['code'] != map_item['code']:
+                continue
+
+        if 'values' in fixup['mapping']:
+            values = fixup['mapping']['values']
+        else:
+            values = json.loads( fixup['mapping']['raw_values'] )
+
+        if 'match_keys' in fixup:
+            if len(map_item['values']) != len(fixup['match_keys']):
+                continue
+            matches = True
+            for k in fixup['match_keys']:
+                if k not in map_item['values']:
+                    matches = False
+                    break
+                if isinstance( fixup['match_keys'], dict ) and isinstance( fixup['match_keys'][k], dict ):
+                    if k not in map_item['values']:
+                        matches = False
+                        break
+                    for mkey in fixup['match_keys'][k]:
+                        if (mkey not in map_item['values'][k]) or (fixup['match_keys'][k][mkey] != map_item['values'][k][mkey]):
+                            matches = False
+                            break
+            if not matches:
+                continue
+
+        map_item = fixup['mapping']
+        map_item['values'] = values
+        break
 
     if USE_ORDEREDDICT and 'raw_values' in map_item and map_item['raw_values']:
         # python < v3.7.0 needs to use OrderedDict
@@ -156,10 +224,23 @@ class _dp_type_base_class( object ):
 
         self.array_decode_int = True
 
-    def parse_value( self, val ):
+    def _unpack_int( self, val ):
+        if isinstance( val, str ):
+            vlen = self.value_len if self.value_len else 1
+            vlen *= 2
+            return int( val[:vlen], 16 ), val[vlen:]
+
+        return int(val), None
+
+    def _pack_int( self, val ):
+        fmt = '%0' + str((self.value_len * 2) if self.value_len else 2) + 'x'
+        val = fmt % val
         return val
 
-    def encode_value( self, val ):
+    def parse_value( self, val ):
+        return val, None
+
+    def encode_value( self, val, pack=False ):
         return val
 
 
@@ -173,37 +254,25 @@ class _dp_type_array( _dp_type_base_class ):
         #else:
         #    self.subtype = 'json'
         #    self.subvals = {}
-
         self.subobj = _build_obj( {'type':'Json', 'values':self.values} )
-
-        self.value_len = self.subobj.value_len
-        if self.subobj.array_decode_int:
-            self.value_len *= 2
+        self.value_len = None
 
     def parse_value( self, val ):
-        if (not self.value_len) or (self.value_len < 1):
-            return (val,)
-
         parsed = []
-
         while val:
-            data = val[:self.value_len]
-            val = val[self.value_len:]
-            if self.subobj.array_decode_int:
-                data = int( data, 16 )
-            parsed.append( self.subobj.parse_value( data ) )
+            data, val = self.subobj.parse_value( val )
+            parsed.append( data )
+        return parsed, val
 
-        return parsed
+    def encode_value( self, val, pack=False ):
+        if isinstance( val, str ):
+            # assume the user already encoded it
+            return val
 
-    def encode_value( self, val ):
         final = ''
-        if self.subobj.array_decode_int:
-            fmt = '%0' + str(self.value_len) + 'x'
         for data in val:
-            encoded = self.subobj.encode_value( data )
-            if self.subobj.array_decode_int:
-                encoded = fmt % encoded
-            final += encoded
+            final += self.subobj.encode_value( data, True )
+
         return final
 
 class _dp_type_bitmap( _dp_type_base_class ):
@@ -238,6 +307,7 @@ class _dp_type_bitmap( _dp_type_base_class ):
         self._calc_valuelen()
 
     def parse_value( self, val ):
+        val, remain = self._unpack_int( val )
         newval = []
         maxlen = self.int_max
         i = 0
@@ -247,9 +317,9 @@ class _dp_type_bitmap( _dp_type_base_class ):
             maxlen >>= 1
             val >>= 1
             i += 1
-        return tuple(newval)
+        return tuple(newval), remain
 
-    def encode_value( self, val ):
+    def encode_value( self, val, pack=False ):
         if type(val) == int:
             if (val < 0) or (val > self.maxlen):
                 raise ValueError( 'Bitmap value out of range, max value is %d' % self.maxlen )
@@ -258,7 +328,7 @@ class _dp_type_bitmap( _dp_type_base_class ):
         for i in val:
             idx = self.bitmap.index( i )
             newval |= (1 << idx)
-        return newval
+        return newval if not pack else self._pack_int( newval )
 
 class _dp_type_boolean( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
@@ -268,10 +338,11 @@ class _dp_type_boolean( _dp_type_base_class ):
         self._calc_valuelen()
 
     def parse_value( self, val ):
-        return bool( val )
+        val, remain = self._unpack_int( val )
+        return bool( val ), remain
 
-    def encode_value( self, val ):
-        return bool( val )
+    def encode_value( self, val, pack=False ):
+        return bool( val ) if not pack else self._pack_int( int(bool( val )) )
 
 class _dp_type_enum( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
@@ -284,9 +355,9 @@ class _dp_type_enum( _dp_type_base_class ):
     def parse_value( self, val ):
         if val not in self.enum_range:
             self.enum_range = self.enum_range + (val,)
-        return val
+        return val, None
 
-    def encode_value( self, val ):
+    def encode_value( self, val, pack=False ):
         if val in self.enum_range:
             return val
         if type(val) != str and str(val) in self.enum_range:
@@ -306,14 +377,17 @@ class _dp_type_enum_integer( _dp_type_base_class ):
         self._calc_valuelen()
 
     def parse_value( self, val ):
+        val, remain = self._unpack_int( val )
         while val >= len(self.enum_range):
             self.enum_range = self.enum_range + (val,)
-        return val
+        return val, remain
 
-    def encode_value( self, val ):
-        if val in self.enum_range:
-            return self.enum_range.index( val )
-        return int(val)
+    def encode_value( self, val, pack=False ):
+        if str(val) in self.enum_range:
+            val = self.enum_range.index( str(val) )
+        else:
+            val = int( val )
+        return val if not pack else self._pack_int( val )
 
 class _dp_type_integer( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
@@ -321,8 +395,10 @@ class _dp_type_integer( _dp_type_base_class ):
         for k in ('min', 'max', 'step'):
             if k in self.values:
                 setattr( self, 'int_' + k, int( self.values[k] ) )
+                setattr( self, 'raw_' + k, int( self.values[k] ) )
             else:
                 setattr( self, 'int_' + k, None )
+                setattr( self, 'raw_' + k, None )
 
         if 'scale' in self.values:
             self.int_scale = 10 ** int( self.values['scale'] )
@@ -331,19 +407,28 @@ class _dp_type_integer( _dp_type_base_class ):
 
         self._calc_valuelen()
 
+        # override scale and map "10 - 1000" to "1.0 - 100.0"
+        if (self.int_min == 10 or self.int_min == 0) and self.int_max == 1000 and self.int_step == 1 and self.int_scale == 1:
+            self.int_scale = 10
+
+        # scale min/max/step if needed
+        if self.int_scale > 1:
+            for k in ('int_min', 'int_max', 'int_step'):
+                v = getattr( self, k, None )
+                if v is not None:
+                    setattr( self, k, float(v)/self.int_scale )
+
     def parse_value( self, val ):
-        val = int( val )
+        val, remain = self._unpack_int( val )
         if self.int_scale > 1:
-            return val / self.int_scale
+            return float(val) / self.int_scale, remain
+        return val, remain
 
-        return val
-
-    def encode_value( self, val ):
-        val = int( val )
-
-        if self.int_scale > 1:
-            val *= self.int_scale
+    def encode_value( self, val, pack=False ):
+        if self.int_scale == 1:
             val = int( val )
+        else:
+            val = float( val )
 
         if self.int_min is not None and val < self.int_min:
             raise ValueError( 'Integer is below minimum value %d' % self.int_min )
@@ -351,19 +436,23 @@ class _dp_type_integer( _dp_type_base_class ):
         if self.int_max is not None and val > self.int_max:
             raise ValueError( 'Integer is above maximum value %d' % self.int_max )
 
-        if self.int_step is not None and self.int_step > 1:
+        if self.int_scale != 1:
+            val *= self.int_scale
+            val = round( val )
+
+        if self.raw_step is not None and self.raw_step > 1:
             # value must be a multiple of 'step'
-            r = val % self.int_step
+            r = val % self.raw_step
             if r != 0:
-                midpoint = self.int_step >> 1
+                midpoint = self.raw_step >> 1
                 if r >= midpoint:
                     # round up
-                    val += (self.int_step - r)
+                    val += (self.raw_step - r)
                 else:
                     # round down
                     val -= r
 
-        return val
+        return val if not pack else self._pack_int( val )
 
 class _dp_type_json( _dp_type_base_class ):
     def __init__( self, data, type_lower ):
@@ -378,62 +467,58 @@ class _dp_type_json( _dp_type_base_class ):
             if not self.items[k].value_len:
                 self.value_len = None
             elif self.value_len is not None:
-                self.value_len += self.items[k].value_len
+                self.value_len += (self.items[k].value_len * 2)
         if not self.value_len:
             self.value_len = 0
         #print( 'Value len:', self.value_len, data )
 
     def parse_value( self, val ):
         parsed = {}
+        #print( '_dp_type_json(): parsing:', val, 'into', self.values )
         for k in self.values:
-            data = val[:self.items[k].value_len]
-            val = val[self.items[k].value_len:]
-            if self.items[k].array_decode_int:
-                data = int( data, 16 )
-            parsed[k] = self.items[k].parse_value( data )
-        return parsed
+            if val is None:
+                print( '_dp_type_json(): not enough input to parse', k )
+                continue
+            parsed[k], val = self.items[k].parse_value( val )
+            #print( k, type(self.items[k]).__name__, self.items[k].value_len, '=', parsed[k], 'remain:', val )
+        return parsed, val
 
-    def encode_value( self, val ):
+    def encode_value( self, val, pack=False ):
+        if isinstance( val, str ):
+            # assume the user already encoded it
+            return val
         final = ''
         for k in self.values:
-            encoded = self.items[k].encode_value( val[k] )
-            if self.items[k].array_decode_int:
-                fmt = '%0' + str(self.items[k].value_len) + 'x'
-                encoded = fmt % encoded
-            final += encoded
+            final += self.items[k].encode_value( val[k], True )
         return final
 
 
 class _dp_type_raw( _dp_type_base_class ):
     # type "Raw" is encoded as a base64 string
     def parse_value( self, val ):
-        return base64.b64decode( val )
+        return base64.b64decode( val ), None
 
-    def encode_value( self, val ):
+    def encode_value( self, val, pack=False ):
         b64val = base64.b64encode( val )
-
         if self.maxlen is not None and len( val ) > self.maxlen:
             # display value as b64 even though the length is for raw bytes
             raise ValueError( 'Attempted to set string %r (length: %d) which is longer than maxlen %r' % (b64val, len( val ), self.maxlen) )
-
         return b64val
 
 
 class _dp_type_string( _dp_type_base_class ):
     # type "String" can be base64, hex, quoted JSON, or anything else
     def parse_value( self, val ):
-        return str( val )
+        return str( val ), None
 
-    def encode_value( self, val ):
+    def encode_value( self, val, pack=False ):
         val = str(val)
-
         if self.maxlen is not None and len( val ) > self.maxlen:
             raise ValueError( 'Attempted to set string %r (length: %d) which is longer than maxlen %r' % (val, len( val ), self.maxlen) )
-
         return val
 
 class _dp_object( object ):
-    COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'raw_value', 'value' )
+    COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'valid', 'added', 'changed', 'raw_value', 'value' )
     OPTION_ITEMS = ( 'value_type', 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'maxlen' )
     def __init__( self, device, dp ):
         super( _dp_object, self ).__setattr__( 'device', device )
@@ -442,18 +527,33 @@ class _dp_object( object ):
         super( _dp_object, self ).__setattr__( 'alt_name', None )
         super( _dp_object, self ).__setattr__( 'names', [dp] )
         super( _dp_object, self ).__setattr__( 'obj', None )
-        self._update_value( None )
+        self._update_value( None, added=True )
 
     def encode_value( self, new_value ):
-        return self.obj.encode_value( new_value )
+        return self.obj.encode_value( new_value, False )
+
+    def clear_changed( self ):
+        if self.valid:
+            super( _dp_object, self ).__setattr__( 'changed', False )
+            super( _dp_object, self ).__setattr__( 'added', False )
 
     #def _update_attr( self, attr, new_value ):
     #    super( _dp_object, self ).__setattr__( attr, new_value )
 
-    def _update_value( self, new_value ):
+    def _update_value( self, new_value, added=False ):
+        #print( 'updating val:', self.names, new_value )
+        if added:
+            super( _dp_object, self ).__setattr__( 'added', False )
+            super( _dp_object, self ).__setattr__( 'valid', False )
+            super( _dp_object, self ).__setattr__( 'changed', False )
+        else:
+            super( _dp_object, self ).__setattr__( 'added', not self.valid )
+            super( _dp_object, self ).__setattr__( 'valid', True )
+            super( _dp_object, self ).__setattr__( 'changed', new_value != self.raw_value )
+
         super( _dp_object, self ).__setattr__( 'raw_value', new_value )
         if self.obj:
-            new_value = self.obj.parse_value( new_value )
+            new_value, _ = self.obj.parse_value( new_value )
         super( _dp_object, self ).__setattr__( 'value', new_value )
 
     def _update_obj( self, new_obj ):
@@ -465,6 +565,8 @@ class _dp_object( object ):
         if key == 'value':
             #print( 'in _dp_object __setattr__()' )
             return self.device.set_value( self.dp, data )
+        elif key in ('added', 'changed'):
+            return super( _dp_object, self ).__setattr__( key, bool(data), *args, **kwargs )
         elif key in ('name', 'alt_name'):
             if not data:
                 # replace "" with None
@@ -545,6 +647,7 @@ class mapped_dps_object( object ):
                     self._dp_data[dst.name] = dst
             else:
                 print( 'no name!', map_item)
+                map_item['code'] = dp_id
 
             # add an alternate name if provided
             if 'alt' in map_item and map_item['alt']:
@@ -555,7 +658,7 @@ class mapped_dps_object( object ):
                     dst.name = dst.alt_name
 
             # set the mapping
-            dst._update_obj( _build_obj( map_item ) )
+            dst._update_obj( _build_obj( map_item, dp_id ) )
 
     # received update from device so parse the value
     def _update_value( self, dp_id, new_raw_val ):
@@ -566,9 +669,8 @@ class mapped_dps_object( object ):
             self._dp_data[dp_id]._update_obj( _dp_type_base_class( None, None ) )
 
         dst = self._dp_data[dp_id]
-        changed = new_raw_val != self._dp_data[dp_id].raw_value
         dst._update_value( new_raw_val )
-        return changed, dst
+        return dst
 
     # accessing as dict returns the _dp_object
     def __getitem__( self, key ):
@@ -647,32 +749,39 @@ class MappedDevice(Device):
         if 'dps' not in data:
             return data
 
-        new_dps = {}
-        changed = []
-        all_dps = []
+        if 'data' in data and isinstance( data['data'], dict ):
+            if 'dps' in data['data']:
+                del data['data']['dps']
+            if not data['data']:
+                del data['data']
+
+        for obj in self.dps:
+            obj.clear_changed()
+
+        dps_values = {}
+        dps_printable = {}
+        dps_objects = []
         for dp_id in data['dps']:
             dp_id_s = str(dp_id)
-            has_changed, dst = self.dps._update_value( dp_id_s, data['dps'][dp_id] )
-            all_dps.append( dst )
+            dst = self.dps._update_value( dp_id_s, data['dps'][dp_id] )
+            dps_objects.append( dst )
 
             # set both primary and alt names
             if dst.name:
-                new_dps[dst.name] = dst.value
+                dps_values[dst.name] = dst.value
+                dps_printable[dst.name] = str(dst.value) + (dst.unit if dst.unit else '')
                 if (dst.alt_name) and (dst.alt_name != dst.name):
-                    new_dps[dst.alt_name] = dst.value
-                if has_changed:
-                    # only use name if no alt name
-                    changed.append( dst )
+                    dps_values[dst.alt_name] = dst.value
+                    dps_printable[dst.alt_name] = dps_printable[dst.name]
             else:
                 # no name, so use DP ID
-                new_dps[dst.dp] = dst.value
-                if has_changed:
-                    changed.append( dst )
+                dps_values[dst.dp] = dst.value
+                dps_printable[dst.dp] = str(dst.value) + (dst.unit if dst.unit else '')
 
         data['raw_dps'] = data['dps']
-        data['dps'] = new_dps
-        data['dps_objects'] = all_dps
-        data['changed'] = changed
+        data['dps'] = dps_values
+        data['dps_printable'] = dps_printable
+        data['dps_objects'] = dps_objects
         return data
 
     # quick-n-dirty access as dict returns the DPS value
@@ -711,7 +820,7 @@ class MappedDevice(Device):
             return None
         if nowait is None:
             nowait = self.nowait
-        new_value = obj.encode_value( value )
+        new_value = obj.encode_value( value, False )
         return super(MappedDevice, self).set_value( obj.dp, new_value, nowait=nowait )
 
     def set_multiple_values(self, data, nowait=False):
@@ -722,11 +831,11 @@ class MappedDevice(Device):
             if not obj:
                 # FIXME should we throw an error instead?
                 if ks.isnumeric():
-                    has_changed, obj = self.dps._update_value( ks, data[k] )
+                    obj = self.dps._update_value( ks, data[k] )
                 else:
-                    # FIXME how about here?
+                    # FIXME what do we do here?
                     continue
-            newdata[obj.dp] = obj.encode_value( data[k] )
+            newdata[obj.dp] = obj.encode_value( data[k], False )
         if nowait is None:
             nowait = self.nowait
         return super(MappedDevice, self).set_multiple_values( newdata, nowait=nowait )

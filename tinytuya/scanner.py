@@ -1807,7 +1807,7 @@ def alldevices(color=True, scantime=None):
 
     # Display device list
     print("\n\n" + term.bold + "Device Listing\n" + term.dim)
-    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4)
+    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4, default=dict)
     print(output)
 
     # Find out if we should poll all devices
@@ -1862,7 +1862,7 @@ def snapshotjson():
         data = load_snapshotfile(SNAPSHOTFILE)
     except:
         current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
-        output = json.dumps(current, indent=4)
+        output = json.dumps(current, indent=4, default=dict)
         print(output)
         return
 
@@ -1891,7 +1891,7 @@ def snapshotjson():
         polling.append(item)
     # for loop
     current = {'timestamp' : time.time(), 'devices' : polling}
-    output = json.dumps(current, indent=4)
+    output = json.dumps(current, indent=4, default=dict)
     print(output)
     return
 
