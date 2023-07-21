@@ -518,7 +518,7 @@ class _dp_type_string( _dp_type_base_class ):
         return val
 
 class _dp_object( object ):
-    COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'valid', 'added', 'changed', 'raw_value', 'value' )
+    COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'valid', 'added', 'changed', 'raw_value', 'value', 'settable' )
     OPTION_ITEMS = ( 'value_type', 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'maxlen' )
     def __init__( self, device, dp ):
         super( _dp_object, self ).__setattr__( 'device', device )
@@ -565,7 +565,7 @@ class _dp_object( object ):
         if key == 'value':
             #print( 'in _dp_object __setattr__()' )
             return self.device.set_value( self.dp, data )
-        elif key in ('added', 'changed'):
+        elif key in ('added', 'changed', 'settable'):
             return super( _dp_object, self ).__setattr__( key, bool(data), *args, **kwargs )
         elif key in ('name', 'alt_name'):
             if not data:
@@ -656,6 +656,9 @@ class mapped_dps_object( object ):
                     self._dp_data[dst.alt_name] = dst
                 if not dst.name:
                     dst.name = dst.alt_name
+
+            if 'settable' in map_item:
+                dst.settable = map_item['settable']
 
             # set the mapping
             dst._update_obj( _build_obj( map_item, dp_id ) )

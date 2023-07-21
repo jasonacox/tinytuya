@@ -791,15 +791,17 @@ class Cloud(object):
         return ts
 
     @staticmethod
-    def _build_mapping( src, dst ):
+    def _build_mapping( src, dst, settable ):
         # merge multiple DPS sets from result['status'] and result['functions'] into a single result
         for mapp in src:
             try:
                 code = mapp['code']
                 dp_id = code if 'dp_id' not in mapp else str(mapp['dp_id'])
                 if dp_id in dst:
+                    if settable:
+                        dst[dp_id]['settable'] = True
                     continue
-                data = { 'code': code, 'type': mapp['type'] }
+                data = { 'code': code, 'type': mapp['type'], 'settable': settable }
                 if (mapp['type'].lower() == 'string') and (mapp['values'][0] != '{' or mapp['values'][-1] != '}'):
                     values = mapp['values']
                 else:
@@ -841,9 +843,9 @@ class Cloud(object):
                     dps = {}
                     # merge result['status'] and result['functions'] into a single result
                     if 'status' in result:
-                        self._build_mapping( result['status'], dps )
+                        self._build_mapping( result['status'], dps, False )
                     if 'functions' in result:
-                        self._build_mapping( result['functions'], dps )
+                        self._build_mapping( result['functions'], dps, True )
                     if not productid:
                         return dps
                     self.mappings[productid] = dps
