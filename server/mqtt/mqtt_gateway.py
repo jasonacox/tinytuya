@@ -212,5 +212,5 @@ if __name__ == "__main__":
             last = time.time()
             devices = getdevices()
             get_status_all(devices)
-    # Slow down
-    time.sleep(0.1)
+        # Slow down
+        time.sleep(0.1)
