@@ -97,3 +97,4 @@ from .OutletDevice import OutletDevice
 from .CoverDevice import CoverDevice
 from .BulbDevice import BulbDevice
 from .Cloud import Cloud
+from .MappedDevice import MappedDevice

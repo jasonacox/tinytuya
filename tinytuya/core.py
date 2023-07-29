@@ -755,7 +755,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, cloud=None # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
@@ -798,6 +798,7 @@ class XenonDevice(object):
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
         self.payload_dict = None
+        self.cloud = cloud
 
         if not local_key:
             local_key = ""
@@ -1715,25 +1716,6 @@ class Device(XenonDevice):
     #def __init__(self, *args, **kwargs):
     #    super(Device, self).__init__(*args, **kwargs)
 
-    def set_status(self, on, switch=1, nowait=False):
-        """
-        Set status of the device to 'on' or 'off'.
-
-        Args:
-            on(bool):  True for 'on', False for 'off'.
-            switch(int): The switch to set
-            nowait(bool): True to send without waiting for response.
-        """
-        # open device, send request, then close connection
-        if isinstance(switch, int):
-            switch = str(switch)  # index and payload is a string
-        payload = self.generate_payload(CONTROL, {switch: on})
-
-        data = self._send_receive(payload, getresponse=(not nowait))
-        log.debug("set_status received data=%r", data)
-
-        return data
-
     def product(self):
         """
         Request AP_CONFIG Product Info from device. [BETA]
@@ -1788,11 +1770,8 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         if isinstance(index, int):
             index = str(index)  # index and payload is a string
-
         payload = self.generate_payload(CONTROL, {index: value})
-
         data = self._send_receive(payload, getresponse=(not nowait))
-
         return data
 
     def set_multiple_values(self, data, nowait=False):
@@ -1809,13 +1788,24 @@ class Device(XenonDevice):
         payload = self.generate_payload(CONTROL, out)
         return self._send_receive(payload, getresponse=(not nowait))
 
+    def set_status(self, on, switch=1, nowait=False):
+        """
+        Set status of the device to 'on' or 'off'.
+
+        Args:
+            on(bool):  True for 'on', False for 'off'.
+            switch(int): The switch to set
+            nowait(bool): True to send without waiting for response.
+        """
+        return self.set_value( switch, on, nowait )
+
     def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""
-        return self.set_status(True, switch, nowait)
+        return self.set_value(switch, True, nowait)
 
     def turn_off(self, switch=1, nowait=False):
         """Turn the device off"""
-        return self.set_status(False, switch, nowait)
+        return self.set_value(switch, False, nowait)
 
     def set_timer(self, num_secs, dps_id=0, nowait=False):
         """

@@ -796,16 +796,18 @@ class Cloud(object):
         return ts
 
     @staticmethod
-    def _build_mapping( src, dst ):
+    def _build_mapping( src, dst, settable ):
         # merge multiple DPS sets from result['status'] and result['functions'] into a single result
         for mapp in src:
             try:
                 code = mapp['code']
                 dp_id = code if 'dp_id' not in mapp else str(mapp['dp_id'])
                 if dp_id in dst:
+                    if settable:
+                        dst[dp_id]['settable'] = True
                     continue
-                data = { 'code': code, 'type': mapp['type'] }
-                if mapp['type'].lower() == 'string':
+                data = { 'code': code, 'type': mapp['type'], 'settable': settable }
+                if (mapp['type'].lower() == 'string') and (mapp['values'][0] != '{' or mapp['values'][-1] != '}'):
                     values = mapp['values']
                 else:
                     try:
@@ -832,7 +834,7 @@ class Cloud(object):
         if not self.mappings:
             self.mappings = {} #load_mappings()
 
-        if productid in self.mappings:
+        if productid and (productid in self.mappings):
             # already have this product id, so just return it
             return self.mappings[productid]
 
@@ -846,13 +848,17 @@ class Cloud(object):
                     dps = {}
                     # merge result['status'] and result['functions'] into a single result
                     if 'status' in result:
-                        self._build_mapping( result['status'], dps )
+                        self._build_mapping( result['status'], dps, False )
                     if 'functions' in result:
-                        self._build_mapping( result['functions'], dps )
+                        self._build_mapping( result['functions'], dps, True )
+                    if not productid:
+                        return dps
                     self.mappings[productid] = dps
                     log.debug( 'Downloaded mapping for device %r: %r', deviceid, dps)
                 elif ('code' in result and result['code'] == 2009) or ('msg' in result and result['msg'] == 'not support this device'):
                     # this device does not have any DPs!
+                    if not productid:
+                        return {}
                     self.mappings[productid] = {}
 
         if productid in self.mappings:
