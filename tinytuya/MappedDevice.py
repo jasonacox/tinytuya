@@ -520,6 +520,7 @@ class _dp_type_string( _dp_type_base_class ):
 class _dp_object( object ):
     COMMON_ITEMS = ( 'dp', 'name', 'alt_name', 'names', 'valid', 'added', 'changed', 'raw_value', 'value', 'settable' )
     OPTION_ITEMS = ( 'value_type', 'unit', 'enum_range', 'int_min', 'int_max', 'int_step', 'int_scale', 'bitmap', 'maxlen' )
+    IFEXISTS_ITEMS = ( 'parent', )
     def __init__( self, device, dp ):
         super( _dp_object, self ).__setattr__( 'device', device )
         super( _dp_object, self ).__setattr__( 'dp', dp )
@@ -529,8 +530,8 @@ class _dp_object( object ):
         super( _dp_object, self ).__setattr__( 'obj', None )
         self._update_value( None, added=True )
 
-    def encode_value( self, new_value ):
-        return self.obj.encode_value( new_value, False )
+    def encode_value( self, new_value, pack=False ):
+        return self.obj.encode_value( new_value, pack )
 
     def clear_changed( self ):
         if self.valid:
@@ -565,7 +566,7 @@ class _dp_object( object ):
         if key == 'value':
             #print( 'in _dp_object __setattr__()' )
             return self.device.set_value( self.dp, data )
-        elif key in ('added', 'changed', 'settable'):
+        elif key in ('added', 'changed', 'settable', 'parent'):
             return super( _dp_object, self ).__setattr__( key, bool(data), *args, **kwargs )
         elif key in ('name', 'alt_name'):
             if not data:
@@ -588,6 +589,11 @@ class _dp_object( object ):
         d = {}
         for k in self.COMMON_ITEMS + self.OPTION_ITEMS:
             d[k] = getattr( self, k, None )
+        for k in self.IFEXISTS_ITEMS:
+            #if hasattr( self, k ):
+            v = getattr( self, k, None )
+            if v is not None:
+                d[k] = v
         return d
 
     # override __dict__ (and vars())
@@ -614,7 +620,7 @@ class mapped_dps_object( object ):
         self.device = device
         self._dp_data = {}
 
-    def set_mappings( self, mappings ):
+    def set_mappings( self, mappings, expand_bitmaps ):
         # delete DP IDs we have not received values for and all names
         dels = []
         for k in self._dp_data:
@@ -663,6 +669,10 @@ class mapped_dps_object( object ):
             # set the mapping
             dst._update_obj( _build_obj( map_item, dp_id ) )
 
+            if expand_bitmaps and dst.bitmap:
+                # FIXME expand bitmaps
+                pass
+
     # received update from device so parse the value
     def _update_value( self, dp_id, new_raw_val ):
         if dp_id not in self._dp_data:
@@ -708,40 +718,38 @@ class mapped_dps_object( object ):
 
 class MappedDevice(Device):
     def __init__(self, dev_id, *args, **kwargs):
-        mapping = None
-        product_id = None
+        self.mapping = None
+        self.product_id = None
+        self.expand_bitmaps = '.'
         self.nowait = False
 
-        # XenonDevice is not going to like the 'mapping' or 'product_id' keys, so remove them from kwargs
-        if 'mapping' in kwargs:
-            mapping = kwargs['mapping']
-            del kwargs['mapping']
-
-        if 'product_id' in kwargs:
-            product_id = kwargs['product_id']
-            del kwargs['product_id']
+        # XenonDevice is not going to like the additional keys, so remove them from kwargs
+        for k in ( 'mapping', 'product_id', 'expand_bitmaps' ):
+            if k in kwargs:
+                setattr( self, k, kwargs[k] )
+                del kwargs[k]
 
         super(MappedDevice, self).__init__( dev_id, *args, **kwargs )
 
         # initialize the mapping machine
         self.dps = mapped_dps_object( self )
 
-        if not mapping:
+        if not self.mapping:
             # no mapping provided, attempt to look it up in devices.json
             devinfo = device_info( self.id )
             if devinfo:
                 if 'mapping' in devinfo:
-                    mapping = devinfo['mapping']
-                if (not product_id) and ('product_id' in devinfo):
-                    product_id = devinfo['product_id']
+                    self.mapping = devinfo['mapping']
+                if (not self.product_id) and ('product_id' in devinfo):
+                    self.product_id = devinfo['product_id']
 
-        if (not mapping) and self.cloud:
+        if (not self.mapping) and self.cloud:
             # no devices.json, or mapping not found in devices.json, so use the Cloud if available
-            mapping = self.cloud.getmapping( product_id, self.id )
+            self.mapping = self.cloud.getmapping( self.product_id, self.id )
 
-        if mapping:
+        if self.mapping:
             # apply the mappings
-            self.dps.set_mappings( mapping )
+            self.dps.set_mappings( self.mapping, self.expand_bitmaps )
 
     # parse the response from the device, mapping DP IDs to names
     def _process_response( self, data ):
