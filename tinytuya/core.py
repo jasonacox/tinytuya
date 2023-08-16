@@ -199,6 +199,7 @@ ERR_CLOUDRESP = 910
 ERR_CLOUDTOKEN = 911
 ERR_PARAMS = 912
 ERR_CLOUD = 913
+ERR_KEY_OR_VER = 914
 
 error_codes = {
     ERR_JSON: "Invalid JSON Response from Device",
@@ -215,6 +216,7 @@ error_codes = {
     ERR_CLOUDTOKEN: "Unable to Get Cloud Token",
     ERR_PARAMS: "Missing Function Parameters",
     ERR_CLOUD: "Error Response from Tuya Cloud",
+    ERR_KEY_OR_VER: "Check device key or version",
     None: "Unknown Error",
 }
 
@@ -865,6 +867,7 @@ class XenonDevice(object):
         if self.socket is None:
             # Set up Socket
             retries = 0
+            err = ERR_OFFLINE
             while retries < self.socketRetryLimit:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 if self.socketNODELAY:
@@ -877,6 +880,11 @@ class XenonDevice(object):
                         # restart session key negotiation
                         if self._negotiate_session_key():
                             return True
+                        else:
+                            if self.socket:
+                                self.socket.close()
+                                self.socket = None
+                            return ERR_KEY_OR_VER
                     else:
                         return True
                 except socket.timeout as err:
@@ -885,19 +893,21 @@ class XenonDevice(object):
                         "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
+                    err = ERR_OFFLINE
                 except Exception as err:
                     # unable to open socket
                     log.debug(
                         "socket unable to connect (exception) - retry %d/%d",
                         retries, self.socketRetryLimit, exc_info=True
                     )
+                    err = ERR_CONNECT
                 if self.socket:
                     self.socket.close()
                     self.socket = None
                 if retries < self.socketRetryLimit:
                     time.sleep(self.socketRetryDelay)
             # unable to get connection
-            return False
+            return err
         # existing socket active
         return True
 
@@ -972,7 +982,7 @@ class XenonDevice(object):
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
         log.debug("sending payload quick")
-        if not self._get_socket(False):
+        if self._get_socket(False) is not True:
             return None
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
         try:
@@ -1033,10 +1043,11 @@ class XenonDevice(object):
         msg = None
         while not success:
             # open up socket if device is available
-            if not self._get_socket(False):
+            sock_result = self._get_socket(False)
+            if sock_result is not True:
                 # unable to get a socket - device likely offline
                 self._check_socket_close(True)
-                return error_json(ERR_OFFLINE)
+                return error_json( sock_result if sock_result else ERR_OFFLINE )
             # send request to device
             try:
                 if payload is not None and do_send:
@@ -1076,6 +1087,7 @@ class XenonDevice(object):
                     return None
                 do_send = True
                 retries += 1
+                # toss old socket and get new one
                 self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
@@ -1088,13 +1100,9 @@ class XenonDevice(object):
                         self.socketRetryLimit
                     )
                     # timeout reached - return error
-                    json_payload = error_json(
-                        ERR_TIMEOUT, "Check device key or version"
-                    )
-                    return json_payload
-                # retry:  wait a bit, toss old socket and get new one
+                    return error_json(ERR_KEY_OR_VER)
+                # wait a bit before retrying
                 time.sleep(0.1)
-                self._get_socket(True)
             except DecodeError as err:
                 log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
@@ -1110,6 +1118,7 @@ class XenonDevice(object):
                 # likely network or connection error
                 do_send = True
                 retries += 1
+                # toss old socket and get new one
                 self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
@@ -1125,9 +1134,8 @@ class XenonDevice(object):
                     # timeout reached - return error
                     json_payload = error_json(ERR_CONNECT)
                     return json_payload
-                # retry:  wait a bit, toss old socket and get new one
+                # wait a bit before retrying
                 time.sleep(0.1)
-                self._get_socket(True)
             # except
         # while
 
