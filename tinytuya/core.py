@@ -964,7 +964,8 @@ class XenonDevice(object):
                 tries -= 1
                 if tries == 0:
                     raise DecodeError('No data received - connection closed?')
-                time.sleep(0.1)
+                if self.sendWait is not None:
+                    time.sleep(self.sendWait)
                 continue
             data += newdata
             length -= len(newdata)
@@ -1090,7 +1091,8 @@ class XenonDevice(object):
                     log.debug("sending payload")
                     enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
                     self.socket.sendall(enc_payload)
-                    time.sleep(self.sendWait)  # give device time to respond
+                    if self.sendWait is not None:
+                        time.sleep(self.sendWait)  # give device time to respond
                 if getresponse:
                     do_send = False
                     rmsg = self._receive()
@@ -1108,7 +1110,7 @@ class XenonDevice(object):
                     else:
                         success = True
                         log.debug("received message=%r", msg)
-                if not getresponse:
+                else:
                     # legacy/default mode avoids persisting socket across commands
                     self._check_socket_close()
                     return None
@@ -1168,8 +1170,7 @@ class XenonDevice(object):
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
-                    json_payload = error_json(ERR_CONNECT)
-                    return json_payload
+                    return error_json(ERR_CONNECT)
                 # wait a bit before retrying
                 time.sleep(0.1)
             # except
