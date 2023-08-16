@@ -530,14 +530,26 @@ def find_device(dev_id=None, address=None):
     if dev_id is None and address is None:
         return (None, None, None)
     log.debug("Listening for device %s on the network", dev_id)
+
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    try:
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except AttributeError:
+        # SO_REUSEPORT not available
+        pass
     client.bind(("", UDPPORT))
     client.setblocking(False)
+
     # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
     clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    try:
+        clients.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except AttributeError:
+        # SO_REUSEPORT not available
+        pass
     clients.bind(("", UDPPORTS))
     clients.setblocking(False)
 

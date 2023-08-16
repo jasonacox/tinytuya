@@ -1025,15 +1025,33 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        try:
+            client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except AttributeError:
+            # SO_REUSEPORT not available
+            pass
         client.bind(("", UDPPORT))
         #client.settimeout(TIMEOUT)
+
         # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
         clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        try:
+            clients.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except AttributeError:
+            # SO_REUSEPORT not available
+            pass
         clients.bind(("", UDPPORTS))
         #clients.settimeout(TIMEOUT)
+
+        # Enable UDP listening broadcasting mode on encrypted UDP port 7000 - App
         clientapp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         clientapp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        try:
+            clientapp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except AttributeError:
+            # SO_REUSEPORT not available
+            pass
         clientapp.bind(("", UDPPORTAPP))
     else:
         client = clients = clientapp = None
