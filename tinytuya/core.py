@@ -789,6 +789,7 @@ class XenonDevice(object):
         self.id = dev_id
         self.cid = cid if cid else node_id
         self.address = address
+        self.auto_ip = False
         self.dev_type = dev_type
         self.dev_type_auto = self.dev_type == 'default'
         self.last_dev_type = ''
@@ -838,6 +839,7 @@ class XenonDevice(object):
             self.parent._register_child(self)
         elif (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
+            self.auto_ip = True
             bcast_data = find_device(dev_id)
             if bcast_data['ip'] is None:
                 log.debug("Unable to find device on network (specify IP address)")
@@ -881,6 +883,26 @@ class XenonDevice(object):
             retries = 0
             err = ERR_OFFLINE
             while retries < self.socketRetryLimit:
+                if self.auto_ip and not self.address:
+                    bcast_data = find_device(self.id)
+                    if bcast_data['ip'] is None:
+                        log.debug("Unable to find device on network (specify IP address)")
+                        return ERR_OFFLINE
+                    self.address = bcast_data['ip']
+                    new_version = float(bcast_data['version'])
+                    if new_version != self.version:
+                        # this may trigger a network call which will call _get_socket() again
+                        #self.set_version(new_version)
+                        self.version = new_version
+                        self.version_str = "v" + str(version)
+                        self.version_bytes = str(version).encode('latin1')
+                        self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
+                        self.payload_dict = None
+
+                if not self.address:
+                    log.debug("No address for device!")
+                    return ERR_OFFLINE
+
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 if self.socketNODELAY:
                     self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -918,6 +940,8 @@ class XenonDevice(object):
                     self.socket = None
                 if retries < self.socketRetryLimit:
                     time.sleep(self.socketRetryDelay)
+                if self.auto_ip:
+                    self.address = None
             # unable to get connection
             return err
         # existing socket active
