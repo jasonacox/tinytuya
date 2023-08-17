@@ -1509,8 +1509,8 @@ class XenonDevice(object):
                 log.debug("status() rebuilding payload for device22")
                 payload = self.generate_payload(query_type)
                 data = self._send_receive(payload)
-        elif (not nowait) and (not data):
-            log.debug("No response to status request, is version %r correct?", self.version)
+            elif data["Err"] == str(ERR_PAYLOAD):
+                log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
 
         return data
 
