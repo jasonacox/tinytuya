@@ -1792,9 +1792,11 @@ class Device(XenonDevice):
         log.debug("product received data=%r", data)
         return data
 
-    def heartbeat(self, nowait=False):
+    def heartbeat(self, nowait=True):
         """
-        Send a simple HEART_BEAT command to device.
+        Send a keep-alive HEART_BEAT command to keep the TCP connection open.
+
+        Devices only send an empty-payload response, so no need to wait for it.
 
         Args:
             nowait(bool): True to send without waiting for response.
