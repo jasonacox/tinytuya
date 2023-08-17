@@ -20,6 +20,8 @@ KEEPALIVE_TIMER = 12
 print(" > Send Request for Status < ")
 data = d.status()
 print('Initial Status: %r' % data)
+if data and 'Err' in data:
+    print("Status request returned an error, is version %r and local key %r correct?" % (d.version, d.local_key))
 
 print(" > Begin Monitor Loop <")
 heartbeat_time = time.time() + KEEPALIVE_TIMER
@@ -54,3 +56,8 @@ while(True):
         data = d.receive()
 
     print('Received Payload: %r' % data)
+
+    if data and 'Err' in data:
+        print("Received error!")
+        # rate limit retries so we don't hammer the device
+        time.sleep(5)
