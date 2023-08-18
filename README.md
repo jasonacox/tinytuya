@@ -137,13 +137,23 @@ Global Functions
     set_debug(toggle, color)           # Activate verbose debugging output
 
 Classes
-    OutletDevice(dev_id, address, local_key=None, dev_type='default')
-    CoverDevice(dev_id, address, local_key=None, dev_type='default')
-    BulbDevice(dev_id, address, local_key=None, dev_type='default')
+    OutletDevice(args...)
+    CoverDevice(args...)
+    BulbDevice(args...)
+      Where args:
         dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99 or 0.0.0.0 to auto-find
-        local_key (str, optional): The encryption key. Defaults to None.
+        address (str): Device Network IP Address e.g. 10.0.1.99 or "Auto" to auto-find
+        local_key (str): The encryption key
         dev_type (str): Device type for payload options (see below)
+        connection_timeout = 5 (int): Timeout in seconds
+        version = 3.1 (float): Tuya Protocol (e.g. 3.1, 3.2, 3.3, 3.4, 3.5)
+        persist = False (bool): Keep TCP link open
+        cid = None (str): Optional sub device id
+        node_id = None (str): Alias for cid
+        parent = None (object): Gateway device object this is a child of
+        connection_retry_limit = 5 (int)
+        connection_retry_delay = 5 (int)
+
     Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
 
@@ -243,6 +253,7 @@ The "Err" number will be one of these:
 * 911 (ERR_CLOUDTOKEN) - Unable to Get Cloud Token
 * 912 (ERR_PARAMS) - Missing Function Parameters
 * 913 (ERR_CLOUD) - Error Response from Tuya Cloud
+* 914 (ERR_KEY_OR_VER) - Check device key or version
 
 ### Example Usage
 

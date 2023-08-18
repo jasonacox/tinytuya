@@ -11,7 +11,9 @@
  Classes
   * AESCipher - Cryptography Helpers
   * XenonDevice(...) - Base Tuya Objects and Functions
-        XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version="3.1", persist=False, cid/node_id=None, parent=None)
+        XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, 
+            version="3.1", persist=False, cid/node_id=None, parent=None, connection_retry_limit=5, 
+            connection_retry_delay=5)
   * Device(XenonDevice) - Tuya Class for Devices
 
  Module Functions
@@ -97,7 +99,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 12, 9)
+version_tuple = (1, 12, 10)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -199,6 +201,7 @@ ERR_CLOUDRESP = 910
 ERR_CLOUDTOKEN = 911
 ERR_PARAMS = 912
 ERR_CLOUD = 913
+ERR_KEY_OR_VER = 914
 
 error_codes = {
     ERR_JSON: "Invalid JSON Response from Device",
@@ -215,6 +218,7 @@ error_codes = {
     ERR_CLOUDTOKEN: "Unable to Get Cloud Token",
     ERR_PARAMS: "Missing Function Parameters",
     ERR_CLOUD: "Error Response from Tuya Cloud",
+    ERR_KEY_OR_VER: "Check device key or version",
     None: "Unknown Error",
 }
 
@@ -528,14 +532,26 @@ def find_device(dev_id=None, address=None):
     if dev_id is None and address is None:
         return (None, None, None)
     log.debug("Listening for device %s on the network", dev_id)
+
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    try:
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except AttributeError:
+        # SO_REUSEPORT not available
+        pass
     client.bind(("", UDPPORT))
     client.setblocking(False)
+
     # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
     clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    try:
+        clients.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except AttributeError:
+        # SO_REUSEPORT not available
+        pass
     clients.bind(("", UDPPORTS))
     clients.setblocking(False)
 
@@ -755,7 +771,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5 # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
@@ -775,6 +791,7 @@ class XenonDevice(object):
         self.id = dev_id
         self.cid = cid if cid else node_id
         self.address = address
+        self.auto_ip = False
         self.dev_type = dev_type
         self.dev_type_auto = self.dev_type == 'default'
         self.last_dev_type = ''
@@ -785,8 +802,8 @@ class XenonDevice(object):
         self.socket = None
         self.socketPersistent = False if not persist else True # pylint: disable=R1719
         self.socketNODELAY = True
-        self.socketRetryLimit = 5
-        self.socketRetryDelay = 5
+        self.socketRetryLimit = connection_retry_limit
+        self.socketRetryDelay = connection_retry_delay
         self.version = 0
         self.dps_to_request = {}
         self.seqno = 1
@@ -824,6 +841,7 @@ class XenonDevice(object):
             self.parent._register_child(self)
         elif (not address) or address == "Auto" or address == "0.0.0.0":
             # try to determine IP address automatically
+            self.auto_ip = True
             bcast_data = find_device(dev_id)
             if bcast_data['ip'] is None:
                 log.debug("Unable to find device on network (specify IP address)")
@@ -865,7 +883,28 @@ class XenonDevice(object):
         if self.socket is None:
             # Set up Socket
             retries = 0
+            err = ERR_OFFLINE
             while retries < self.socketRetryLimit:
+                if self.auto_ip and not self.address:
+                    bcast_data = find_device(self.id)
+                    if bcast_data['ip'] is None:
+                        log.debug("Unable to find device on network (specify IP address)")
+                        return ERR_OFFLINE
+                    self.address = bcast_data['ip']
+                    new_version = float(bcast_data['version'])
+                    if new_version != self.version:
+                        # this may trigger a network call which will call _get_socket() again
+                        #self.set_version(new_version)
+                        self.version = new_version
+                        self.version_str = "v" + str(version)
+                        self.version_bytes = str(version).encode('latin1')
+                        self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
+                        self.payload_dict = None
+
+                if not self.address:
+                    log.debug("No address for device!")
+                    return ERR_OFFLINE
+
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 if self.socketNODELAY:
                     self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -877,6 +916,11 @@ class XenonDevice(object):
                         # restart session key negotiation
                         if self._negotiate_session_key():
                             return True
+                        else:
+                            if self.socket:
+                                self.socket.close()
+                                self.socket = None
+                            return ERR_KEY_OR_VER
                     else:
                         return True
                 except socket.timeout as err:
@@ -885,19 +929,23 @@ class XenonDevice(object):
                         "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
+                    err = ERR_OFFLINE
                 except Exception as err:
                     # unable to open socket
                     log.debug(
                         "socket unable to connect (exception) - retry %d/%d",
                         retries, self.socketRetryLimit, exc_info=True
                     )
+                    err = ERR_CONNECT
                 if self.socket:
                     self.socket.close()
                     self.socket = None
                 if retries < self.socketRetryLimit:
                     time.sleep(self.socketRetryDelay)
+                if self.auto_ip:
+                    self.address = None
             # unable to get connection
-            return False
+            return err
         # existing socket active
         return True
 
@@ -918,7 +966,8 @@ class XenonDevice(object):
                 tries -= 1
                 if tries == 0:
                     raise DecodeError('No data received - connection closed?')
-                time.sleep(0.1)
+                if self.sendWait is not None:
+                    time.sleep(self.sendWait)
                 continue
             data += newdata
             length -= len(newdata)
@@ -972,7 +1021,7 @@ class XenonDevice(object):
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
         log.debug("sending payload quick")
-        if not self._get_socket(False):
+        if self._get_socket(False) is not True:
             return None
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
         try:
@@ -1033,17 +1082,19 @@ class XenonDevice(object):
         msg = None
         while not success:
             # open up socket if device is available
-            if not self._get_socket(False):
+            sock_result = self._get_socket(False)
+            if sock_result is not True:
                 # unable to get a socket - device likely offline
                 self._check_socket_close(True)
-                return error_json(ERR_OFFLINE)
+                return error_json( sock_result if sock_result else ERR_OFFLINE )
             # send request to device
             try:
                 if payload is not None and do_send:
                     log.debug("sending payload")
                     enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
                     self.socket.sendall(enc_payload)
-                    time.sleep(self.sendWait)  # give device time to respond
+                    if self.sendWait is not None:
+                        time.sleep(self.sendWait)  # give device time to respond
                 if getresponse:
                     do_send = False
                     rmsg = self._receive()
@@ -1061,7 +1112,7 @@ class XenonDevice(object):
                     else:
                         success = True
                         log.debug("received message=%r", msg)
-                if not getresponse:
+                else:
                     # legacy/default mode avoids persisting socket across commands
                     self._check_socket_close()
                     return None
@@ -1076,6 +1127,7 @@ class XenonDevice(object):
                     return None
                 do_send = True
                 retries += 1
+                # toss old socket and get new one
                 self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
@@ -1088,13 +1140,9 @@ class XenonDevice(object):
                         self.socketRetryLimit
                     )
                     # timeout reached - return error
-                    json_payload = error_json(
-                        ERR_TIMEOUT, "Check device key or version"
-                    )
-                    return json_payload
-                # retry:  wait a bit, toss old socket and get new one
+                    return error_json(ERR_KEY_OR_VER)
+                # wait a bit before retrying
                 time.sleep(0.1)
-                self._get_socket(True)
             except DecodeError as err:
                 log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
@@ -1110,6 +1158,7 @@ class XenonDevice(object):
                 # likely network or connection error
                 do_send = True
                 retries += 1
+                # toss old socket and get new one
                 self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
@@ -1123,11 +1172,9 @@ class XenonDevice(object):
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
-                    json_payload = error_json(ERR_CONNECT)
-                    return json_payload
-                # retry:  wait a bit, toss old socket and get new one
+                    return error_json(ERR_CONNECT)
+                # wait a bit before retrying
                 time.sleep(0.1)
-                self._get_socket(True)
             # except
         # while
 
@@ -1464,6 +1511,8 @@ class XenonDevice(object):
                 log.debug("status() rebuilding payload for device22")
                 payload = self.generate_payload(query_type)
                 data = self._send_receive(payload)
+            elif data["Err"] == str(ERR_PAYLOAD):
+                log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
 
         return data
 
@@ -1745,9 +1794,11 @@ class Device(XenonDevice):
         log.debug("product received data=%r", data)
         return data
 
-    def heartbeat(self, nowait=False):
+    def heartbeat(self, nowait=True):
         """
-        Send a simple HEART_BEAT command to device.
+        Send a keep-alive HEART_BEAT command to keep the TCP connection open.
+
+        Devices only send an empty-payload response, so no need to wait for it.
 
         Args:
             nowait(bool): True to send without waiting for response.

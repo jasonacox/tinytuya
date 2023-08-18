@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.12.10 - Various Updates
+
+* PyPI 1.12.10
+* Updates to scanner, added error code and helpful troubleshooting messages, make connection/key errors more descriptive.
+* Added socketRetryLimit (`connection_retry_limit`) and socketRetryDelay (`connection_retry_limit`) to Device constructor args.
+
 ## v1.12.9 - Import Issue with urllib3
 
 * PyPI 1.12.9
