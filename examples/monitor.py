@@ -12,7 +12,10 @@ import time
 
 # tinytuya.set_debug(True)
 
-d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)
+# Setting the address to 'Auto' or None will trigger a scan which will auto-detect both the address and version, but this can take up to 8 seconds
+d = tinytuya.OutletDevice('DEVICEID', 'Auto', 'DEVICEKEY', persist=True)
+# If you know both the address and version then supplying them is a lot quicker
+# d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=DEVICEVERSION, persist=True)
 
 STATUS_TIMER = 30
 KEEPALIVE_TIMER = 12
