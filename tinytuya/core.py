@@ -99,7 +99,7 @@ except ImportError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 12, 10)
+version_tuple = (1, 12, 11)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -923,14 +923,14 @@ class XenonDevice(object):
                             return ERR_KEY_OR_VER
                     else:
                         return True
-                except socket.timeout as err:
+                except socket.timeout as e:
                     # unable to open socket
                     log.debug(
                         "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
                     err = ERR_OFFLINE
-                except Exception as err:
+                except Exception as e:
                     # unable to open socket
                     log.debug(
                         "socket unable to connect (exception) - retry %d/%d",
