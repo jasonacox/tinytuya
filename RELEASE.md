@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.12.11 - Bug Fix for _get_socket()
+
+* PyPI 1.12.11
+* Fix local variable collision in `_get_socket()` exception handling for device offline conditions.
+
 ## v1.12.10 - Various Updates
 
 * PyPI 1.12.10
