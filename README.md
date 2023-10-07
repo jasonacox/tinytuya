@@ -62,7 +62,7 @@ python -m tinytuya scan
 
 TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to generate a JSON list (devices.json) of all your registered devices, including secret *Local_Key* and *Name* of your devices. Follow the steps below:
 
-1. PAIR - Download the *Smart Life App* or *Tuya Smart App*, available for [iPhone](https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8) or [Android](https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en). Pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).
+1. PAIR - Download the *Smart Life App* or *Tuya Smart App*, available for [iPhone](https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8) or [Android](https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en). Set up your SmartLife account and pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).
 
 2. SCAN (Optional) - Run the TinyTuya scan to get a list of Tuya devices on your network. It will show device *Address*, *Device ID* and *Version* number (3.x):
     ```bash
@@ -70,14 +70,14 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
     ```
     NOTE: You will need to use one of the displayed *Device IDs* for step 4.
 
-3. TUYA ACCOUNT - Set up a Tuya Account (see [PDF Instructions](https://github.com/jasonacox/tinytuya/files/12101705/Tuya.IoT.API.Setup.1.pdf)):
+3. TUYA ACCOUNT - Set up a Tuya Account (see [PDF Instructions](https://github.com/jasonacox/tinytuya/files/12836816/Tuya.IoT.API.Setup.v2.pdf)):
     * *NOTE: Tuya often changes their portal and services. Please open an [issue](https://github.com/jasonacox/tinytuya/issues) with screenshots if we need to update these instructions.*
     * Create a Tuya Developer account on [iot.tuya.com](https://iot.tuya.com/). When it asks for the "Account Type", select "Skip this step..." (see [screenshot](https://user-images.githubusercontent.com/836718/213877860-34c39851-5671-4c9f-b4d5-251873f18c77.png)).  
     * Click on "Cloud" icon -> "Create Cloud Project"
-      1. Remember the "Data Center" you select.  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png)).
+      1. Pick the correct Data Center "Region" for your location (check [HERE](https://developer.tuya.com/en/docs/iot/oem-app-data-center-distributed?id=Kafi0ku9l07qb#title-3-Western%20America%20Data%20Center) to find your Region).  This will be used by TinyTuya Wizard ([screenshot](https://user-images.githubusercontent.com/836718/138598647-c9657e49-1a89-4ed6-8105-ceee95d9513f.png)).
       2. Skip the configuration wizard but remember the Authorization Key: *API ID* and *Secret* for below ([screenshot](https://user-images.githubusercontent.com/836718/138598788-f74d2fe8-57fa-439c-8003-18735a44e7e5.png)).
     * Click on "Cloud" icon -> Select your project -> **Devices** -> **Link Tuya App Account** ([see screenshot](https://user-images.githubusercontent.com/836718/155827671-44d5fce4-0119-4d0e-a224-ef3715fafc24.png))
-    * Click **Add App Account** ([screenshot](https://user-images.githubusercontent.com/836718/155827671-44d5fce4-0119-4d0e-a224-ef3715fafc24.png)) and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button `[..]` in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
+    * Click **Add App Account** ([screenshot](https://user-images.githubusercontent.com/836718/273364035-0fd133b7-4e9e-4a6d-900e-efe63d69f1a0.png)) and it will pop-up a "Link Tuya App Account" dialog, chose "Automatic" and "Read, Write, and Manage". Click OK and it will display a QR code. Scan the QR code with the *Smart Life app* on your Phone (see step 1 above) by going to the "Me" tab in the *Smart Life app* and clicking on the QR code button `[..]` in the upper right hand corner of the app. When you scan the QR code, it will link all of the devices registered in your *Smart Life app* into your Tuya IoT project.
     * **NO DEVICES?** If no devices show up after scanning the QR code, you will need to select a different data center and edit your project (or create a new one) until you see your paired devices from the *Smart Life App* show up. ([screenshot](https://user-images.githubusercontent.com/35581194/148679597-391adecb-a271-453b-90c0-c64cdfad42e4.png)). The data center may not be the most logical. As an example, some in the UK have reported needing to select "Central Europe" instead of "Western Europe".
     * **SERVICE API:** Under "Service API" ensure these APIs are listed: `IoT Core` and `Authorization`. To be sure, click subscribe again on every service.  Very important: **disable popup blockers** otherwise subscribing won't work without providing any indication of a failure. Make sure you authorize your Project to use those APIs:
         - Click "Service API" tab
@@ -85,7 +85,6 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
 
 5. WIZARD - Run Setup Wizard:
-    * Tuya has changed their data center regions. Make sure you are using the latest version of TinyTuya (v1.2.10 or newer).
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
