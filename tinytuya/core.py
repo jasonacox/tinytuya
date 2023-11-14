@@ -88,13 +88,26 @@ try:
 except NameError:
     pass
 
-# Required module: pycryptodome
+# PyCryptodome is installed as "Cryptodome" when installed by
+#  `apt install python3-pycryptodome` or
+#  `pip3 install pycryptodomex`
 try:
-    import Crypto
-    from Crypto.Cipher import AES  # PyCrypto
+    import Cryptodome as Crypto
+    from Cryptodome.Cipher import AES
+    CRYPTOLIB = 'PyCryptodomex'
 except ImportError:
-    Crypto = AES = None
-    import pyaes  # https://github.com/ricmoo/pyaes
+    try:
+        import Crypto
+        from Crypto.Cipher import AES  # PyCrypto
+        # v1/v2 is PyCrypto, v3 is PyCryptodome
+        CRYPTOLIB = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
+    except ImportError:
+        try:
+            Crypto = AES = None
+            import pyaes  # https://github.com/ricmoo/pyaes
+            CRYPTOLIB = 'pyaes'
+        except ImportError:
+            raise
 
 # Colorama terminal color capability for all platforms
 init()
@@ -226,87 +239,13 @@ class DecodeError(Exception):
     pass
 
 # Cryptography Helpers
-class AESCipher(object):
+class _AESCipher_Base(object):
     def __init__(self, key):
-        self.bs = 16
         self.key = key
 
-    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
-        if Crypto:
-            if iv: # initialization vector or nonce (number used once)
-                if iv is True:
-                    if log.isEnabledFor( logging.DEBUG ):
-                        iv = b'0123456789ab'
-                    else:
-                        iv = str(time.time() * 10)[:12].encode('utf8')
-                cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
-                if header:
-                    cipher.update(header)
-                crypted_text, tag = cipher.encrypt_and_digest(raw)
-                crypted_text = cipher.nonce + crypted_text + tag
-            else:
-                if pad: raw = self._pad(raw)
-                cipher = AES.new(self.key, mode=AES.MODE_ECB)
-                crypted_text = cipher.encrypt(raw)
-        else:
-            if iv:
-                # GCM required for 3.5 devices
-                raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
-
-            _ = self._pad(raw)
-            # pylint: disable-next=used-before-assignment
-            cipher = pyaes.blockfeeder.Encrypter(
-                pyaes.AESModeOfOperationECB(self.key),
-                pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE
-            )  # no IV, auto pads to 16
-            crypted_text = cipher.feed(raw)
-            crypted_text += cipher.feed()  # flush final block
-
-        if use_base64:
-            return base64.b64encode(crypted_text)
-        else:
-            return crypted_text
-
-    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
-        if not iv:
-            if use_base64:
-                enc = base64.b64decode(enc)
-
-            if len(enc) % 16 != 0:
-                raise ValueError("invalid length")
-
-        if Crypto:
-            if iv:
-                if iv is True:
-                    iv = enc[:12]
-                    enc = enc[12:]
-                cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
-                if header:
-                    cipher.update(header)
-                if tag:
-                    raw = cipher.decrypt_and_verify(enc, tag)
-                else:
-                    raw = cipher.decrypt(enc)
-            else:
-                cipher = AES.new(self.key, AES.MODE_ECB)
-                raw = cipher.decrypt(enc)
-                raw = self._unpad(raw, verify_padding)
-            return raw.decode("utf-8") if decode_text else raw
-        else:
-            if iv:
-                # GCM required for 3.5 devices
-                raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
-            cipher = pyaes.blockfeeder.Decrypter(
-                pyaes.AESModeOfOperationECB(self.key),
-                pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
-            )  # no IV, auto pads to 16
-            raw = cipher.feed(enc)
-            raw += cipher.feed()  # flush final block
-            if verify_padding: raw = self._unpad(raw, verify_padding)
-            return raw.decode("utf-8") if decode_text else raw
-
-    def _pad(self, s):
-        padnum = self.bs - len(s) % self.bs
+    @staticmethod
+    def _pad(s, bs):
+        padnum = bs - len(s) % bs
         return s + padnum * chr(padnum).encode()
 
     @staticmethod
@@ -317,6 +256,103 @@ class AESCipher(object):
         if verify_padding and s[-padlen:] != (padlen * chr(padlen).encode()):
             raise ValueError("invalid padding data")
         return s[:-padlen]
+
+class _AESCipher_PyCrypto(_AESCipher_Base):
+    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
+        if iv: # initialization vector or nonce (number used once)
+            if not self.CRYPTOLIB_HAS_GCM:
+                raise NotImplementedError( 'PyCrypto does not support GCM, please install PyCryptodome' )
+            if iv is True:
+                if log.isEnabledFor( logging.DEBUG ):
+                    iv = b'0123456789ab'
+                else:
+                    iv = str(time.time() * 10)[:12].encode('utf8')
+            cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
+            if header:
+                cipher.update(header)
+            crypted_text, tag = cipher.encrypt_and_digest(raw)
+            crypted_text = cipher.nonce + crypted_text + tag
+        else:
+            if pad: raw = self._pad(raw, 16)
+            cipher = AES.new(self.key, mode=AES.MODE_ECB)
+            crypted_text = cipher.encrypt(raw)
+
+        return base64.b64encode(crypted_text) if use_base64 else crypted_text
+
+    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
+        if not iv:
+            if use_base64:
+                enc = base64.b64decode(enc)
+            if len(enc) % 16 != 0:
+                raise ValueError("invalid length")
+        if iv:
+            if not self.CRYPTOLIB_HAS_GCM:
+                raise NotImplementedError( 'PyCrypto does not support GCM, please install PyCryptodome' )
+            if iv is True:
+                iv = enc[:12]
+                enc = enc[12:]
+            cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
+            if header:
+                cipher.update(header)
+            if tag:
+                raw = cipher.decrypt_and_verify(enc, tag)
+            else:
+                raw = cipher.decrypt(enc)
+        else:
+            cipher = AES.new(self.key, AES.MODE_ECB)
+            raw = cipher.decrypt(enc)
+            raw = self._unpad(raw, verify_padding)
+        return raw.decode("utf-8") if decode_text else raw
+
+class _AESCipher_pyaes(_AESCipher_Base):
+    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
+        if iv:
+            # GCM required for 3.5 devices
+            raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
+
+        # pylint: disable-next=used-before-assignment
+        cipher = pyaes.blockfeeder.Encrypter(
+            pyaes.AESModeOfOperationECB(self.key),
+            pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE
+        )  # no IV, auto pads to 16
+        crypted_text = cipher.feed(raw)
+        crypted_text += cipher.feed()  # flush final block
+        return base64.b64encode(crypted_text) if use_base64 else crypted_text
+
+    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
+        if iv:
+            # GCM required for 3.5 devices
+            raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
+
+        if use_base64:
+            enc = base64.b64decode(enc)
+
+        if len(enc) % 16 != 0:
+            raise ValueError("invalid length")
+
+        cipher = pyaes.blockfeeder.Decrypter(
+            pyaes.AESModeOfOperationECB(self.key),
+            pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
+        )  # no IV, auto pads to 16
+
+        raw = cipher.feed(enc)
+        raw += cipher.feed()  # flush final block
+
+        if verify_padding: raw = self._unpad(raw, verify_padding)
+        return raw.decode("utf-8") if decode_text else raw
+
+
+if CRYPTOLIB[:8] == 'PyCrypto': # PyCrypto, PyCryptodome, and PyCryptodomex
+    class AESCipher(_AESCipher_PyCrypto):
+        CRYPTOLIB = CRYPTOLIB
+        CRYPTOLIB_VER = '.'.join( [str(x) for x in Crypto.version_info] )
+        CRYPTOLIB_HAS_GCM = getattr( AES, 'MODE_GCM', False ) # only PyCryptodome supports GCM, PyCrypto does not
+elif CRYPTOLIB == 'pyaes':
+    class AESCipher(_AESCipher_pyaes):
+        CRYPTOLIB = CRYPTOLIB
+        CRYPTOLIB_VER = '.'.join( [str(x) for x in pyaes.VERSION] )
+        CRYPTOLIB_HAS_GCM = False
+
 
 # Misc Helpers
 def bin2hex(x, pretty=False):
@@ -348,11 +384,11 @@ def set_debug(toggle=True, color=True):
         log.setLevel(logging.DEBUG)
         log.debug("TinyTuya [%s]\n", __version__)
         log.debug("Python %s on %s", sys.version, sys.platform)
-        if Crypto is None:
-            # pylint: disable-next=used-before-assignment
-            log.debug("Using pyaes version %r", pyaes.VERSION)
+        if AESCipher.CRYPTOLIB_HAS_GCM == False:
+            log.debug("Using %s %s for crypto", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
+            log.debug("Warning: Crypto library does not support AES-GCM, v3.5 devices will not work!")
         else:
-            log.debug("Using PyCrypto %r", Crypto.version_info)
+            log.debug("Using %s %s for crypto, GCM is supported", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
     else:
         log.setLevel(logging.NOTSET)
 
