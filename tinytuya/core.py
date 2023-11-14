@@ -88,26 +88,33 @@ try:
 except NameError:
     pass
 
-# PyCryptodome is installed as "Cryptodome" when installed by
-#  `apt install python3-pycryptodome` or
-#  `pip3 install pycryptodomex`
-try:
-    import Cryptodome as Crypto
-    from Cryptodome.Cipher import AES
-    CRYPTOLIB = 'PyCryptodomex'
-except ImportError:
+for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
+    Crypto = AES = CRYPTOLIB = None
     try:
-        import Crypto
-        from Crypto.Cipher import AES  # PyCrypto
-        # v1/v2 is PyCrypto, v3 is PyCryptodome
-        CRYPTOLIB = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
-    except ImportError:
-        try:
-            Crypto = AES = None
+        if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
+            from cryptography.hazmat.primitives.ciphers import Cipher as Crypto
+            from cryptography.hazmat.primitives.ciphers import modes as Crypto_modes
+            from cryptography.hazmat.primitives.ciphers.algorithms import AES
+            from cryptography import __version__ as Crypto_version
+        elif clib == 'PyCryptodomex':
+            # PyCryptodome is installed as "Cryptodome" when installed by
+            #  `apt install python3-pycryptodome` or
+            #  `pip3 install pycryptodomex`
+            import Cryptodome as Crypto
+            from Cryptodome.Cipher import AES
+        elif clib == 'PyCrypto':
+            import Crypto
+            from Crypto.Cipher import AES  # PyCrypto
+            # v1/v2 is PyCrypto, v3 is PyCryptodome
+            clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
+        elif clib == 'pyaes':
             import pyaes  # https://github.com/ricmoo/pyaes
-            CRYPTOLIB = 'pyaes'
-        except ImportError:
-            raise
+        CRYPTOLIB = clib
+        break
+    except ImportError:
+        continue
+if CRYPTOLIB is None:
+    raise ModuleNotFoundError('No crypto library found, please install one of: pyca/cryptography, PyCryptodome, or PyCrypto')
 
 # Colorama terminal color capability for all platforms
 init()
@@ -257,6 +264,53 @@ class _AESCipher_Base(object):
             raise ValueError("invalid padding data")
         return s[:-padlen]
 
+class _AESCipher_pyca(_AESCipher_Base):
+    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
+        if iv: # initialization vector or nonce (number used once)
+            if not self.CRYPTOLIB_HAS_GCM:
+                raise NotImplementedError( 'Crypto library does not support GCM' )
+            if iv is True:
+                if log.isEnabledFor( logging.DEBUG ):
+                    iv = b'0123456789ab'
+                else:
+                    iv = str(time.time() * 10)[:12].encode('utf8')
+            encryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv) ).encryptor()
+            if header:
+                encryptor.authenticate_additional_data(header)
+            crypted_text = encryptor.update(raw) + encryptor.finalize()
+            crypted_text = encryptor.initialization_vector + crypted_text + encryptor.tag
+        else:
+            if pad: raw = self._pad(raw, 16)
+            encryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).encryptor()
+            crypted_text = encryptor.update(raw) + encryptor.finalize()
+
+        return base64.b64encode(crypted_text) if use_base64 else crypted_text
+
+    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
+        if not iv:
+            if use_base64:
+                enc = base64.b64decode(enc)
+            if len(enc) % 16 != 0:
+                raise ValueError("invalid length")
+        if iv:
+            if not self.CRYPTOLIB_HAS_GCM:
+                raise NotImplementedError( 'Crypto library does not support GCM' )
+            if iv is True:
+                iv = enc[:12]
+                enc = enc[12:]
+            decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
+            if header:
+                decryptor.authenticate_additional_data( header )
+            #if tag is None:
+            #    raw = decryptor.update( enc )
+            #else:
+            raw = decryptor.update( enc ) + decryptor.finalize()
+        else:
+            decryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).decryptor()
+            raw = decryptor.update( enc ) + decryptor.finalize()
+            raw = self._unpad(raw, verify_padding)
+        return raw.decode("utf-8") if decode_text else raw
+
 class _AESCipher_PyCrypto(_AESCipher_Base):
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if iv: # initialization vector or nonce (number used once)
@@ -341,7 +395,6 @@ class _AESCipher_pyaes(_AESCipher_Base):
         if verify_padding: raw = self._unpad(raw, verify_padding)
         return raw.decode("utf-8") if decode_text else raw
 
-
 if CRYPTOLIB[:8] == 'PyCrypto': # PyCrypto, PyCryptodome, and PyCryptodomex
     class AESCipher(_AESCipher_PyCrypto):
         CRYPTOLIB = CRYPTOLIB
@@ -352,7 +405,11 @@ elif CRYPTOLIB == 'pyaes':
         CRYPTOLIB = CRYPTOLIB
         CRYPTOLIB_VER = '.'.join( [str(x) for x in pyaes.VERSION] )
         CRYPTOLIB_HAS_GCM = False
-
+elif CRYPTOLIB == 'pyca/cryptography':
+    class AESCipher(_AESCipher_pyca):
+        CRYPTOLIB = CRYPTOLIB
+        CRYPTOLIB_VER = Crypto_version
+        CRYPTOLIB_HAS_GCM = getattr( Crypto_modes, 'GCM', False )
 
 # Misc Helpers
 def bin2hex(x, pretty=False):
