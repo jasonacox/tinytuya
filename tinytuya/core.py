@@ -96,15 +96,14 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
             from cryptography.hazmat.primitives.ciphers import modes as Crypto_modes
             from cryptography.hazmat.primitives.ciphers.algorithms import AES
             from cryptography import __version__ as Crypto_version
-        elif clib == 'PyCryptodomex':
+        elif clib == 'PyCryptodomex': # https://pycryptodome.readthedocs.io/en/latest/
             # PyCryptodome is installed as "Cryptodome" when installed by
-            #  `apt install python3-pycryptodome` or
-            #  `pip3 install pycryptodomex`
+            #  `apt install python3-pycryptodome` or `pip install pycryptodomex`
             import Cryptodome as Crypto
             from Cryptodome.Cipher import AES
-        elif clib == 'PyCrypto':
+        elif clib == 'PyCrypto': # https://www.pycrypto.org/
             import Crypto
-            from Crypto.Cipher import AES  # PyCrypto
+            from Crypto.Cipher import AES
             # v1/v2 is PyCrypto, v3 is PyCryptodome
             clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
         elif clib == 'pyaes':
