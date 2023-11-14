@@ -279,7 +279,7 @@ def process_pcap( pcap_file, args ):
             continue
 
         if( isinstance(eth.ip.data, dpkt.udp.UDP) ):
-            if( eth.ip.udp.dport == 6667 and eth.ip.src not in ip_devs ):
+            if( (eth.ip.udp.dport == 6667 or eth.ip.udp.dport == 6666) and eth.ip.src not in ip_devs ):
                 try:
                     data = eth.ip.udp.data
                     devmac = mac_to_str( eth.src )

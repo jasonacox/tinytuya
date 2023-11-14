@@ -1339,10 +1339,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             ip = addr[0]
             result = b''
             try:
-                if sock is client:
-                    result = tinytuya.unpack_message( data ).payload.decode()
-                else:
-                    result = tinytuya.decrypt_udp( data )
+                result = tinytuya.decrypt_udp( data )
                 result = json.loads(result)
                 log.debug("Received valid UDP packet: %r", result)
             except:

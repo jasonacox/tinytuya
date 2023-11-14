@@ -664,11 +664,7 @@ def find_device(dev_id=None, address=None):
             gwId = version = "" # pylint: disable=W0621
             result = data
             try:
-                try:
-                    result = decrypt_udp(result)
-                except:
-                    result = result.decode()
-
+                result = decrypt_udp(result)
                 result = json.loads(result)
                 ip = result["ip"]
                 gwId = result["gwId"]
@@ -2011,9 +2007,21 @@ def decrypt(msg, key):
 udpkey = md5(b"yGAdlopoPVldABfn").digest()
 
 def decrypt_udp(msg):
-    if msg[:4] == PREFIX_55AA_BIN:
-        return decrypt(msg[20:-8], udpkey)
-    if msg[:4] == PREFIX_6699_BIN:
+    try:
+        header = parse_header(msg)
+    except:
+        header = None
+    if not header:
+        return decrypt(msg, udpkey)
+    if header.prefix == PREFIX_55AA_VALUE:
+        payload = unpack_message(msg).payload
+        try:
+            if payload[:1] == b'{' and payload[-1:] == b'}':
+                return payload.decode()
+        except:
+            pass
+        return decrypt(payload, udpkey)
+    if header.prefix == PREFIX_6699_VALUE:
         unpacked = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
         payload = unpacked.payload.decode()
         # app sometimes has extra bytes at the end

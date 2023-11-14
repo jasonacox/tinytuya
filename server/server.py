@@ -293,11 +293,7 @@ def tuyalisten(port):
         gwId = dname = dkey = mac = ""
         result = data
         try:
-            result = data[20:-8]
-            try:
-                result = tinytuya.decrypt_udp(result)
-            except:
-                result = result.decode()
+            result = tinytuya.decrypt_udp( data )
             result = json.loads(result)
             #log.debug("Received valid UDP packet: %r", result)
             ip = result["ip"]
