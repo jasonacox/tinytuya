@@ -249,6 +249,26 @@ class _AESCipher_Base(object):
     def __init__(self, key):
         self.key = key
 
+    @classmethod
+    def get_encryption_iv( cls, iv ):
+        if not self.CRYPTOLIB_HAS_GCM:
+            raise NotImplementedError( 'Crypto library does not support GCM' )
+        if iv is True:
+            if log.isEnabledFor( logging.DEBUG ):
+                iv = b'0123456789ab'
+            else:
+                iv = str(time.time() * 10)[:12].encode('utf8')
+        return iv
+
+    @classmethod
+    def get_decryption_iv( cls, iv, data ):
+        if not self.CRYPTOLIB_HAS_GCM:
+            raise NotImplementedError( 'Crypto library does not support GCM' )
+        if iv is True:
+            iv = data[:12]
+            data = data[12:]
+        return iv, data
+
     @staticmethod
     def _pad(s, bs):
         padnum = bs - len(s) % bs
@@ -266,13 +286,7 @@ class _AESCipher_Base(object):
 class _AESCipher_pyca(_AESCipher_Base):
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if iv: # initialization vector or nonce (number used once)
-            if not self.CRYPTOLIB_HAS_GCM:
-                raise NotImplementedError( 'Crypto library does not support GCM' )
-            if iv is True:
-                if log.isEnabledFor( logging.DEBUG ):
-                    iv = b'0123456789ab'
-                else:
-                    iv = str(time.time() * 10)[:12].encode('utf8')
+            iv = self.get_encryption_iv( iv )
             encryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv) ).encryptor()
             if header:
                 encryptor.authenticate_additional_data(header)
@@ -292,11 +306,7 @@ class _AESCipher_pyca(_AESCipher_Base):
             if len(enc) % 16 != 0:
                 raise ValueError("invalid length")
         if iv:
-            if not self.CRYPTOLIB_HAS_GCM:
-                raise NotImplementedError( 'Crypto library does not support GCM' )
-            if iv is True:
-                iv = enc[:12]
-                enc = enc[12:]
+            iv, enc = self.get_decryption_iv( iv, enc )
             decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
             if header:
                 decryptor.authenticate_additional_data( header )
@@ -313,13 +323,7 @@ class _AESCipher_pyca(_AESCipher_Base):
 class _AESCipher_PyCrypto(_AESCipher_Base):
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if iv: # initialization vector or nonce (number used once)
-            if not self.CRYPTOLIB_HAS_GCM:
-                raise NotImplementedError( 'PyCrypto does not support GCM, please install PyCryptodome' )
-            if iv is True:
-                if log.isEnabledFor( logging.DEBUG ):
-                    iv = b'0123456789ab'
-                else:
-                    iv = str(time.time() * 10)[:12].encode('utf8')
+            iv = self.get_encryption_iv( iv )
             cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
             if header:
                 cipher.update(header)
@@ -339,11 +343,7 @@ class _AESCipher_PyCrypto(_AESCipher_Base):
             if len(enc) % 16 != 0:
                 raise ValueError("invalid length")
         if iv:
-            if not self.CRYPTOLIB_HAS_GCM:
-                raise NotImplementedError( 'PyCrypto does not support GCM, please install PyCryptodome' )
-            if iv is True:
-                iv = enc[:12]
-                enc = enc[12:]
+            iv, enc = self.get_decryption_iv( iv, enc )
             cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
             if header:
                 cipher.update(header)
