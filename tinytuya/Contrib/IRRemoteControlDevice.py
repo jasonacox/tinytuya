@@ -184,24 +184,18 @@ class IRRemoteControlDevice(Device):
         self.study_end()
         self.control_type = 0
         status = self.status()
-        while status:
-            if status and 'dps' in status:
-                # original devices using DPS 201/202
-                if self.DP_SEND_IR in status['dps']:
-                    log.debug( 'Detected control type 1' )
-                    self.control_type = 1
-                    break
-                # newer devices using DPS 1-13
-                elif self.DP_MODE in status['dps']:
-                    log.debug( 'Detected control type 2' )
-                    self.control_type = 2
-                    break
+        while status and 'dps' in status:
+            # original devices using DPS 201/202
+            if self.DP_SEND_IR in status['dps']:
+                log.debug( 'Detected control type 1' )
+                self.control_type = 1
+            # newer devices using DPS 1-13
+            elif self.DP_MODE in status['dps']:
+                log.debug( 'Detected control type 2' )
+                self.control_type = 2
             status = self._send_receive(None)
         if not self.control_type:
             log.warning( 'Detect control type failed! control_type= must be set manually' )
-        elif status:
-            # try and make sure no data is waiting to be read
-            status = self._send_receive(None)
         self.set_socketTimeout( old_timeout )
         self.set_socketPersistent( old_persist )
 

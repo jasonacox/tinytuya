@@ -962,7 +962,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     Parameters:
         verbose = True or False, print formatted output to stdout [Default: False]
-        scantime = The time to wait to pick up UDP from all devices
+        scantime = The time to wait to pick up UDP from all devices (ignored when discover=False))
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
         forcescan = True, False, or a list of networks to force scan for device IP addresses
@@ -1339,10 +1339,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             ip = addr[0]
             result = b''
             try:
-                if sock is client:
-                    result = tinytuya.unpack_message( data ).payload.decode()
-                else:
-                    result = tinytuya.decrypt_udp( data )
+                result = tinytuya.decrypt_udp( data )
                 result = json.loads(result)
                 log.debug("Received valid UDP packet: %r", result)
             except:
