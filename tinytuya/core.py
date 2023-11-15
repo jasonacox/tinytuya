@@ -251,7 +251,7 @@ class _AESCipher_Base(object):
 
     @classmethod
     def get_encryption_iv( cls, iv ):
-        if not self.CRYPTOLIB_HAS_GCM:
+        if not cls.CRYPTOLIB_HAS_GCM:
             raise NotImplementedError( 'Crypto library does not support GCM' )
         if iv is True:
             if log.isEnabledFor( logging.DEBUG ):
@@ -262,7 +262,7 @@ class _AESCipher_Base(object):
 
     @classmethod
     def get_decryption_iv( cls, iv, data ):
-        if not self.CRYPTOLIB_HAS_GCM:
+        if not cls.CRYPTOLIB_HAS_GCM:
             raise NotImplementedError( 'Crypto library does not support GCM' )
         if iv is True:
             iv = data[:12]
