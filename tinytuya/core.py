@@ -118,7 +118,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 12, 11)
+version_tuple = (1, 13, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
