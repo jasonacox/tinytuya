@@ -27,7 +27,7 @@ jobs:
           python -VV
           python -m site
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install --upgrade pycryptodome requests colorama
+          python -m pip install --upgrade cryptography requests colorama
 
       - name: "Run testcontrib.py on ${{ matrix.python-version }}"
         run: "python -m testcontrib.py"

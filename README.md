@@ -40,7 +40,7 @@ TinyTuya supports python versions 2.7 and 3.x (recommended).
 python -m pip install tinytuya
 ```
 
-Pip will attempt to install `pycryptodome`, `requests` and `colorama` if not already installed.
+Pip will attempt to install `cryptography`, `requests` and `colorama` if not already installed.
 
 ## Tuya Device Preparation
 
@@ -419,7 +419,7 @@ print( json.dumps(r, indent=2) )
 
 ### Encryption Notes
 
-Tuya devices use AES encryption which is not available in the Python standard library. **PyCryptodome** is recommended and installed by default. Other options include **PyCrypto** and **pyaes**.
+Tuya devices use AES encryption which is not available in the Python standard library. **PyCA/cryptography** is recommended and installed by default. Other options include **PyCryptodome** , **PyCrypto** and **pyaes**.
 
 * Deprecation notice for pyaes: The pyaes library works for Tuya Protocol <= 3.4 but will not work for 3.5 devices. This is because pyaes does not support GCM which is required for v3.5 devices.
 

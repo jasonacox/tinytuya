@@ -1,5 +1,12 @@
 # RELEASE NOTES
 
+## v1.13.0 - Crypto Library Update
+
+* PyPI 1.13.0
+* Updates AESCipher() to make it a bit easier to add additional crypto libraries. It also adds pyca/cryptography as the default. By @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/423
+* Fixes issue with tinytuya.find_device() for v3.1 devices and the infinite loop in Contrib/IRRemoteControlDevice.py (Closes #403).
+* Officially removes Python 2.7 support.
+
 ## v1.12.11 - Bug Fix for _get_socket()
 
 * PyPI 1.12.11
