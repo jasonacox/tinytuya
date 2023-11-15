@@ -33,8 +33,6 @@ NOTE: Devices need to be **activated** by Smart Life App.
 
 ## TinyTuya Installation  
 
-TinyTuya supports python versions 2.7 and 3.x (recommended).
-
 ```bash
 # Install TinyTuya
 python -m pip install tinytuya
