@@ -108,6 +108,8 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
             clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
         elif clib == 'pyaes':
             import pyaes  # https://github.com/ricmoo/pyaes
+        else:
+            continue
         CRYPTOLIB = clib
         break
     except ImportError:
@@ -291,7 +293,7 @@ class _AESCipher_pyca(_AESCipher_Base):
             if header:
                 encryptor.authenticate_additional_data(header)
             crypted_text = encryptor.update(raw) + encryptor.finalize()
-            crypted_text = encryptor.initialization_vector + crypted_text + encryptor.tag
+            crypted_text = iv + crypted_text + encryptor.tag
         else:
             if pad: raw = self._pad(raw, 16)
             encryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).encryptor()
