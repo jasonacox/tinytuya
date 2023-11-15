@@ -113,7 +113,7 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
     except ImportError:
         continue
 if CRYPTOLIB is None:
-    raise ModuleNotFoundError('No crypto library found, please install one of: pyca/cryptography, PyCryptodome, or PyCrypto')
+    raise ModuleNotFoundError('No crypto library found, please "pip install" cryptography, pycryptodome, or pyaes')
 
 # Colorama terminal color capability for all platforms
 init()
