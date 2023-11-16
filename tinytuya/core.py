@@ -312,12 +312,12 @@ class _AESCipher_pyca(_AESCipher_Base):
                 raise ValueError("invalid length")
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
-            decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
-            if header:
+            if tag is None:
+                decryptor = Crypto( AES(self.key), Crypto_modes.CTR(iv + b'\x00\x00\x00\x02') ).decryptor()
+            else:
+                decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
+            if header and (tag is not None):
                 decryptor.authenticate_additional_data( header )
-            #if tag is None:
-            #    raw = decryptor.update( enc )
-            #else:
             raw = decryptor.update( enc ) + decryptor.finalize()
         else:
             decryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).decryptor()
