@@ -1,5 +1,12 @@
 # RELEASE NOTES
 
+## v1.13.1 - Cryptography Version
+
+* PyPI 1.13.1
+* Require pyca/cryptography>=3.1 or fallback to PyCryptodome
+* Add `tools/fake-v35-device.py` script to tools
+* Allow pyca/cryptography to GCM decrypt without the tag (makes it match PyCryptodome) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/424
+
 ## v1.13.0 - Crypto Library Update
 
 * PyPI 1.13.0
