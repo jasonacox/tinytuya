@@ -92,10 +92,13 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
     Crypto = AES = CRYPTOLIB = None
     try:
         if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
+            from cryptography import __version__ as Crypto_version
+            if (Crypto_version[:2] in ('0.', '1.', '2.')) or (Crypto_version == '3.0'):
+                # cryptography <= 3.0 requires a backend= parameter
+                continue
             from cryptography.hazmat.primitives.ciphers import Cipher as Crypto
             from cryptography.hazmat.primitives.ciphers import modes as Crypto_modes
             from cryptography.hazmat.primitives.ciphers.algorithms import AES
-            from cryptography import __version__ as Crypto_version
         elif clib == 'PyCryptodomex': # https://pycryptodome.readthedocs.io/en/latest/
             # PyCryptodome is installed as "Cryptodome" when installed by
             #  `apt install python3-pycryptodome` or `pip install pycryptodomex`
@@ -120,7 +123,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 13, 0)
+version_tuple = (1, 13, 1)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -309,12 +312,12 @@ class _AESCipher_pyca(_AESCipher_Base):
                 raise ValueError("invalid length")
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
-            decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
-            if header:
+            if tag is None:
+                decryptor = Crypto( AES(self.key), Crypto_modes.CTR(iv + b'\x00\x00\x00\x02') ).decryptor()
+            else:
+                decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
+            if header and (tag is not None):
                 decryptor.authenticate_additional_data( header )
-            #if tag is None:
-            #    raw = decryptor.update( enc )
-            #else:
             raw = decryptor.update( enc ) + decryptor.finalize()
         else:
             decryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).decryptor()
