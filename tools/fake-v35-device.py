@@ -109,7 +109,7 @@ while True:
             client.sendall( data )
         else:
             print('unhandled command', m.cmd)
-            msg = tinytuya.TuyaMessage(seqno, 16, 0, b'JSON GOES HERE', 0, True, tinytuya.PREFIX_6699_VALUE, True)
+            msg = tinytuya.TuyaMessage(seqno, 16, 0, b'json obj data unvalid', 0, True, tinytuya.PREFIX_6699_VALUE, True)
             seqno += 1
             data = tinytuya.pack_message(msg, hmac_key=tmp_key)
             client.sendall( data )
