@@ -93,7 +93,7 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
     try:
         if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
             from cryptography import __version__ as Crypto_version
-            if (Crypto_version[:2] == '0.') or (Crypto_version[:2] == '1.') or (Crypto_version[:2] == '2.') or (Crypto_version == '3.0'):
+            if (Crypto_version[:2] in ('0.', '1.', '2.')) or (Crypto_version == '3.0'):
                 # cryptography <= 3.0 requires a backend= parameter
                 continue
             from cryptography.hazmat.primitives.ciphers import Cipher as Crypto
