@@ -107,7 +107,7 @@ if __name__ == '__main__':
   # make the colors chase down the string
   d = tinytuya.BulbDevice(DEVICE_ID, DEVICE_IP, DEVICE_KEY, version=DEVICE_VER, persist=False)
   while True:
-    for i in range (6):
-      d102 = xmcosy_string_lights_encode_colors (lights, colors, 5-i)
+    for i in range (len(colors)):
+      d102 = xmcosy_string_lights_encode_colors (lights, colors, len(colors)-1-i)
       d.set_value (102, d102)
       time.sleep(1)
