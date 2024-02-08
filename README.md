@@ -605,6 +605,14 @@ Note: Some 3.3 energy management plugs use the DPS values of the 3.1 plug above.
 | 27|Music|string|n/a||
 | 28|Debugger|string|n/a||
 | 29|Debug|string|n/a||
+| 30|Rhythms|n/a|n/a||
+| 31|Go To Sleep|n/a|n/a||
+| 32|Wake Up|n/a|n/a||
+| 33|Power Off Memory|n/a|n/a||
+| 34|Do not Disturb|n/a|n/a||
+| 41|Remote Control Switch|n/a|n/a||
+| 209|Cycle Timing|n/a|n/a||
+| 210|Vaction Timing|n/a|n/a||
 
 #### Version 3.3 - Automated Curtain Type
 | DP ID        | Function Point | Type        | Range       | Units |
