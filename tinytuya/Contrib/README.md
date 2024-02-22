@@ -171,4 +171,3 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 
 * We welcome new device modules!
 * Follow the template example in [ThermostatDevice.py](ThermostatDevice.py) to add your device.
-* Add your module to the [__init__.py](__init__.py) file.
