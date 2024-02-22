@@ -6,6 +6,5 @@ from .DoorbellDevice import DoorbellDevice
 from .ClimateDevice import ClimateDevice
 from .AtorchTemperatureControllerDevice import AtorchTemperatureControllerDevice
 from .InverterHeatPumpDevice import InverterHeatPumpDevice, TemperatureUnit, InverterHeatPumpMode, InverterHeatPumpFault
-from .PresenceDetectorDevice import PresenceDetectorDevice
 
-DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice", "PresenceDetectorDevice"]
+DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice"]
