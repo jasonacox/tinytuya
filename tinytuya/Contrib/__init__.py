@@ -1,3 +1,7 @@
+#
+# Note: This file has been depricated, please do not add new modules to it.
+# Instead, import new modules with `from tinytuya.Contrib import YourNewModule`
+#
 
 from .ThermostatDevice import ThermostatDevice
 from .IRRemoteControlDevice import IRRemoteControlDevice
