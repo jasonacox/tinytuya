@@ -1,4 +1,4 @@
-from tinytuya.core import Device
+from ..core import Device
 import time
 import json
 
