@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.13.2 - Contrib Updates
+
+* Makes some tweaks to the recently-added Contrib/PresenceDetectorDevice by @mrioan and Deprecates Contrib/__init__.py by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/466
+* And adds a note about QR code scanning with Dark Reader to the README. #463
+
 ## v1.13.1 - Cryptography Version
 
 * PyPI 1.13.1
