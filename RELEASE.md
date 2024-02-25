@@ -4,6 +4,7 @@
 
 * Makes some tweaks to the recently-added Contrib/PresenceDetectorDevice by @mrioan and Deprecates Contrib/__init__.py by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/466
 * And adds a note about QR code scanning with Dark Reader to the README. #463
+* Add option to specify port in XenonDevice class by @unit-404 in https://github.com/jasonacox/tinytuya/pull/468
 
 ## v1.13.1 - Cryptography Version
 
