@@ -864,7 +864,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5 # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
@@ -891,7 +891,7 @@ class XenonDevice(object):
         self.connection_timeout = connection_timeout
         self.retry = True
         self.disabledetect = False  # if True do not detect device22
-        self.port = TCPPORT  # default - do not expect caller to pass in
+        self.port = port  # default - do not expect caller to pass in
         self.socket = None
         self.socketPersistent = False if not persist else True # pylint: disable=R1719
         self.socketNODELAY = True
