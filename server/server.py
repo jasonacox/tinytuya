@@ -50,14 +50,6 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from socketserver import ThreadingMixIn 
 
-# Required module: pycryptodome
-try:
-    import Crypto
-    from Crypto.Cipher import AES  # PyCrypto
-except ImportError:
-    Crypto = AES = None
-    import pyaes  # https://github.com/ricmoo/pyaes
-
 # Terminal color capability for all platforms
 try:
     from colorama import init
@@ -67,7 +59,7 @@ except:
 
 import tinytuya
 
-BUILD = "t9"
+BUILD = "t10"
 
 # Defaults
 APIPORT = 8888
