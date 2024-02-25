@@ -2,8 +2,12 @@
 
 ## v1.13.2 - Contrib Updates
 
-* Makes some tweaks to the recently-added Contrib/PresenceDetectorDevice by @mrioan and Deprecates Contrib/__init__.py by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/466
-* And adds a note about QR code scanning with Dark Reader to the README. #463
+* Add example for XmCosy+ RGBW patio string lights by @bikerglen in https://github.com/jasonacox/tinytuya/pull/445
+* Fix case when the number of colors in the colors list is not exactly six by @bikerglen in https://github.com/jasonacox/tinytuya/pull/446
+* Adding support for Presence Detector Device by @mrioan in https://github.com/jasonacox/tinytuya/pull/451
+* Makes some tweaks to the recently-added Contrib/PresenceDetectorDevice by @mrioan and Deprecates `Contrib/__init__.py` by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/466
+* Add a note about QR code scanning with Dark Reader to the README [#463](https://github.com/jasonacox/tinytuya/issues/463) by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/466
+* Add option to specify port in XenonDevice class by @unit-404 in https://github.com/jasonacox/tinytuya/pull/468
 
 ## v1.13.1 - Cryptography Version
 
