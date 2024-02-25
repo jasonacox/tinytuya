@@ -110,6 +110,18 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### t10 - Remove Import
+
+* Remove unused imports for Crypto.
+
+### t9 - DeviceName Addition
+
+* Use {DeviceName} instead of {DeviceID} alternatively for API commands
+
+### t8 - Mappings
+
+* Mapping for DP IDs in https://github.com/jasonacox/tinytuya/pull/353.
+
 ### t7 - Add Control by Name
 
 * Use {`DeviceName`} in addition to {`DeviceID`} for API commands by @mschlenstedt in https://github.com/jasonacox/tinytuya/pull/352
