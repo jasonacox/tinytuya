@@ -127,103 +127,109 @@ d.turn_off()
 
 ### TinyTuya Module Classes and Functions 
 ```
-Global Functions
-    devices = deviceScan()             # Returns dictionary of devices found on local network
-    scan()                             # Interactive scan of local network
-    wizard()                           # Interactive setup wizard
-    set_debug(toggle, color)           # Activate verbose debugging output
-
 Classes
-    OutletDevice(args...)
-    CoverDevice(args...)
-    BulbDevice(args...)
-      Where args:
-        dev_id (str): Device ID e.g. 01234567891234567890
-        address (str): Device Network IP Address e.g. 10.0.1.99 or "Auto" to auto-find
-        local_key (str): The encryption key
-        dev_type (str): Device type for payload options (see below)
-        connection_timeout = 5 (int): Timeout in seconds
-        version = 3.1 (float): Tuya Protocol (e.g. 3.1, 3.2, 3.3, 3.4, 3.5)
-        persist = False (bool): Keep TCP link open
-        cid = None (str): Optional sub device id
-        node_id = None (str): Alias for cid
-        parent = None (object): Gateway device object this is a child of
-        connection_retry_limit = 5 (int)
-        connection_retry_delay = 5 (int)
+  AESCipher - Cryptography Helpers
+  XenonDevice(args...) - Base Class
+    Device(args...) - Tuya Class for Devices
+      OutletDevice(args...)
+      CoverDevice(args...)
+      BulbDevice(args...)
+        Where args:
+          dev_id (str): Device ID e.g. 01234567891234567890
+          address (str): Device Network IP Address e.g. 10.0.1.99 or "Auto" to auto-find
+          local_key (str): The encryption key
+          dev_type (str): Device type for payload options (see below)
+          connection_timeout = 5 (int): Timeout in seconds
+          version = 3.1 (float): Tuya Protocol (e.g. 3.1, 3.2, 3.3, 3.4, 3.5)
+          persist = False (bool): Keep TCP link open
+          cid = None (str): Optional sub device id
+          node_id = None (str): Alias for cid
+          parent = None (object): Gateway device object this is a child of
+          connection_retry_limit = 5 (int)
+          connection_retry_delay = 5 (int)
+          port = TCPPORT (int): The port to connect to device
 
-    Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
+  Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
+TinyTuya Base Functions
+    devices = deviceScan()                        # Returns dictionary of devices found on local network
+    scan()                                        # Interactive scan of local network
+    wizard()                                      # Interactive setup wizard
+    set_debug(toggle, color)                      # Activate verbose debugging output
+    pack_message(msg, hmac_key)                   # Packs a TuyaMessage(), encrypting or adding a CRC if required 
+    unpack_message(data, hmac_key, header, 
+                    no_retcode)                   # Unpacks a TuyaMessage() 
+    parse_header(data)                            # Unpacks just the header part of a message into a TuyaHeader()
+    find_device(dev_id, address)                  # Scans network for Tuya devices with either ID = dev_id or IP = address
+    device_info(dev_id)                           # Searches DEVICEFILE (usually devices.json) for device with ID
+    assign_dp_mappings(tuyadevices, mappings)     # Adds mappings to all the devices in the tuyadevices list
+    decrypt_udp(msg)                              # Decrypts a UDP network broadcast packet
 
-Functions:
+ Device Functions (All Devices)
+    json = status()                               # returns json payload
+    subdev_query(nowait)                          # query sub-device status (only for gateway devices)
+    set_version(version)                          # 3.1 [default], 3.2, 3.3 or 3.4
+    set_socketPersistent(False/True)              # False [default] or True
+    set_socketNODELAY(False/True)                 # False or True [default]
+    set_socketRetryLimit(integer)                 # retry count limit [default 5]
+    set_socketRetryDelay(integer)                 # retry delay [default 5]
+    set_socketTimeout(timeout)                    # set connection timeout in seconds [default 5]
+    set_dpsUsed(dps_to_request)                   # add data points (DPS) to request
+    add_dps_to_request(index)                     # add data point (DPS) index set to None
+    set_retry(retry=True)                         # retry if response payload is truncated
+    set_status(on, switch=1, nowait)              # Set status of switch to 'on' or 'off' (bool)
+    set_value(index, value, nowait)               # Set int value of any index.
+    set_multiple_values(index_value_dict, nowait) # Set multiple values with a single request
+    heartbeat(nowait)                             # Send heartbeat to device
+    updatedps(index=[1], nowait)                  # Send updatedps command to device
+    turn_on(switch=1, nowait)                     # Turn on device / switch #
+    turn_off(switch=1, nowait)                    # Turn off
+    set_timer(num_secs, nowait)                   # Set timer for num_secs
+    set_sendWait(num_secs)                        # Time to wait after sending commands before pulling response
+    detect_available_dps()                        # Return list of DPS available from device
+    generate_payload(command, data,...            # Generate TuyaMessage payload for command with data
+    send(payload)                                 # Send payload to device (do not wait for response)
+    receive()                                     # Receive payload from device
 
-  Configuration Settings: 
+OutletDevice Additional Functions
+    set_dimmer(percentage):
 
-    set_version(version)               # Set device version 3.1 [default] or 3.3 (all new devices)
-    set_socketPersistent(False/True)   # Keep connect open with device: False [default] or True
-    set_socketNODELAY(False/True)      # Add cooldown period for slow Tuya devices: False or True [default]
-    set_socketRetryLimit(integer)      # Set retry count limit [default 5]
-    set_socketTimeout(s)               # Set connection timeout in seconds [default 5]
-    set_dpsUsed(dpsUsed)               # Set data points (DPs) to expect (rarely needed)
-    set_retry(retry=True)              # Force retry if response payload is truncated
-    set_sendWait(num_secs)             # Seconds to wait after sending for a response
-    set_bulb_type(type):               # For BulbDevice, set type to A, B or C
+BulbDevice Additional Functions
+    set_colour(r, g, b, nowait):
+    set_hsv(h, s, v, nowait):
+    set_white(brightness, colourtemp, nowait):
+    set_white_percentage(brightness=100, colourtemp=0, nowait):
+    set_brightness(brightness, nowait):
+    set_brightness_percentage(brightness=100, nowait):
+    set_colourtemp(colourtemp, nowait):
+    set_colourtemp_percentage(colourtemp=100, nowait):
+    set_scene(scene, nowait):                     # 1=nature, 3=rave, 4=rainbow
+    set_mode(mode='white', nowait):               # white, colour, scene, music
+    result = brightness():
+    result = colourtemp():
+    (r, g, b) = colour_rgb():
+    (h,s,v) = colour_hsv()
+    result = state():
 
-  Device Commands:
+CoverDevice Additional Functions
+    open_cover(switch=1):
+    close_cover(switch=1):
+    stop_cover(switch=1):
 
-    status()                           # Fetch status of device (json payload)
-    subdev_query(nowait)               # query sub-device list and online status (only for gateway devices)
-    detect_available_dps()             # Return list of DPS available from device
-    set_status(on, switch=1, nowait)   # Control status of the device to 'on' or 'off' (bool)
-                                       # nowait (default False) True to send without waiting for response
-    set_value(index, value, nowait)    # Send and set value of any DPS/index on device.
-    set_multiple_values(index_value_dict, nowait)
-                                       # Set multiple values with a single request
-				       # Note: Some devices do not like this!
-    heartbeat(nowait)                  # Send heartbeat to device
-    updatedps(index=[1], nowait)       # Send updatedps command to device to refresh DPS values
-    turn_on(switch=1, nowait)          # Turn on device / switch #
-    turn_off(switch=1, nowait)         # Turn off device
-    set_timer(num_secs, nowait)        # Set timer for num_secs on devices (if supported)
-    generate_payload(command, data)    # Generate TuyaMessage payload for command with data
-    send(payload)                      # Send payload to device (do not wait for response)
-    receive()                          # Receive payload from device
+Cloud Functions
+    setregion(apiRegion)
+    cloudrequest(url, action=[POST if post else GET], post={}, query={})
+    getdevices(verbose=False)
+    getstatus(deviceid)
+    getfunctions(deviceid)
+    getproperties(deviceid)
+    getdps(deviceid)
+    sendcommand(deviceid, commands [, uri])
+    getconnectstatus(deviceid)
+    getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
+      -> when start or end are negative, they are the number of days before "right now"
+          i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
 
-    OutletDevice:
-        set_dimmer(percentage):
-        
-    CoverDevice:
-        open_cover(switch=1):  
-        close_cover(switch=1):
-        stop_cover(switch=1):
-
-    BulbDevice
-        set_colour(r, g, b, nowait):
-        set_hsv(h, s, v, nowait):
-        set_white(brightness, colourtemp, nowait):
-        set_white_percentage(brightness=100, colourtemp=0, nowait):
-        set_brightness(brightness, nowait):
-        set_brightness_percentage(brightness=100, nowait):
-        set_colourtemp(colourtemp, nowait):
-        set_colourtemp_percentage(colourtemp=100, nowait):
-        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white', nowait):       # white, colour, scene, music
-        result = brightness():
-        result = colourtemp():
-        (r, g, b) = colour_rgb():
-        (h,s,v) = colour_hsv():
-        result = state():
-    
-    Cloud
-        setregion(apiRegion)
-	cloudrequest(url, action=[POST if post else GET], post={}, query={})
-        getdevices(verbose=False)
-        getstatus(deviceid)
-        getfunctions(deviceid)
-        getproperties(deviceid)
-        getdps(deviceid)
-        sendcommand(deviceid, commands [, uri])
-	getconnectstatus(deviceid)
-	getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=0, max_fetches=50, start_row_key=None, params={})
 ```
 
 ### TinyTuya Error Codes
