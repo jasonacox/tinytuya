@@ -60,7 +60,7 @@ python -m tinytuya scan
 
 TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to generate a JSON list (devices.json) of all your registered devices, including secret *Local_Key* and *Name* of your devices. Follow the steps below:
 
-1. PAIR - Download the *Smart Life App* or *Tuya Smart App*, available for [iPhone](https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8) or [Android](https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en). Set up your SmartLife account and pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).
+1. PAIR - Download the *Smart Life App* or *Tuya Smart App*, available for [iPhone](https://itunes.apple.com/us/app/smart-life-smart-living/id1115101477?mt=8) or [Android](https://play.google.com/store/apps/details?id=com.tuya.smartlife&hl=en). Set up your SmartLife account and pair all of your Tuya devices (this is important as you cannot access a device that has not been paired).  Do not use a 'guest' account, otherwise it will get deleted without confirmation at step 3.
 
 2. SCAN (Optional) - Run the TinyTuya scan to get a list of Tuya devices on your network. It will show device *Address*, *Device ID* and *Version* number (3.x):
     ```bash
