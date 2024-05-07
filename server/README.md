@@ -110,6 +110,11 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### t11 - Minimize Container
+
+* Reduce size of Docker container by removing rust build and using python:3.12-bookworm.
+* Add signal handler for cleaner shutdown handling for `docker stop`.
+
 ### t10 - Remove Import
 
 * Remove unused imports for Crypto.

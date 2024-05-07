@@ -44,6 +44,7 @@ except ImportError as impErr:
     print("WARN: Check dependencies. See https://github.com/jasonacox/tinytuya/issues/377")
     print("WARN: Error: {}.".format(impErr.args[0]))
 import resource
+import signal
 import sys
 import os
 import urllib.parse
@@ -59,7 +60,7 @@ except:
 
 import tinytuya
 
-BUILD = "t10"
+BUILD = "t11"
 
 # Defaults
 APIPORT = 8888
@@ -95,6 +96,12 @@ if DEBUGMODE:
     log.setLevel(logging.DEBUG)
     log.debug("TinyTuya Server [%s]", BUILD)
     tinytuya.set_debug(True)
+
+# Signal handler - Exit on SIGTERM
+def sig_term_handle(signum, frame):
+    raise SystemExit
+
+signal.signal(signal.SIGTERM, sig_term_handle)
 
 # Static Assets
 web_root = os.path.join(os.path.dirname(__file__), "web")

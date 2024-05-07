@@ -1,8 +1,8 @@
-FROM python:3.10
+FROM python:3.12-bookworm
 WORKDIR /app
-# Install Rust for cryptography (remove pycryptodome)
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PYTHONUNBUFFERED 1
+ENV CRYPTOGRAPHY_DONT_BUILD_RUST=1
+RUN pip3 install cryptography pycryptodome --no-build-isolation
 RUN pip3 install --no-cache-dir tinytuya
 COPY . .
 CMD ["python3", "server.py"]
