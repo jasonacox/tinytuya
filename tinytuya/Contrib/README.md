@@ -26,12 +26,28 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 * Example: [examples/IRRemoteControlDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/IRRemoteControlDevice-example.py)
 
     ```python
-    # Example usage of community contributed device modules
+    # Example 1 -usage of community contributed device modules
     from tinytuya import Contrib
 
-    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc' )
     button = ir.receive_button(timeout=15)
     ir.send_button(button)
+    ```
+
+    ```python
+    # Example 2 - Aubess WiFi IR Controller S16 for Sony TV - Issue #492
+    from tinytuya import Contrib
+
+    # Pull the Device Log from Tuya cloud while using Tuya Smart App and pressing PWR button on controller:
+    # SONY Tuya Device Debug Log: IR send{"control":"send_ir","head":"xxxx","key1":"003xxx)","type":0,"delay":300}
+    head = 'xxx'
+    key1 = '003xxx'
+
+    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc', persist=True )
+    ir.send_key( head, key1 )
+
+    # NOTE: If it doesn't work, try removing a leading zero from key1. Depending on what DPS set the device 
+    # uses the key1 from the debug logs could have an extra 0.
     ```
 
 ### SocketDevice
