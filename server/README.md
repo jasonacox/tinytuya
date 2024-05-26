@@ -54,16 +54,16 @@ Starting threads...
 
     ```bash
     docker run \
-    -d \
-    -p 8888:8888 \
-    -p 6666:6666/udp \
-    -p 6667:6667/udp \
-    -e DEBUG='no' \
-    --mount type=bind,source="$(pwd)"/devices.json,target=/app/devices.json \
-    --mount type=bind,source="$(pwd)"/tinytuya.json,target=/app/tinytuya.json \
-    --name tinytuya \
-    --restart unless-stopped \
-    jasonacox/tinytuya
+        -d \
+        -p 8888:8888 \
+        -p 6666:6666/udp \
+        -p 6667:6667/udp \
+        -e DEBUG='no' \
+        -v $PWD/devices.json:/app/devices.json \
+        -v $PWD/tinytuya.json:/app/tinytuya.json \
+        --name tinytuya \
+        --restart unless-stopped \
+        jasonacox/tinytuya
     ```
 
 2. Test the Server
@@ -109,6 +109,11 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 ![image](https://user-images.githubusercontent.com/836718/227736057-e5392c13-554f-457e-9082-43c4d41a98ed.png)
 
 ## Release Notes
+
+### t11 - Minimize Container
+
+* Reduce size of Docker container by removing rust build and using python:3.12-bookworm.
+* Add signal handler for cleaner shutdown handling for `docker stop`.
 
 ### t10 - Remove Import
 

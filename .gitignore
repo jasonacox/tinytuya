@@ -126,3 +126,6 @@ mappings.json
 # backup files
 *.bak
 *~
+
+# test scripts
+server/r
