@@ -24,7 +24,7 @@ try:
 except:
     HAVE_ARGCOMPLETE = False
 
-from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, set_debug
+from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -58,15 +58,20 @@ for sp in cmd_list:
         if sp != 'scan':
             subparsers[sp].add_argument( '-no-poll', '-no', help='Answer "no" to "Poll?" (overrides -yes)', action='store_true' )
 
-    help = ('JSON file to load/save devices from/to [Default: %s]' if sp == 'wizard' else 'JSON file to load devices from [Default: %s]') % DEVICEFILE
-    subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
+    if sp == 'wizard':
+        help = 'JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE
+        subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
+        subparsers[sp].add_argument( '-raw-response-file', help='JSON file to save the raw server response to [Default: %s]' % RAWFILE, default=RAWFILE, metavar='FILE' )
+    else:
+        help = 'JSON file to load devices from [Default: %s]' % DEVICEFILE
+        subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
 
     if sp == 'json':
         # Throw error if file does not exist
-        subparsers[sp].add_argument( '-snapshot-file', help='JSON snapshot file to load devices from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE', type=argparse.FileType('r') )
+        subparsers[sp].add_argument( '-snapshot-file', help='JSON file to load snapshot from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE', type=argparse.FileType('r') )
     else:
         # May not exist yet, will be created
-        subparsers[sp].add_argument( '-snapshot-file', help='JSON snapshot file to load devices from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE' )
+        subparsers[sp].add_argument( '-snapshot-file', help='JSON file to load/save snapshot from/to [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE' )
 
 # Looks neater in a group
 cred_group = subparsers['wizard'].add_argument_group( 'Cloud API Credentials', 'If no option is set then the Wizard will prompt')
@@ -84,17 +89,27 @@ if HAVE_ARGCOMPLETE:
 args = parser.parse_args()
 
 if args.debug:
-    print(args)
+    print('Parsed args:', args)
     set_debug(True)
 
 if args.command:
     if args.debug2 and not args.debug:
-        print(args)
+        print('Parsed args:', args)
         set_debug(True)
 
+    if args.command == 'wizard' and args.raw_response_file:
+        wizard.RAWFILE = args.raw_response_file
+
     if args.device_file:
-        scanner.DEVICEFILE = args.device_file
-        wizard.DEVICEFILE = args.device_file
+        if type(args.device_file) == str:
+            scanner.DEVICEFILE = args.device_file
+            wizard.DEVICEFILE = args.device_file
+        else:
+            fname = args.device_file.name
+            args.device_file.close()
+            args.device_file = fname
+            scanner.DEVICEFILE = fname
+            wizard.DEVICEFILE = fname
 
     if args.snapshot_file:
         if args.command == 'json':
@@ -116,7 +131,9 @@ elif args.command == 'json':
 elif args.command == 'wizard':
     if args.credentials_file:
         wizard.CONFIGFILE = args.credentials_file
-    creds = { 'file': args.credentials_file, 'apiKey': args.key, 'apiSecret': args.secret, 'apiRegion': args.region, 'apiDeviceID': ','.join(sum(args.device, [])) }
+    creds = { 'file': args.credentials_file, 'apiKey': args.key, 'apiSecret': args.secret, 'apiRegion': args.region, 'apiDeviceID': None }
+    if args.device:
+        creds['apiDeviceID'] = ','.join(sum(args.device, []))
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
 else:
     # no command selected?
