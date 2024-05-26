@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.13.3 - PIPX Support
+
+* Add support for `pipx install tinytuya` as raised by @felipecrs in https://github.com/jasonacox/tinytuya/issues/500 allowing for easier CLI use.
+* Possible breaking change: Running `tinytuya` by itself will now produce a "Usage" page instead of running a scan.  Use `tinytuya scan` or `python -m tinytuya scan`.
+
 ## v1.13.2 - Contrib Updates
 
 * Add example for XmCosy+ RGBW patio string lights by @bikerglen in https://github.com/jasonacox/tinytuya/pull/445
