@@ -89,7 +89,7 @@ except NameError:
     pass
 
 for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
-    Crypto = AES = CRYPTOLIB = None
+    Crypto = Crypto_modes = AES = CRYPTOLIB = None
     try:
         if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
             from cryptography import __version__ as Crypto_version
@@ -496,6 +496,7 @@ def pack_message(msg, hmac_key=None):
 
 def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
     """Unpack bytes into a TuyaMessage."""
+    crc_good = False
     if header is None:
         header = parse_header(data)
 
