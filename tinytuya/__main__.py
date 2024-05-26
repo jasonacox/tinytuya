@@ -114,4 +114,8 @@ else:
     # no command selected?
     wizard.wizard()
 
+# give entry_points/console_scripts something to point at
+def dummy():
+    pass
+
 # End
