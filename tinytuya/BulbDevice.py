@@ -182,7 +182,7 @@ class BulbDevice(Device):
             r = int(hexvalue[0:2], 16)
             g = int(hexvalue[2:4], 16)
             b = int(hexvalue[4:6], 16)
-        if bulb == "B":
+        elif bulb == "B":
             # hexvalue is in hsv
             h = float(int(hexvalue[0:4], 16) / 360.0)
             s = float(int(hexvalue[4:8], 16) / 1000.0)
@@ -191,6 +191,9 @@ class BulbDevice(Device):
             r = int(rgb[0] * 255)
             g = int(rgb[1] * 255)
             b = int(rgb[2] * 255)
+        else:
+            # should we raise an error instead?
+            r = g = b = 0
 
         return (r, g, b)
 
