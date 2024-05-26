@@ -1718,11 +1718,13 @@ def save_snapshotfile(fname, data, term=None):
         outfile.write(output)
 
 # Scan Devices in snapshot.json
-def snapshot(color=True, scantime=None, forcescan=False, discover=True, assume_yes=False, skip_poll=None):
+def snapshot(color=True, assume_yes=False, skip_poll=None):
     """Uses snapshot.json to scan devices
 
     Parameters:
         color = True or False, print output in color [Default: True]
+        assume_yes = True or False, auto-answer 'yes' to "Poll local devices?" (ignored when skip_poll is set)
+        skip_poll = True or False, auto-answer 'no' to "Poll local devices?" (overrides assume_yes)
     """
     # Terminal formatting
     termcolors = tinytuya.termcolor(color)
@@ -1769,7 +1771,7 @@ def snapshot(color=True, scantime=None, forcescan=False, discover=True, assume_y
     if answer.lower().find('n') < 0:
         print("")
         print("%sPolling %s local devices from last snapshot..." % (term.normal, len(devicesx)))
-        result = devices(verbose=False, scantime=scantime, color=color, poll=True, byID=True, discover=False, snapshot=by_ip, forcescan=forcescan)
+        result = devices(verbose=False, color=color, poll=True, byID=True, discover=False, snapshot=by_ip)
 
         for i in devicesx:
             gwId = _get_gwid( i )

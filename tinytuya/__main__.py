@@ -26,30 +26,40 @@ except:
 
 from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, set_debug
 
+prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
-parser = argparse.ArgumentParser( prog='python -m tinytuya', description=description )
+parser = argparse.ArgumentParser( prog=prog, description=description )
 
 # Options for all functions.
 # Add both here and in subparsers (with alternate `dest=`) if you want to allow it to be positioned anywhere
 parser.add_argument( '-debug', '-d', help='Enable debug messages', action='store_true' )
 
-subparser = parser.add_subparsers( dest='command' )
+subparser = parser.add_subparsers( dest='command', title='commands (run <command> -h to see usage information)' )
 subparsers = {}
-cmd_list = ('wizard', 'scan', 'devices', 'snapshot', 'json')
+cmd_list = {
+    'wizard': 'Launch Setup Wizard to get Device Local Keys',
+    'scan': 'Scan local network for Tuya devices',
+    'devices': 'Scan all devices listed in device-file',
+    'snapshot': 'Scan devices listed in snapshot-file',
+    'json': 'Scan devices listed in snapshot-file and display the result as JSON'
+}
 for sp in cmd_list:
-    subparsers[sp] = subparser.add_parser(sp)
+    subparsers[sp] = subparser.add_parser(sp, help=cmd_list[sp])
     subparsers[sp].add_argument( '-debug', '-d', help='Enable debug messages', action='store_true', dest='debug2' )
 
     if sp != 'json':
-        subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
+        if sp != 'snapshot':
+            subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
+            subparsers[sp].add_argument( '-force', '-f', metavar='0.0.0.0/24', help='Force network scan of device IP addresses. Auto-detects net/mask if none provided', action='append', nargs='*' )
+            subparsers[sp].add_argument( '-no-broadcasts', help='Ignore broadcast packets when force scanning', action='store_true' )
+
         subparsers[sp].add_argument( '-nocolor', help='Disable color text output', action='store_true' )
         subparsers[sp].add_argument( '-yes', '-y', help='Answer "yes" to all questions', action='store_true' )
         if sp != 'scan':
             subparsers[sp].add_argument( '-no-poll', '-no', help='Answer "no" to "Poll?" (overrides -yes)', action='store_true' )
-        subparsers[sp].add_argument( '-force', '-f', metavar='0.0.0.0/24', help='Force network scan of device IP addresses. Auto-detects net/mask if none provided', action='append', nargs='*' )
-        subparsers[sp].add_argument( '-no-broadcasts', help='Ignore broadcast packets when force scanning', action='store_true' )
 
-    subparsers[sp].add_argument( '-device-file', help='JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE, default=DEVICEFILE, metavar='FILE' )
+    help = ('JSON file to load/save devices from/to [Default: %s]' if sp == 'wizard' else 'JSON file to load devices from [Default: %s]') % DEVICEFILE
+    subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
 
     if sp == 'json':
         # Throw error if file does not exist
@@ -98,7 +108,7 @@ if args.command:
 if args.command == 'scan':
     scanner.scan( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes )
 elif args.command == 'snapshot':
-    scanner.snapshot( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll )
+    scanner.snapshot( color=(not args.nocolor), assume_yes=args.yes, skip_poll=args.no_poll )
 elif args.command == 'devices':
     scanner.alldevices( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll )
 elif args.command == 'json':
@@ -110,7 +120,8 @@ elif args.command == 'wizard':
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
 else:
     # no command selected?
-    wizard.wizard()
+    #wizard.wizard()
+    parser.print_help()
 
 # give entry_points/console_scripts something to point at
 def dummy():
