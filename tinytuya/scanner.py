@@ -1079,6 +1079,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             )
 
     #debug_ips = ['172.20.10.144', '172.20.10.91', '172.20.10.51', '172.20.10.136']
+    scan_ips = None
     debug_ips = []
     networks = []
     scanned_devices = {}
