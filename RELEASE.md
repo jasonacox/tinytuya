@@ -1,5 +1,12 @@
 # RELEASE NOTES
 
+## v1.14.0 - Command Line Updates
+
+* PyPI 1.14.0 rewrite of main to use argparse and add additional options by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/503
+* Add support for `pipx install tinytuya` as raised by @felipecrs in https://github.com/jasonacox/tinytuya/issues/500 allowing for easier CLI use.
+* Note possible breaking change: Running `tinytuya` by itself will now produce a "Usage" page instead of running a scan.  Use `tinytuya scan` or `python -m tinytuya scan`.
+* Updated docs to explain timeout as raised by @GamerPeggun in https://github.com/jasonacox/tinytuya/issues/501
+
 ## v1.13.2 - Contrib Updates
 
 * Add example for XmCosy+ RGBW patio string lights by @bikerglen in https://github.com/jasonacox/tinytuya/pull/445

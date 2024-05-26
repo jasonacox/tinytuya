@@ -136,11 +136,10 @@ elif args.command == 'wizard':
         creds['apiDeviceID'] = ','.join(sum(args.device, []))
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
 else:
-    # no command selected?
-    #wizard.wizard()
+    # No command selected - show help
     parser.print_help()
 
-# give entry_points/console_scripts something to point at
+# Entry_points/console_scripts endpoints require a function to be called
 def dummy():
     pass
 
