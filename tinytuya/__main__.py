@@ -73,13 +73,13 @@ if HAVE_ARGCOMPLETE:
 
 args = parser.parse_args()
 
-print(args)
-
 if args.debug:
+    print(args)
     set_debug(True)
 
 if args.command:
     if args.debug2 and not args.debug:
+        print(args)
         set_debug(True)
 
     if args.device_file:
@@ -94,8 +94,6 @@ if args.command:
         else:
             scanner.SNAPSHOTFILE = args.snapshot_file
             wizard.SNAPSHOTFILE = args.snapshot_file
-
-#dsfsadgfadsgdfg()
 
 if args.command == 'scan':
     scanner.scan( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes )

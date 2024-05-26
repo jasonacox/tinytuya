@@ -1103,6 +1103,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     log.debug("Listening for Tuya devices on UDP ports %d, %d and %d", UDPPORT, UDPPORTS, UDPPORTAPP)
     start_time = time.time()
     timeout_time = time.time() + 5
+    scan_ips = None
     current_ip = None
     need_sleep = 0.1
     user_break_count = 0

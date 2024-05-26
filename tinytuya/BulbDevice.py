@@ -210,11 +210,14 @@ class BulbDevice(Device):
             h = int(hexvalue[7:10], 16) / 360.0
             s = int(hexvalue[10:12], 16) / 255.0
             v = int(hexvalue[12:14], 16) / 255.0
-        if bulb == "B":
+        elif bulb == "B":
             # hexvalue is in hsv
             h = int(hexvalue[0:4], 16) / 360.0
             s = int(hexvalue[4:8], 16) / 1000.0
             v = int(hexvalue[8:12], 16) / 1000.0
+        else:
+            # should we raise an error instead?
+            h = s = v = 0
 
         return (h, s, v)
 
