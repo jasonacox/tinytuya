@@ -1,5 +1,7 @@
-# TinyTuya Module
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# PYTHON_ARGCOMPLETE_OK
+# TinyTuya Module
 """
  Python module to interface with Tuya WiFi smart devices
 
@@ -15,96 +17,101 @@
 
 # Modules
 import sys
-import tinytuya
-from . import wizard
-from . import scanner
+import argparse
+try:
+    import argcomplete
+    HAVE_ARGCOMPLETE = True
+except:
+    HAVE_ARGCOMPLETE = False
 
-retries = None
-state = 0
-color = True
-force = False
-force_list = []
-last_force = False
-broadcast_listen = True
-assume_yes = False
+from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, set_debug
 
-for i in sys.argv:
-    if i==sys.argv[0]:
-        continue
-    this_force = False
-    if i.lower() == "wizard":
-        state = 1
-    elif i.lower() == "scan":
-        state = 0
-    elif i.lower() == "-nocolor":
-        color = False
-    elif i.lower() == "-force" or i.lower() == "-f":
-        force = True
-        this_force = True
-    elif i.lower() == "-no-broadcasts":
-        broadcast_listen = False
-    elif i.lower() == "snapshot":
-        state = 2
-    elif i.lower() == "devices":
-        state = 3
-    elif i.lower() == "json":
-        state = 4
-    elif i.lower() == "-yes" or i.lower() == "-y":
-        assume_yes = True
-    elif i.lower() == "-debug" or i.lower() == "-d":
-        tinytuya.set_debug(True)
-    elif last_force and len(i) > 6:
-        this_force = True
-        force_list.append( i )
+description = 'TinyTuya [%s]' % (version,)
+parser = argparse.ArgumentParser( prog='python -m tinytuya', description=description )
+
+# Options for all functions.
+# Add both here and in subparsers (with alternate `dest=`) if you want to allow it to be positioned anywhere
+parser.add_argument( '-debug', '-d', help='Enable debug messages', action='store_true' )
+
+subparser = parser.add_subparsers( dest='command' )
+subparsers = {}
+cmd_list = ('wizard', 'scan', 'devices', 'snapshot', 'json')
+for sp in cmd_list:
+    subparsers[sp] = subparser.add_parser(sp)
+    subparsers[sp].add_argument( '-debug', '-d', help='Enable debug messages', action='store_true', dest='debug2' )
+
+    if sp != 'json':
+        subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
+        subparsers[sp].add_argument( '-nocolor', help='Disable color text output', action='store_true' )
+        subparsers[sp].add_argument( '-yes', '-y', help='Answer "yes" to all questions', action='store_true' )
+        if sp != 'scan':
+            subparsers[sp].add_argument( '-no-poll', '-no', help='Answer "no" to "Poll?" (overrides -yes)', action='store_true' )
+        subparsers[sp].add_argument( '-force', '-f', metavar='0.0.0.0/24', help='Force network scan of device IP addresses. Auto-detects net/mask if none provided', action='append', nargs='*' )
+        subparsers[sp].add_argument( '-no-broadcasts', help='Ignore broadcast packets when force scanning', action='store_true' )
+
+    subparsers[sp].add_argument( '-device-file', help='JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE, default=DEVICEFILE, metavar='FILE' )
+
+    if sp == 'json':
+        # Throw error if file does not exist
+        subparsers[sp].add_argument( '-snapshot-file', help='JSON snapshot file to load devices from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE', type=argparse.FileType('r') )
     else:
-        try:
-            retries = int(i)
-        except:
-            state = 10
+        # May not exist yet, will be created
+        subparsers[sp].add_argument( '-snapshot-file', help='JSON snapshot file to load devices from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE' )
 
-    last_force = this_force
+# Looks neater in a group
+cred_group = subparsers['wizard'].add_argument_group( 'Cloud API Credentials', 'If no option is set then the Wizard will prompt')
+cred_group.add_argument( '-credentials-file', help='JSON file to load/save Cloud credentials from/to [Default: %s]' % CONFIGFILE, metavar='FILE' )
+cred_group.add_argument( '-key', help='Cloud API Key to use' )
+cred_group.add_argument( '-secret', help='Cloud API Secret to use' )
+cred_group.add_argument( '-region', help='Cloud API Region to use', choices=('cn', 'eu', 'eu-w', 'in', 'us', 'us-e') )
+cred_group.add_argument( '-device', help='One or more Device ID(s) to use', action='append', nargs='+' )
 
-if force and len(force_list) > 0:
-    force = force_list
+subparsers['wizard'].add_argument( '-dry-run', help='Do not actually connect to the Cloud', action='store_true' )
 
-# State 0 = Run Network Scan
-if state == 0:
-    scanner.scan(scantime=retries, color=color, forcescan=force, discover=broadcast_listen, assume_yes=assume_yes)
+if HAVE_ARGCOMPLETE:
+    argcomplete.autocomplete( parser )
 
-# State 1 = Run Setup Wizard
-if state == 1:
-    wizard.wizard(color=color, retries=retries, forcescan=force, quicklist=assume_yes)
+args = parser.parse_args()
 
-# State 2 = Snapshot Display and Scan
-if state == 2:
-    scanner.snapshot(color=color)
+print(args)
 
-# State 3 = Scan All Devices
-if state == 3:
-    scanner.alldevices(color=color, scantime=retries)
+if args.debug:
+    set_debug(True)
 
-# State 4 = Scan All Devices
-if state == 4:
+if args.command:
+    if args.debug2 and not args.debug:
+        set_debug(True)
+
+    if args.device_file:
+        scanner.DEVICEFILE = args.device_file
+        wizard.DEVICEFILE = args.device_file
+
+    if args.snapshot_file:
+        if args.command == 'json':
+            scanner.SNAPSHOTFILE = args.snapshot_file.name
+            args.snapshot_file.close()
+            args.snapshot_file = scanner.SNAPSHOTFILE
+        else:
+            scanner.SNAPSHOTFILE = args.snapshot_file
+            wizard.SNAPSHOTFILE = args.snapshot_file
+
+#dsfsadgfadsgdfg()
+
+if args.command == 'scan':
+    scanner.scan( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes )
+elif args.command == 'snapshot':
+    scanner.snapshot( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll )
+elif args.command == 'devices':
+    scanner.alldevices( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll )
+elif args.command == 'json':
     scanner.snapshotjson()
-
-# State 10 = Show Usage
-if state == 10:
-    print("TinyTuya [%s]\n" % (tinytuya.version))
-    print("Usage:\n")
-    print("    python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]")
-    print("")
-    print("      wizard         Launch Setup Wizard to get Tuya Local KEYs.")
-    print("      scan           Scan local network for Tuya devices.")
-    print("      devices        Scan all devices listed in devices.json file.")
-    print("      snapshot       Scan devices listed in snapshot.json file.")
-    print("      json           Scan devices listed in snapshot.json file [JSON].")
-    print("      <max_time>     Maximum time to find Tuya devices [Default=%s]" % tinytuya.SCANTIME)
-    print("      -nocolor       Disable color text output.")
-    print("      -force         Force network scan of device IP addresses based on format:")
-    print("                     [net1/mask1 net2/mask2 ...] Auto-detects if none provided.")
-    print("      -no-broadcasts Ignore broadcast packets when force scanning.")
-    print("      -debug         Activate debug mode.")
-    print("      -h             Show usage.")
-    print("")
+elif args.command == 'wizard':
+    if args.credentials_file:
+        wizard.CONFIGFILE = args.credentials_file
+    creds = { 'file': args.credentials_file, 'apiKey': args.key, 'apiSecret': args.secret, 'apiRegion': args.region, 'apiDeviceID': ','.join(sum(args.device, [])) }
+    wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
+else:
+    # no command selected?
+    wizard.wizard()
 
 # End

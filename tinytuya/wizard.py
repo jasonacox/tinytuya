@@ -48,7 +48,7 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 
-def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=False):
+def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=False, discover=True, credentials=None, skip_poll=None):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
@@ -72,19 +72,40 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
         The TuyAPI/CLI wizard inspired and informed this python version.
     """
 
+    config_file = CONFIGFILE
+    config_keys = ('apiKey', 'apiSecret', 'apiRegion', 'apiDeviceID')
     config = {}
     config['apiKey'] = ''
     config['apiSecret'] = ''
     config['apiRegion'] = ''
     config['apiDeviceID'] = ''
     needconfigs = True
+
+    if credentials and 'file' in credentials and credentials['file']:
+        needconfigs = False
+        config_file = credentials['file']
+
     try:
         # Load defaults
-        with open(CONFIGFILE) as f:
-            config = json.load(f)
+        with open(config_file) as f:
+            file_config = json.load(f)
+        for k in config_keys:
+            if file_config and k in file_config and file_config[k]:
+                config[k] = file_config[k]
     except:
         # First Time Setup
         pass
+
+    if credentials:
+        for k in config_keys:
+            if k in credentials and credentials[k]:
+                config[k] = credentials[k]
+                needconfigs = False
+
+    if not needconfigs:
+        for k in config_keys:
+            if not config[k]:
+                needconfigs = True
 
     try:
         # Load the old device list, if available
@@ -98,7 +119,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
     print('')
 
-    if (config['apiKey'] != '' and config['apiSecret'] != '' and
+    if (needconfigs and config['apiKey'] != '' and config['apiSecret'] != '' and
             config['apiRegion'] != ''):
         needconfigs = False
         apiDeviceID = '<None>' if ('apiDeviceID' not in config or not config['apiDeviceID']) else config['apiDeviceID']
@@ -107,12 +128,12 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
               (config['apiKey'], config['apiSecret'], apiDeviceID,
                config['apiRegion']))
         print('')
-        if not quicklist:
+        if not assume_yes:
             answer = input(subbold + '    Use existing credentials ' + normal + '(Y/n): ')
             if answer[0:1].lower() == 'n':
                 needconfigs = True
 
-    if needconfigs:
+    if needconfigs and (not (nocloud and assume_yes)):
         # Ask user for config settings
         print('')
         config['apiKey'] = input(subbold + "    Enter " + bold + "API Key" + subbold +
@@ -134,9 +155,9 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
                                     " (Options: cn, us, us-e, eu, eu-w, or in): " + normal)
         # Write Config
         json_object = json.dumps(config, indent=4)
-        with open(CONFIGFILE, "w") as outfile:
+        with open(config_file, "w") as outfile:
             outfile.write(json_object)
-        print(bold + "\n>> Configuration Data Saved to " + CONFIGFILE)
+        print(bold + "\n>> Configuration Data Saved to " + config_file)
         print(dim + json_object)
 
     if nocloud:
@@ -164,7 +185,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
             return
 
         # Fetch the DP name mappings for all devices
-        if quicklist:
+        if assume_yes:
             answer = 'y'
         else:
             answer = input(subbold + '\nDownload DP Name mappings? ' + normal + '(Y/n): ')
@@ -246,11 +267,14 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, quicklist=F
             print('\n\n' + bold + 'Unable to save raw file' + dim )
 
     # Find out if we should poll all devices
-    if quicklist:
+    if skip_poll:
         answer = 'n'
+    elif assume_yes:
+        answer = 'y'
     else:
         answer = input(subbold + '\nPoll local devices? ' + normal + '(Y/n): ')
     if answer.lower().find('n') < 0:
+        tinytuya.scanner.SNAPSHOTFILE = SNAPSHOTFILE
         result = tinytuya.scanner.poll_and_display( tuyadevices, color=color, scantime=retries, snapshot=True, forcescan=forcescan )
         iplist = {}
         found = 0
