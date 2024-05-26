@@ -192,8 +192,8 @@ class BulbDevice(Device):
             g = int(rgb[1] * 255)
             b = int(rgb[2] * 255)
         else:
-            # should we raise an error instead?
-            r = g = b = 0
+            # Unsupported bulb type
+            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine RGB values.")
 
         return (r, g, b)
 
@@ -216,9 +216,9 @@ class BulbDevice(Device):
             s = int(hexvalue[4:8], 16) / 1000.0
             v = int(hexvalue[8:12], 16) / 1000.0
         else:
-            # should we raise an error instead?
-            h = s = v = 0
-
+            # Unsupported bulb type
+            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine HSV values.")
+        
         return (h, s, v)
 
     def set_version(self, version): # pylint: disable=W0621
