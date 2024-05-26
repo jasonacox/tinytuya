@@ -1103,6 +1103,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     log.debug("Listening for Tuya devices on UDP ports %d, %d and %d", UDPPORT, UDPPORTS, UDPPORTAPP)
     start_time = time.time()
     timeout_time = time.time() + 5
+    scan_ips = None
     current_ip = None
     need_sleep = 0.1
     user_break_count = 0
@@ -1516,7 +1517,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
         if scanned_devices[ip].displayed and ip in broadcast_messages:
             # remove the "Received Broadcast from ..." line
-            del	broadcast_messages[ip]
+            del broadcast_messages[ip]
 
         if scanned_devices[ip].sock or not scanned_devices[ip].displayed:
             scanned_devices[ip].stop()
@@ -1665,7 +1666,7 @@ def _snapshot_save_item( old ):
     item = {}
     item['id'] = _get_gwid( old )
     items = { 'ip':'', 'ver':'', 'origin':'', 'name':'', 'key':'', 'mac':'' }
-    for	itm in old:
+    for itm in old:
         item[itm] = old[itm]
 
     for itm in items:
@@ -1685,9 +1686,10 @@ def _snapshot_save_item( old ):
     return item
 
 def load_snapshotfile(fname):
+    if (not fname) or (not isinstance(fname, str)):
+        fname = SNAPSHOTFILE
     with open(fname) as json_file:
         data = json.load(json_file)
-
     devices = [] # pylint: disable=W0621
     if data and 'devices' in data:
         for dev in data['devices']:
@@ -1697,6 +1699,8 @@ def load_snapshotfile(fname):
     return data
 
 def save_snapshotfile(fname, data, term=None):
+    if (not fname) or (not isinstance(fname, str)):
+        fname = SNAPSHOTFILE
     if term:
         norm = term.normal
         bold = term.bold
@@ -1714,11 +1718,13 @@ def save_snapshotfile(fname, data, term=None):
         outfile.write(output)
 
 # Scan Devices in snapshot.json
-def snapshot(color=True):
+def snapshot(color=True, assume_yes=False, skip_poll=None):
     """Uses snapshot.json to scan devices
 
     Parameters:
         color = True or False, print output in color [Default: True]
+        assume_yes = True or False, auto-answer 'yes' to "Poll local devices?" (ignored when skip_poll is set)
+        skip_poll = True or False, auto-answer 'no' to "Poll local devices?" (overrides assume_yes)
     """
     # Terminal formatting
     termcolors = tinytuya.termcolor(color)
@@ -1756,11 +1762,16 @@ def snapshot(color=True):
             by_ip[device['ip']] = device
 
     # Find out if we should poll all devices
-    answer = input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
+    if skip_poll:
+        answer = 'n'
+    elif assume_yes:
+        answer = 'y'
+    else:
+        answer = input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
     if answer.lower().find('n') < 0:
         print("")
         print("%sPolling %s local devices from last snapshot..." % (term.normal, len(devicesx)))
-        result = devices(verbose=False, scantime=0, color=color, poll=True, byID=True, discover=False, snapshot=by_ip)
+        result = devices(verbose=False, color=color, poll=True, byID=True, discover=False, snapshot=by_ip)
 
         for i in devicesx:
             gwId = _get_gwid( i )
@@ -1781,7 +1792,7 @@ def snapshot(color=True):
 
 
 # Scan All Devices in devices.json
-def alldevices(color=True, scantime=None):
+def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume_yes=False, skip_poll=None):
     """Uses devices.json to scan devices
 
     Parameters:
@@ -1814,21 +1825,26 @@ def alldevices(color=True, scantime=None):
     print(output)
 
     # Find out if we should poll all devices
-    answer = input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
+    if skip_poll:
+        answer = 'n'
+    elif assume_yes:
+        answer = 'y'
+    else:
+        answer = input(term.subbold + '\nPoll local devices? ' + term.normal + '(Y/n): ')
     if answer.lower().find('n') < 0:
-        poll_and_display( tuyadevices, color=color, scantime=scantime, snapshot=True )
+        poll_and_display( tuyadevices, color=color, scantime=scantime, snapshot=True, forcescan=forcescan, discover=discover )
 
     print("%s\nDone.\n" % term.dim)
     return
 
-def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False ): # pylint: disable=W0621
+def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False, discover=True ): # pylint: disable=W0621
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 
     by_id = [x['id'] for x in tuyadevices]
     # Scan network for devices and provide polling data
     print(term.normal + "\nScanning local network for Tuya devices...")
-    result = devices(verbose=False, poll=True, byID=True, scantime=scantime, wantids=by_id, show_timer=True, forcescan=forcescan, tuyadevices=tuyadevices)
+    result = devices(verbose=False, poll=True, byID=True, scantime=scantime, wantids=by_id, show_timer=True, forcescan=forcescan, tuyadevices=tuyadevices, discover=discover)
     print("    %s%s local devices discovered%s" % (term.dim, len(result), term.normal))
     print("")
 
@@ -1864,7 +1880,7 @@ def snapshotjson():
     try:
         data = load_snapshotfile(SNAPSHOTFILE)
     except:
-        current = {'timestamp' : time.time(), 'error' : 'Missing %s' % SNAPSHOTFILE}
+        current = {'timestamp' : time.time(), 'error' : 'Could not load JSON snapshot file: %s' % SNAPSHOTFILE}
         output = json.dumps(current, indent=4)
         print(output)
         return

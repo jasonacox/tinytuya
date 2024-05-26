@@ -89,7 +89,7 @@ except NameError:
     pass
 
 for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
-    Crypto = AES = CRYPTOLIB = None
+    Crypto = Crypto_modes = AES = CRYPTOLIB = None
     try:
         if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
             from cryptography import __version__ as Crypto_version
@@ -123,7 +123,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 13, 2)
+version_tuple = (1, 14, 0)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -524,6 +524,7 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
     retcode = 0 if not retcode_len else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:header_len+retcode_len])[0]
     payload = data[header_len+retcode_len:msg_len]
     crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
+    crc_good = False
     payload = payload[:-end_len]
 
     if header.prefix == PREFIX_55AA_VALUE:

@@ -34,8 +34,11 @@ NOTE: Devices need to be **activated** by Smart Life App.
 ## TinyTuya Installation  
 
 ```bash
-# Install TinyTuya
+# Install TinyTuya Library
 python -m pip install tinytuya
+
+# Optional: Install Command Line Tool
+pipx install tinytuya
 ```
 
 Pip will attempt to install `cryptography`, `requests` and `colorama` if not already installed.
@@ -128,6 +131,7 @@ d.turn_off()
 ### TinyTuya Module Classes and Functions 
 ```
 Classes
+
   AESCipher - Cryptography Helpers
   XenonDevice(args...) - Base Class
     Device(args...) - Tuya Class for Devices
@@ -139,16 +143,20 @@ Classes
           address (str): Device Network IP Address e.g. 10.0.1.99 or "Auto" to auto-find
           local_key (str): The encryption key
           dev_type (str): Device type for payload options (see below)
-          connection_timeout = 5 (int): Timeout in seconds
           version = 3.1 (float): Tuya Protocol (e.g. 3.1, 3.2, 3.3, 3.4, 3.5)
           persist = False (bool): Keep TCP link open
           cid = None (str): Optional sub device id
           node_id = None (str): Alias for cid
           parent = None (object): Gateway device object this is a child of
+          port = TCPPORT (int): The port to connect to device
+          connection_timeout = 5 (int): Timeout in seconds
           connection_retry_limit = 5 (int)
           connection_retry_delay = 5 (int)
-          port = TCPPORT (int): The port to connect to device
 
+          Total timeout = (connection_timeout * connection_retry_limit) + 
+                          (connection_retry_delay * (connection_retry_limit - 1))
+                          Defaults: (5 * 5) + (5 * (5 - 1)) = 45 seconds
+                        
   Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
 TinyTuya Base Functions
@@ -229,7 +237,7 @@ Cloud Functions
     getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
       -> when start or end are negative, they are the number of days before "right now"
           i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
-
+          
 ```
 
 ### TinyTuya Error Codes
@@ -429,21 +437,71 @@ Tuya devices use AES encryption which is not available in the Python standard li
 
 ### Command Line
 
+TinyTuya provides a built-in command line interface to get Local key, scan and poll devices.
+
+Installation
+
+```bash
+# Option-1: pip install tinytuya
+python -m tinytuya
+
+# Option-2: pipx install tinytuya
+tinytuya 
 ```
-python -m tinytuya <command> [<max_time>] [-debug] [-nocolor] [-force [192.168.0.0/24 192.168.1.0/24 ...]] [-h]
+
+Command Line Usage
+
+```
+tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE] [-snapshot-file FILE]
 
   wizard         Launch Setup Wizard to get Tuya Local KEYs.
   scan           Scan local network for Tuya devices.
   devices        Scan all devices listed in devices.json file.
   snapshot       Scan devices listed in snapshot.json file.
   json           Scan devices listed in snapshot.json file [JSON].
-  <max_time>     Maximum time to find Tuya devices [Default=18]
-  -nocolor       Disable color text output.
-  -force         Force network scan of device IP addresses based on format:
-                 [net1/mask1 net2/mask2 ...] Auto-detects if none provided.
-  -no-broadcasts Ignore broadcast packets when force scanning.
-  -debug         Activate debug mode.
-  -h             Show usage.
+
+  Wizard
+      tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
+                [-device-file FILE] [-raw-response-file FILE] [-snapshot-file FILE] [-credentials-file FILE]
+                [-key KEY] [-secret SECRET] [-region {cn,eu,eu-w,in,us,us-e}] [-device DEVICE [DEVICE ...]]
+                [-dry-run] [max_time]
+
+        Common Options
+        max_time             Maximum time to find Tuya devices [Default: 18]
+        -no-broadcasts       Ignore broadcast packets when force scanning
+        -nocolor             Disable color text output.
+        -debug               Activate debug mode.
+        -h, -help            Show usage help for command.
+        -yes, -y             Answer "yes" to all questions
+        -no-poll, -no        Answer "no" to "Poll?" (overrides -yes)
+        -device-file FILE    JSON file to load devices from [Default: devices.json]
+        -snapshot-file FILE  JSON file to load/save snapshot from/to [Default: snapshot.json]
+        -force [0.0.0.0/24 ...], -f [0.0.0.0/24 ...]
+                             Force network scan of device IP addresses [Default: Auto-detects net/mask]
+        -no-broadcasts       Ignore broadcast packets when force scanning
+        -raw-response-file   JSON file to save the raw server response to [Default: tuya-raw.json]
+
+        Wizard Cloud API Options
+        -dry-run             Do not actually connect to the Cloud
+        -credentials-file    JSON file to load/save Cloud credentials from/to [Default: tinytuya.json]
+        -key KEY             Cloud API Key to use
+        -secret SECRET       Cloud API Secret to use
+        -region              Cloud API Region to use {cn,eu,eu-w,in,us,us-e}
+        -device DEVICE(S)    One or more Device ID(s) to use
+
+  Scan
+      tinytuya scan [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] 
+                [-device-file FILE] [-snapshot-file FILE] [max_time]
+
+  Devices
+      tinytuya devices [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] 
+                [-no-poll] [-device-file FILE] [-snapshot-file FILE] [max_time]
+
+  Snapshot
+      tinytuya snapshot [-h] [-debug] [-nocolor] [-yes] [-no-poll] [-device-file FILE] [-snapshot-file FILE]
+
+  JSON
+      tinytuya json [-h] [-debug] [-device-file FILE] [-snapshot-file FILE]
 
 ```
 

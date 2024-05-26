@@ -40,6 +40,7 @@ setuptools.setup(
     url='https://github.com/jasonacox/tinytuya',
     packages=setuptools.find_packages(exclude=("sandbox",)),
     install_requires=INSTALL_REQUIRES,
+    entry_points={"console_scripts": ["tinytuya=tinytuya.__main__:dummy"]},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
