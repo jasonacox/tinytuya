@@ -123,7 +123,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 14, 0)
+version_tuple = (1, 14, 1)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -1189,27 +1189,33 @@ class XenonDevice(object):
                     self.socket.sendall(enc_payload)
                     if self.sendWait is not None:
                         time.sleep(self.sendWait)  # give device time to respond
-                if getresponse:
-                    do_send = False
-                    rmsg = self._receive()
-                    # device may send null ack (28 byte) response before a full response
-                    # consider it an ACK and do not retry the send even if we do not get a full response
-                    if rmsg:
-                        payload = None
-                        partial_success = True
-                        msg = rmsg
-                    if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
-                        log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
-                        recv_retries += 1
-                        if recv_retries > max_recv_retries:
+                while not success:
+                    if getresponse:
+                        do_send = False
+                        rmsg = self._receive()
+                        # device may send null ack (28 byte) response before a full response
+                        # consider it an ACK and do not retry the send even if we do not get a full response
+                        if rmsg:
+                            payload = None
+                            partial_success = True
+                            msg = rmsg
+                        if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
+                            log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
+                            recv_retries += 1
+                            if recv_retries > max_recv_retries:
+                                success = True
+                        else:
+                            success = True
+                            log.debug("received message=%r", msg)
+                        if msg.seqno == 0:
+                            log.debug("Received message with seqno=0, ignoring")
+                            success = False
+                        else:
                             success = True
                     else:
-                        success = True
-                        log.debug("received message=%r", msg)
-                else:
-                    # legacy/default mode avoids persisting socket across commands
-                    self._check_socket_close()
-                    return None
+                        # legacy/default mode avoids persisting socket across commands
+                        self._check_socket_close()
+                        return None
             except (KeyboardInterrupt, SystemExit) as err:
                 log.debug("Keyboard Interrupt - Exiting")
                 raise

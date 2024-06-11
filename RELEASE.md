@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.14.1 - SeqNo 0 Fix
+
+* Ignore SeqNo=0 messages and wait for SeqNo=1. Accepting the first message will often not include all the DPS values. This was raised by @leweafan in https://github.com/jasonacox/tinytuya/issues/505
+
 ## v1.14.0 - Command Line Updates
 
 * PyPI 1.14.0 rewrite of main to use argparse and add additional options by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/503
