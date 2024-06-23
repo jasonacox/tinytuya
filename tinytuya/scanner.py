@@ -529,6 +529,7 @@ class ForceScannedDevice(DeviceDetect):
                     prefix_offset = data.find(tinytuya.PREFIX_BIN)
                     if prefix_offset >= 0:
                         data = data[prefix_offset:]
+                        self.try_v35 = False
                     elif self.try_v35 and self.deviceinfo['version'] == 3.4:
                         prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
                         if prefix_offset >= 0:
