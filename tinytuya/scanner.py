@@ -1129,9 +1129,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if verbose:
             print(term.subbold + "    Option: " + term.dim + "Network force scanning requested.\n")
 
+        # argparse gives us a list of lists
+        # the inner list is empty [[]] when no address specified
         add_connected = True
         if isinstance( forcescan, list ) or isinstance( forcescan, tuple ):
-            # argparse gives us a list of lists [[]] when no address specified
             for ip in forcescan:
                 if isinstance( ip, list ) or isinstance( ip, tuple ):
                     for ip2 in ip:
@@ -1140,6 +1141,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 else:
                     networks.append( ip )
                     add_connected = False
+
+        if isinstance( forcescan, str ) or isinstance( forcescan, bytes ):
+            networks.append( forcescan )
+            add_connected = False
 
         if add_connected:
             if not NETIFLIBS:
