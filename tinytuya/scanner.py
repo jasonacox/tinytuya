@@ -1129,8 +1129,19 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if verbose:
             print(term.subbold + "    Option: " + term.dim + "Network force scanning requested.\n")
 
-        fstype = type(forcescan)
-        if fstype != list and fstype != tuple:
+        add_connected = True
+        if isinstance( forcescan, list ) or isinstance( forcescan, tuple ):
+            # argparse gives us a list of lists [[]] when no address specified
+            for ip in forcescan:
+                if isinstance( ip, list ) or isinstance( ip, tuple ):
+                    for ip2 in ip:
+                        networks.append( ip2 )
+                        add_connected = False
+                else:
+                    networks.append( ip )
+                    add_connected = False
+
+        if add_connected:
             if not NETIFLIBS:
                 print(term.alert +
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
@@ -1151,9 +1162,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 if not networks:
                     print(term.alert + 'No networks to force-scan, exiting.' + term.normal)
                     return None
-        else:
-            for ip in forcescan:
-                networks.append( ip )
 
     if snapshot:
         for ip in snapshot:
@@ -1162,6 +1170,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         snapshot = []
 
     if networks:
+        if verbose:
+            log.debug("Force-scanning networks: %r", networks)
+
         scan_ips = _generate_ip( networks, verbose, term )
         ip_scan = ip_scan_running = True
         if discover:
