@@ -164,7 +164,7 @@ class DeviceDetect(object):
         self.timeo = 0
         self.resets = 0
         self.step = FSCAN_NOT_STARTED
-        self.try_v35 = False
+        self.try_v35_with_v34 = False
         self.cur_key = None
         self.hard_time_limit = time.time() + 30
         self.initial_connect_retries = options['retries']
@@ -276,7 +276,7 @@ class DeviceDetect(object):
             print('v3.4/5 trying key', self.ip, self.device.real_local_key)
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
-        if self.try_v35 and self.device.version == 3.4:
+        if self.try_v35_with_v34 and self.device.version == 3.4:
             self.device.version = 3.5
             step1 = self.device._negotiate_session_key_generate_step_1()
             self.sock.sendall( self.device._encode_message( step1 ) )
@@ -303,7 +303,7 @@ class ForceScannedDevice(DeviceDetect):
         self.retries = 0
         self.keygen = None
         self.brute_force_data = []
-        self.try_v35 = True
+        self.try_v35_with_v34 = True
         self.v34_connect_ok = False
 
         self.connect()
@@ -529,14 +529,14 @@ class ForceScannedDevice(DeviceDetect):
                     prefix_offset = data.find(tinytuya.PREFIX_BIN)
                     if prefix_offset >= 0:
                         data = data[prefix_offset:]
-                        self.try_v35 = False
-                    elif self.try_v35 and self.deviceinfo['version'] == 3.4:
+                        self.try_v35_with_v34 = False
+                    elif self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
                         prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
                         if prefix_offset >= 0:
                             if self.debug:
                                 print('ForceScannedDevice: device is v3.5!')
                             data = data[prefix_offset:]
-                            self.try_v35 = False
+                            self.try_v35_with_v34 = False
                             self.deviceinfo['version'] = 3.5
                             self.device.set_version(3.5)
                             self.ver_found = True
