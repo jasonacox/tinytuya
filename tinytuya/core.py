@@ -1654,6 +1654,7 @@ class XenonDevice(object):
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
     def set_version(self, version): # pylint: disable=W0621
+        version = float(version)
         self.version = version
         self.version_str = "v" + str(version)
         self.version_bytes = str(version).encode('latin1')
