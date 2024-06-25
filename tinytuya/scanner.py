@@ -928,7 +928,7 @@ def _generate_ip(networks, verbose, term):
         if tinytuya.IS_PY2 and type(netblock) == str:
             netblock = netblock.decode('latin1')
         try:
-            network = ipaddress.ip_network(netblock)
+            network = ipaddress.ip_network(netblock, strict=False)
             log.debug("Starting brute force network scan %s", network)
         except:
             log.debug("Unable to get network for %r, ignoring", netblock)
