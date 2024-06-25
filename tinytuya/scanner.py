@@ -326,7 +326,7 @@ class ForceScannedDevice(DeviceDetect):
             self.deviceinfo['version'] = 0.0
 
         if self.options['verbose'] and self.found and not self.displayed:
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message, self.options['verbose'] )
             self.displayed = True
 
     def timeout( self, forced=False ):
@@ -385,7 +385,7 @@ class ForceScannedDevice(DeviceDetect):
                     self.err_found = True
                     self.deviceinfo['version'] = 0.0
                     self.message = "%s    Polling %s Failed: Device stopped responding before key was found" % (self.options['termcolors'].alertdim, self.ip)
-                    _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+                    _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
                     self.displayed = True
                     self.close()
                 return
@@ -398,7 +398,7 @@ class ForceScannedDevice(DeviceDetect):
         elif forced:
             self.err_found = True
             self.message = "%s    Polling %s Failed: Unexpected close during read/write operation" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose']) 
             self.displayed = True
             self.remove = True
         elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
@@ -409,14 +409,14 @@ class ForceScannedDevice(DeviceDetect):
         elif self.step == FSCAN_FINAL_POLL:
             if not self.message:
                 self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
         else:
             if self.debug:
                 print('ForceScannedDevice: Debug sock', self.ip, 'timeout on unhandled step', self.step)
             self.remove = True
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
 
         if self.remove:
@@ -723,7 +723,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.remove = True
                 self.deviceinfo['version'] = 0.0
                 self.message = "%s    Polling %s Failed: No matching key found" % (self.options['termcolors'].alertdim, self.ip)
-                _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+                _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'] )
                 self.displayed = True
             else:
                 if self.debug:
@@ -944,7 +944,9 @@ def _generate_ip(networks, verbose, term):
         for addr in ipaddress.IPv4Network(network):
             yield str(addr)
 
-def _print_device_info( result, note, term, extra_message=None ):
+def _print_device_info( result, note, term, extra_message=None, verbose=True ):
+    if not verbose:
+        return
     ip = result["ip"]
     gwId = result["gwId"]
     productKey = result["productKey"] if result["productKey"] else '?'
@@ -985,7 +987,9 @@ def _print_device_info( result, note, term, extra_message=None ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], maxdevices=0): # pylint: disable=W0621, W0102
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
+            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+            maxdevices=0): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
