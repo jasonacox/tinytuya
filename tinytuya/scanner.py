@@ -164,6 +164,7 @@ class DeviceDetect(object):
         self.timeo = 0
         self.resets = 0
         self.step = FSCAN_NOT_STARTED
+        self.try_v35_with_v34 = False
         self.cur_key = None
         self.hard_time_limit = time.time() + 30
         self.initial_connect_retries = options['retries']
@@ -275,6 +276,11 @@ class DeviceDetect(object):
             print('v3.4/5 trying key', self.ip, self.device.real_local_key)
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
+        if self.try_v35_with_v34 and self.device.version == 3.4:
+            self.device.version = 3.5
+            step1 = self.device._negotiate_session_key_generate_step_1()
+            self.sock.sendall( self.device._encode_message( step1 ) )
+            self.device.version = 3.4
         if self.debug:
             print('v3.4/5 session key neg start, debug ip', self.ip)
 
@@ -297,6 +303,8 @@ class ForceScannedDevice(DeviceDetect):
         self.retries = 0
         self.keygen = None
         self.brute_force_data = []
+        self.try_v35_with_v34 = True
+        self.v34_connect_ok = False
 
         self.connect()
 
@@ -318,7 +326,7 @@ class ForceScannedDevice(DeviceDetect):
             self.deviceinfo['version'] = 0.0
 
         if self.options['verbose'] and self.found and not self.displayed:
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan, FORCED STOP', self.options['termcolors'], self.message, self.options['verbose'] )
             self.displayed = True
 
     def timeout( self, forced=False ):
@@ -334,7 +342,7 @@ class ForceScannedDevice(DeviceDetect):
                 print('ForceScannedDevice: Debug sock', self.ip, 'connect timed out!')
         elif self.step == FSCAN_INITIAL_CONNECT:
             if self.debug:
-                print('ForceScannedDevice: Debug sock', self.ip, 'socket send failed,', 'no data received' if forced else 'receive timed out')
+                print('ForceScannedDevice: Debug sock', self.ip, 'socket send failed,', 'no data received,' if forced else 'receive timed out,', 'current retry:', self.retries)
             if self.retries < 2:
                 self.retries += 1
                 self.connect()
@@ -366,8 +374,9 @@ class ForceScannedDevice(DeviceDetect):
                     self.remove = True
                 else:
                     self.connect()
-        elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE: # or self.step == FSCAN_v33_BRUTE_FORCE_ACTIVE or self.step == FSCAN_v31_BRUTE_FORCE_ACTIVE:
-            if not forced:
+                    self.v34_connect_ok = False
+        elif self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE:
+            if( (not forced) and (not self.v34_connect_ok) ):
                 # actual timeout, connect failed
                 if self.retries < 2:
                     self.retries += 1
@@ -376,19 +385,20 @@ class ForceScannedDevice(DeviceDetect):
                     self.err_found = True
                     self.deviceinfo['version'] = 0.0
                     self.message = "%s    Polling %s Failed: Device stopped responding before key was found" % (self.options['termcolors'].alertdim, self.ip)
-                    _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+                    _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
                     self.displayed = True
                     self.close()
                 return
             # brute-forcing the key
             self.v3x_brute_force_try_next_key()
+            self.v34_connect_ok = False
         elif self.step == FSCAN_v31_BRUTE_FORCE_ACTIVE:
             # brute-forcing the key
             self.v3x_brute_force_try_next_key()
         elif forced:
             self.err_found = True
             self.message = "%s    Polling %s Failed: Unexpected close during read/write operation" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose']) 
             self.displayed = True
             self.remove = True
         elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
@@ -399,14 +409,14 @@ class ForceScannedDevice(DeviceDetect):
         elif self.step == FSCAN_FINAL_POLL:
             if not self.message:
                 self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
         else:
             if self.debug:
                 print('ForceScannedDevice: Debug sock', self.ip, 'timeout on unhandled step', self.step)
             self.remove = True
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
 
         if self.remove:
@@ -418,6 +428,8 @@ class ForceScannedDevice(DeviceDetect):
         #  'False' when connection was made but then closed
         #  The IP address when the connection is still open
         addr = self.get_peer()
+        if self.debug:
+            print('ForceScannedDevice: device', self.ip, 'addr is:', addr)
         if addr is None:
             # refused
             self.close()
@@ -435,6 +447,7 @@ class ForceScannedDevice(DeviceDetect):
         #self.timeo = time.time() + self.options['data_timeout']
         self.timeo = time.time() + 1.5
         self.found = True
+        self.v34_connect_ok = True
 
         if len(self.send_queue) > 0:
             self.sock.sendall( self.device._encode_message( self.send_queue[0] ) )
@@ -502,15 +515,31 @@ class ForceScannedDevice(DeviceDetect):
         if self.debug:
             print('ForceScannedDevice:', self.ip, 'got step', self.step, 'data:', data )
 
-        if len(data) ==	0:
+        if len(data) == 0:
             self.timeout( True )
             return
 
         while len(data):
             try:
-                prefix_offset = data.find(tinytuya.PREFIX_BIN)
-                if prefix_offset > 0:
-                    data = data[prefix_offset:]
+                if self.deviceinfo['version'] == 3.5:
+                    prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
+                    if prefix_offset > 0:
+                        data = data[prefix_offset:]
+                else:
+                    prefix_offset = data.find(tinytuya.PREFIX_BIN)
+                    if prefix_offset >= 0:
+                        data = data[prefix_offset:]
+                        self.try_v35_with_v34 = False
+                    elif self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
+                        prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
+                        if prefix_offset >= 0:
+                            if self.debug:
+                                print('ForceScannedDevice: device is v3.5!')
+                            data = data[prefix_offset:]
+                            self.try_v35_with_v34 = False
+                            self.deviceinfo['version'] = 3.5
+                            self.device.set_version(3.5)
+                            self.ver_found = True
                 hmac_key = self.device.local_key if self.deviceinfo['version'] >= 3.4 else None
                 msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
             except:
@@ -668,7 +697,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.brute_force_found_key()
                 return True
 
-        self.brute_force_data =	[]
+        self.brute_force_data = []
         return False
 
     def v3x_brute_force_try_next_key( self ):
@@ -694,7 +723,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.remove = True
                 self.deviceinfo['version'] = 0.0
                 self.message = "%s    Polling %s Failed: No matching key found" % (self.options['termcolors'].alertdim, self.ip)
-                _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message )
+                _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'] )
                 self.displayed = True
             else:
                 if self.debug:
@@ -794,7 +823,7 @@ class PollDevice(DeviceDetect):
         self.write = False
 
         try:
-	    # connected, send the query
+            # connected, send the query
             if self.device.version >= 3.4 :
                 # self.device.real_local_key, self.device.local_key
                 self.v34_negotiate_sess_key_start()
@@ -899,7 +928,7 @@ def _generate_ip(networks, verbose, term):
         if tinytuya.IS_PY2 and type(netblock) == str:
             netblock = netblock.decode('latin1')
         try:
-            network = ipaddress.ip_network(netblock)
+            network = ipaddress.ip_network(netblock, strict=False)
             log.debug("Starting brute force network scan %s", network)
         except:
             log.debug("Unable to get network for %r, ignoring", netblock)
@@ -915,7 +944,9 @@ def _generate_ip(networks, verbose, term):
         for addr in ipaddress.IPv4Network(network):
             yield str(addr)
 
-def _print_device_info( result, note, term, extra_message=None ):
+def _print_device_info( result, note, term, extra_message=None, verbose=True ):
+    if not verbose:
+        return
     ip = result["ip"]
     gwId = result["gwId"]
     productKey = result["productKey"] if result["productKey"] else '?'
@@ -956,7 +987,9 @@ def _print_device_info( result, note, term, extra_message=None ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], maxdevices=0): # pylint: disable=W0621, W0102
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
+            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+            maxdevices=0): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1129,8 +1162,24 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if verbose:
             print(term.subbold + "    Option: " + term.dim + "Network force scanning requested.\n")
 
-        fstype = type(forcescan)
-        if fstype != list and fstype != tuple:
+        # argparse gives us a list of lists
+        # the inner list is empty [[]] when no address specified
+        add_connected = True
+        if isinstance( forcescan, list ) or isinstance( forcescan, tuple ):
+            for ip in forcescan:
+                if isinstance( ip, list ) or isinstance( ip, tuple ):
+                    for ip2 in ip:
+                        networks.append( ip2 )
+                        add_connected = False
+                else:
+                    networks.append( ip )
+                    add_connected = False
+
+        if isinstance( forcescan, str ) or isinstance( forcescan, bytes ):
+            networks.append( forcescan )
+            add_connected = False
+
+        if add_connected:
             if not NETIFLIBS:
                 print(term.alert +
                       '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
@@ -1151,9 +1200,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 if not networks:
                     print(term.alert + 'No networks to force-scan, exiting.' + term.normal)
                     return None
-        else:
-            for ip in forcescan:
-                networks.append( ip )
 
     if snapshot:
         for ip in snapshot:
@@ -1162,6 +1208,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         snapshot = []
 
     if networks:
+        if verbose:
+            log.debug("Force-scanning networks: %r", networks)
+
         scan_ips = _generate_ip( networks, verbose, term )
         ip_scan = ip_scan_running = True
         if discover:

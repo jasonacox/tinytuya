@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.14.1 - Scanner Fixes
+
+* Fix force-scanning bug in scanner introduced in last release by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/511.
+
 ## v1.14.0 - Command Line Updates
 
 * PyPI 1.14.0 rewrite of main to use argparse and add additional options by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/503
