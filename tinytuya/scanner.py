@@ -184,7 +184,7 @@ def send_discovery_request( iface_list ):
         if 'port' not in iface:
             iface['port'] = 7000
 
-        log.warning( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
+        log.debug( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
         # the official app always sends it twice, so do the same
         iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
         iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
