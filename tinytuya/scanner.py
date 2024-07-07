@@ -1645,6 +1645,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         clients.close()
         clientapp.close()
 
+    for address in client_ip_broadcast_list:
+        iface = client_ip_broadcast_list[address]
+        if 'socket' in iface:
+            iface['socket'].close()
+            del iface['socket']
+
     if verbose:
         print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
         #print( len(response_list), response_list )
