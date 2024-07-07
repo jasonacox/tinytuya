@@ -107,6 +107,13 @@ def getmyIP():
     return '%s.%s.%s.0/24' % tuple(r[:3])
 
 def getmyIPs( term, verbose, ask ):
+    if NETIFLIBS:
+        return getmyIPs_via_netifaces( term, verbose, ask )
+    if PSULIBS:
+        return getmyIPs_via_psutil( term, verbose, ask )
+    return None
+
+def getmyIPs_via_netifaces( term, verbose, ask ):
     ips = {}
     interfaces = netifaces.interfaces()
     try:
@@ -123,6 +130,30 @@ def getmyIPs( term, verbose, ask ):
 
         for address in family_addresses:
             k = str(ipaddress.IPv4Interface(address['addr']+'/'+address['netmask']).network)
+            if k[:4] == '127.':
+                # skip the loopback interface
+                continue
+            if ask:
+                if ask != 2:
+                    answer = input( '%sScan network %s from interface %s?%s ([Y]es/[n]o/[a]ll yes): ' % (term.bold, k, str(interface), term.normal) )
+                    if answer[0:1].lower() == 'a':
+                        ask = 2
+                    elif answer.lower().find('n') >= 0:
+                        continue
+            if verbose:
+                print(term.dim + 'Adding Network', k, 'to the force-scan list')
+            ips[k] = True
+    return ips.keys()
+
+def getmyIPs_via_psutil( term, verbose, ask ):
+    ips = {}
+    interfaces = psutil.net_if_addrs()
+    for interface in interfaces:
+        addresses = interfaces[interface]
+        for addr in addresses:
+            if addr.family != socket.AF_INET:
+                continue
+            k = str(ipaddress.IPv4Interface(addr.address+'/'+addr.netmask).network)
             if k[:4] == '127.':
                 # skip the loopback interface
                 continue
@@ -1252,10 +1283,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             add_connected = False
 
         if add_connected:
-            if not NETIFLIBS:
+            if (not NETIFLIBS) and (not PSULIBS):
                 print(term.alert +
-                      '    NOTE: netifaces module not available, multi-interface machines will be limited.\n'
-                      '           (Requires: pip install netifaces)\n' + term.dim)
+                      '    NOTE: neither module netifaces nor module psutil are available, multi-interface machines will be limited.\n'
+                      '           (Requires: `pip install netifaces` or `pip install psutil`)\n' + term.dim)
                 try:
                     ip = getmyIP()
                     networks.append( ip )
