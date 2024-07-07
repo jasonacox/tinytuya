@@ -168,7 +168,17 @@ def get_ip_to_broadcast():
     ip_to_broadcast['255.255.255.255'] = getmyIP()
     return ip_to_broadcast
 
-def send_discovery_request( iface_list ):
+def send_discovery_request( iface_list=None ):
+    close_sockets = False
+
+    if not iface_list:
+        close_sockets = True
+        iface_list = {}
+        client_bcast_addrs = get_ip_to_broadcast()
+        for bcast in client_bcast_addrs:
+            addr = client_bcast_addrs[bcast]
+            iface_list[addr] = { 'broadcast': bcast }
+
     for address in iface_list:
         iface = iface_list[address]
         if 'socket' not in iface:
@@ -188,6 +198,10 @@ def send_discovery_request( iface_list ):
         # the official app always sends it twice, so do the same
         iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
         iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
+
+        if close_sockets:
+            iface['socket'].close()
+            del iface['socket']
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
@@ -1213,10 +1227,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     for i in tuyadevices:
         options['keylist'].append( KeyObj( i['id'], i['key'] ) )
 
-    if not wantips:
-        wantips = [] #['192.168.1.3']
-    if not wantids:
-        wantids = [] #['abcdef']
+    wantips = [] if not wantips else list(wantips) #['192.168.1.3']
+    wantids = [] if not wantids else list(wantids) #['abcdef']
 
     if forcescan:
         if verbose:
