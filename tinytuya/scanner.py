@@ -70,6 +70,7 @@ UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
 UDPPORTAPP = tinytuya.UDPPORTAPP    # Tuya app encrypted UDP Port
 TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
 SCANTIME = tinytuya.SCANTIME        # How many seconds to wait before stopping
+BROADCASTTIME = 6                   # How often to broadcast to port 7000 to get v3.5 devices to send us their info
 
 max_parallel = 300
 connect_timeout = 3
@@ -148,7 +149,7 @@ def get_ip_to_broadcast():
 
             if ipv4:
                 for addr in ipv4:
-                    if 'broadcast' in addr:
+                    if 'broadcast' in addr and 'addr' in addr and addr['broadcast'] != addr['addr']:
                         ip_to_broadcast[addr['broadcast']] = addr['addr']
 
         if ip_to_broadcast:
@@ -158,7 +159,7 @@ def get_ip_to_broadcast():
         interfaces = psutil.net_if_addrs()
         for addresses in interfaces.values():
             for addr in addresses:
-                if addr.family == socket.AF_INET and addr.broadcast:  # AF_INET is for IPv4
+                if addr.family == socket.AF_INET and addr.broadcast and addr.address and addr.address != addr.broadcast:  # AF_INET is for IPv4
                     ip_to_broadcast[addr.broadcast] = addr.address
 
         if ip_to_broadcast:
@@ -166,6 +167,27 @@ def get_ip_to_broadcast():
 
     ip_to_broadcast['255.255.255.255'] = getmyIP()
     return ip_to_broadcast
+
+def send_discovery_request( iface_list ):
+    for address in iface_list:
+        iface = iface_list[address]
+        if 'socket' not in iface:
+            iface['socket'] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+            iface['socket'].setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            iface['socket'].bind( (address,0) )
+
+        if 'payload' not in iface:
+            bcast = json.dumps( {"from":"app","ip":address} ).encode()
+            bcast_msg = tinytuya.TuyaMessage( 0, tinytuya.REQ_DEVINFO, None, bcast, 0, True, tinytuya.PREFIX_6699_VALUE, True )
+            iface['payload'] = tinytuya.pack_message( bcast_msg, hmac_key=tinytuya.udpkey )
+
+        if 'port' not in iface:
+            iface['port'] = 7000
+
+        log.warning( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
+        # the official app always sends it twice, so do the same
+        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
+        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
@@ -1176,6 +1198,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     current_ip = None
     need_sleep = 0.1
     user_break_count = 0
+    client_ip_broadcast_list = {}
+    client_ip_broadcast_timer = 0
     options = {
         'connect_timeout': connect_timeout,
         'data_timeout': connect_timeout,
@@ -1259,6 +1283,11 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     # If no scantime value set use default
     if not scantime:
         scantime = 0 if ip_scan_running else tinytuya.SCANTIME
+
+    client_bcast_addrs = get_ip_to_broadcast()
+    for bcast in client_bcast_addrs:
+        addr = client_bcast_addrs[bcast]
+        client_ip_broadcast_list[addr] = { 'broadcast': bcast }
 
     while ip_scan_running or scan_end_time > time.time() or device_end_time > time.time() or connect_next_round:
         if client:
@@ -1558,6 +1587,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             for dev in devicelist:
                 if (not dev.remove) and (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
                     device_end_time = dev.timeo + 1.0
+
+        if discover and (not user_break_count) and (not ip_force_wants_end) and time.time() >= client_ip_broadcast_timer:
+            client_ip_broadcast_timer = time.time() + BROADCASTTIME
+            send_discovery_request( client_ip_broadcast_list )
 
     for sock in read_socks:
         sock.close()

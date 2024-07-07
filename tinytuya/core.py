@@ -171,6 +171,7 @@ UPDATEDPS       = 0x12 # 18 # FRM_LAN_QUERY_DP    # Request refresh of DPS
 UDP_NEW         = 0x13 # 19 # FR_TYPE_ENCRYPTION
 AP_CONFIG_NEW   = 0x14 # 20 # FRM_AP_CFG_WF_V40
 BOARDCAST_LPV34 = 0x23 # 35 # FR_TYPE_BOARDCAST_LPV34
+REQ_DEVINFO     = 0x25 # broadcast to port 7000 to get v3.5 devices to send their info
 LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
 
 # Protocol Versions and Headers
