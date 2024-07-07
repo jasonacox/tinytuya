@@ -44,8 +44,14 @@ except NameError:
 try:
     import netifaces # pylint: disable=E0401
     NETIFLIBS = True
-except:
+except ImportError:
     NETIFLIBS = False
+
+try:
+    import psutil # pylint: disable=E0401
+    PSULIBS = True
+except ImportError:
+    PSULIBS = False
 
 # Colorama terminal color capability for all platforms
 init()
@@ -130,6 +136,36 @@ def getmyIPs( term, verbose, ask ):
                 print(term.dim + 'Adding Network', k, 'to the force-scan list')
             ips[k] = True
     return ips.keys()
+
+def get_ip_to_broadcast():
+    ip_to_broadcast = {}
+
+    if NETIFLIBS:
+        interfaces = netifaces.interfaces()
+        for interface in interfaces:
+            addresses = netifaces.ifaddresses(interface)
+            ipv4 = addresses.get(netifaces.AF_INET)
+
+            if ipv4:
+                for addr in ipv4:
+                    if 'broadcast' in addr:
+                        ip_to_broadcast[addr['broadcast']] = addr['addr']
+
+        if ip_to_broadcast:
+            return ip_to_broadcast
+
+    if PSULIBS:
+        interfaces = psutil.net_if_addrs()
+        for addresses in interfaces.values():
+            for addr in addresses:
+                if addr.family == socket.AF_INET and addr.broadcast:  # AF_INET is for IPv4
+                    ip_to_broadcast[addr.broadcast] = addr.address
+
+        if ip_to_broadcast:
+            return ip_to_broadcast
+
+    ip_to_broadcast['255.255.255.255'] = getmyIP()
+    return ip_to_broadcast
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
