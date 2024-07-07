@@ -396,8 +396,11 @@ class Cloud(object):
     def getdevices(self, verbose=False, oldlist=[], include_map=False):
         """
         Return dictionary of all devices.
-        If verbose is true, return full Tuya device
-        details.
+
+        Args: 
+            verbose - Returns raw JSON data from Tuya Cloud
+            oldlist - List of devices from previous run
+            include_map - Include the DPS mapping in the device list
         """
         old_devices = {}
         if oldlist:

@@ -20,7 +20,9 @@
     </div>
     <div class="button">
         <div class="number"></div>
-        <input id='forcescan' type='button' value='Force Scan' onclick='forcescan()'></div>
+        <input id='forcescan' type='button' value='Force Scan' onclick='forcescan()'>
+        <input id='cloudsync' type='button' value='Cloud Sync' onclick='cloudsync()'>
+    </div>
     <script>
 
     // Get Version
@@ -46,6 +48,19 @@
         });        
     }
 
+    // Cloud Sync
+    function cloudsync() {
+        // Change button text and disable - restore on sync completion
+        // via numdevices() function
+        $("#cloudsync").prop('value', 'Syncing...');
+        $("#cloudsync").prop('disabled', true);
+        // Call the sync API
+        var pwurl = window.location.protocol + "//" + window.location.host + "/sync";
+        $.getJSON(pwurl, function(data) {
+            console.log(data);
+        });        
+    }
+
     // Number of Devices
     function numdevices() {
         var pwurl = window.location.protocol + "//" + window.location.host + "/numdevices";
@@ -55,6 +70,8 @@
             var online = `Devices Online: ${data.found}`;
             var numoff = data.registered - data.found;
             var forcescandone = data.forcescandone;
+            var cloudsyncdone = data.cloudsyncdone;
+            var cloudcreds = data.cloudcreds;
             if(numoff<0) numoff = 0;
             var offline = `Devices Offline: ${numoff}`;
             $(".onlinetext").html(online)
@@ -67,6 +84,20 @@
             } else {
                 $("#forcescan").prop('value', 'Scanning...');
                 $("#forcescan").prop('disabled', true);
+            }
+            if(cloudsyncdone) {
+                if(cloudcreds) {
+                    $("#cloudsync").prop('value', 'Cloud Sync');
+                    $("#cloudsync").prop('disabled', false);
+                } else {
+                    $("#cloudsync").prop('value', 'Cloud Sync (No Credentials)');
+                    $("#cloudsync").prop('disabled', true);
+                }
+                $("#cloudsync").prop('value', 'Cloud Sync');
+                $("#cloudsync").prop('disabled', false);
+            } else {
+                $("#cloudsync").prop('value', 'Syncing...');
+                $("#cloudsync").prop('disabled', true);
             }
         });
         setTimeout(numdevices, 1000);

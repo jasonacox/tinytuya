@@ -110,11 +110,14 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
-### t12 - Force Scan
+### p12 - Force Scan
 
 * Added "Force Scan" button to cause server to run a network scan for devices not broadcasting.
 * Minor updates to UI for a cleaner title and footer to accommodate button.
 * Added logic to allow settings via environmental variables.
+* Add broadcast request to local network for 3.5 devices. 
+* Fix bug with cloud sync refresh losing device mappings.
+* Added "Cloud Sync" button to poll cloud for updated device data.
 
 ### t11 - Minimize Container
 
