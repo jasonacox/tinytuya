@@ -44,8 +44,14 @@ except NameError:
 try:
     import netifaces # pylint: disable=E0401
     NETIFLIBS = True
-except:
+except ImportError:
     NETIFLIBS = False
+
+try:
+    import psutil # pylint: disable=E0401
+    PSULIBS = True
+except ImportError:
+    PSULIBS = False
 
 # Colorama terminal color capability for all platforms
 init()
@@ -130,6 +136,36 @@ def getmyIPs( term, verbose, ask ):
                 print(term.dim + 'Adding Network', k, 'to the force-scan list')
             ips[k] = True
     return ips.keys()
+
+def get_ip_to_broadcast():
+    ip_to_broadcast = {}
+
+    if NETIFLIBS:
+        interfaces = netifaces.interfaces()
+        for interface in interfaces:
+            addresses = netifaces.ifaddresses(interface)
+            ipv4 = addresses.get(netifaces.AF_INET)
+
+            if ipv4:
+                for addr in ipv4:
+                    if 'broadcast' in addr:
+                        ip_to_broadcast[addr['broadcast']] = addr['addr']
+
+        if ip_to_broadcast:
+            return ip_to_broadcast
+
+    if PSULIBS:
+        interfaces = psutil.net_if_addrs()
+        for addresses in interfaces.values():
+            for addr in addresses:
+                if addr.family == socket.AF_INET and addr.broadcast:  # AF_INET is for IPv4
+                    ip_to_broadcast[addr.broadcast] = addr.address
+
+        if ip_to_broadcast:
+            return ip_to_broadcast
+
+    ip_to_broadcast['255.255.255.255'] = getmyIP()
+    return ip_to_broadcast
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
@@ -1402,11 +1438,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if ip_force_wants_end:
                 continue
 
-            if sock is clientapp:
+            if 'from' in result and result['from'] == 'app': #sock is clientapp:
                 if ip not in broadcasted_apps:
                     broadcasted_apps[ip] = result
                     if verbose:
                         print( term.alertdim + 'New Broadcast from App at ' + str(ip) + term.dim + ' - ' + str(result) + term.normal )
+                continue
+
+            if 'gwId' not in result:
+                if verbose:
+                    print(term.alertdim + "*  Payload missing required 'gwId' - from %r to port %r:%s %r (%r)\n" % (ip, tgt_port, term.normal, result, data))
+                log.debug("UDP Packet payload missing required 'gwId' - from %r port %r - %r", ip, tgt_port, data)
                 continue
 
             # check to see if we have seen this device before and add to devices array
