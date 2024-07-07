@@ -1402,11 +1402,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if ip_force_wants_end:
                 continue
 
-            if sock is clientapp:
+            if 'from' in result and result['from'] == 'app': #sock is clientapp:
                 if ip not in broadcasted_apps:
                     broadcasted_apps[ip] = result
                     if verbose:
                         print( term.alertdim + 'New Broadcast from App at ' + str(ip) + term.dim + ' - ' + str(result) + term.normal )
+                continue
+
+            if 'gwId' not in result:
+                if verbose:
+                    print(term.alertdim + "*  Payload missing required 'gwId' - from %r to port %r:%s %r (%r)\n" % (ip, tgt_port, term.normal, result, data))
+                log.debug("UDP Packet payload missing required 'gwId' - from %r port %r - %r", ip, tgt_port, data)
                 continue
 
             # check to see if we have seen this device before and add to devices array
