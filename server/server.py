@@ -48,7 +48,7 @@ import signal
 import sys
 import os
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn 
 
 # Terminal color capability for all platforms
@@ -59,30 +59,28 @@ except:
     pass
 
 import tinytuya
+from tinytuya import scanner
+import os
 
-BUILD = "t11"
+BUILD = "t12"
 
-# Defaults
-APIPORT = 8888
-DEBUGMODE = False
-DEVICEFILE = tinytuya.DEVICEFILE
-SNAPSHOTFILE = tinytuya.SNAPSHOTFILE
-CONFIGFILE = tinytuya.CONFIGFILE
-TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
-TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
-MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
-UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
-UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
-UDPPORTAPP = tinytuya.UDPPORTAPP    # Tuya App
-TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
-RETRYTIME = 30
-RETRYCOUNT = 5
-SAVEDEVICEFILE = True
-
-# Check for Environmental Overrides
-debugmode = os.getenv("DEBUG", "no")
-if debugmode.lower() == "yes":
-    DEBUGMODE = True
+# Defaults from Environment
+APIPORT = int(os.getenv("APIPORT", "8888"))
+DEBUGMODE = os.getenv("DEBUGMODE", "False").lower() == "true"
+DEVICEFILE = os.getenv("DEVICEFILE", tinytuya.DEVICEFILE)
+SNAPSHOTFILE = os.getenv("SNAPSHOTFILE", tinytuya.SNAPSHOTFILE)
+CONFIGFILE = os.getenv("CONFIGFILE", tinytuya.CONFIGFILE)
+TCPTIMEOUT = float(os.getenv("TCPTIMEOUT", str(tinytuya.TCPTIMEOUT)))
+TCPPORT = int(os.getenv("TCPPORT", str(tinytuya.TCPPORT)))
+MAXCOUNT = int(os.getenv("MAXCOUNT", str(tinytuya.MAXCOUNT)))
+UDPPORT = int(os.getenv("UDPPORT", str(tinytuya.UDPPORT)))
+UDPPORTS = int(os.getenv("UDPPORTS", str(tinytuya.UDPPORTS)))
+UDPPORTAPP = int(os.getenv("UDPPORTAPP", str(tinytuya.UDPPORTAPP)))
+TIMEOUT = float(os.getenv("TIMEOUT", str(tinytuya.TIMEOUT)))
+RETRYTIME = int(os.getenv("RETRYTIME", "30"))
+RETRYCOUNT = int(os.getenv("RETRYCOUNT", "5"))
+SAVEDEVICEFILE = os.getenv("SAVEDEVICEFILE", "True").lower() == "true"
+DEBUGMODE = os.getenv("DEBUGMODE", "no").lower() == "yes"
 
 # Logging
 log = logging.getLogger(__name__)
@@ -124,7 +122,8 @@ newdevices = []
 retrydevices = {}
 retrytimer = 0
 cloudconfig = {'apiKey':'', 'apiSecret':'', 'apiRegion':'', 'apiDeviceID':''}
-
+forcescan = False
+forcescandone = True
 
 # Terminal formatting
 (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(True)
@@ -310,6 +309,7 @@ def tuyalisten(port):
         result["mac"] = mac
         result["key"] = dkey
         result["id"] = gwId
+        result["forced"] = False
 
         # add device if new
         if not appenddevice(result, deviceslist):
@@ -323,7 +323,6 @@ def tuyalisten(port):
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
-    pass
 
 def delayoff(d, sw):
     d.turn_off(switch=sw, nowait=True)
@@ -355,8 +354,10 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(bytes(message, "utf8"))
 
     def do_GET(self):
+        # pylint: disable=global-variable-not-assigned
         global retrytimer, retrydevices
         global cloudconfig, deviceslist
+        global forcescan, forcescandone
 
         self.send_response(200)
         message = "Error"
@@ -516,6 +517,8 @@ class handler(BaseHTTPRequestHandler):
             jout = {}
             jout["found"] = len(deviceslist)
             jout["registered"] = len(tuyadevices)
+            jout["forcescan"] = forcescan
+            jout["forcescandone"] = forcescandone
             message = json.dumps(jout)
         elif self.path.startswith('/status/'):
             id = self.path.split('/status/')[1]
@@ -561,6 +564,11 @@ class handler(BaseHTTPRequestHandler):
                 retrydevices['*'] = 1
         elif self.path == '/offline':
             message = json.dumps(offlineDevices())
+        elif self.path == '/scan':
+            # Force Scan for new devices
+            forcescan = True
+            forcescandone = False
+            message = json.dumps({"OK": "Forcing a scan for new devices."})
         else:
             # Serve static assets from web root first, if found.
             fcontent, ftype = get_static(web_root, self.path)
@@ -606,7 +614,7 @@ if __name__ == "__main__":
     tuyaUDPs = threading.Thread(target=tuyalisten, args=(UDPPORTS,))
     tuyaUDP7 = threading.Thread(target=tuyalisten, args=(UDPPORTAPP,))
     apiServer = threading.Thread(target=api, args=(APIPORT,))
-    
+
     print(
         "\n%sTinyTuya %s(Server)%s [%s%s]\n"
         % (bold, normal, dim, tinytuya.__version__, BUILD)
@@ -626,10 +634,50 @@ if __name__ == "__main__":
 
     print(" * API and UI Endpoint on http://localhost:%d" % APIPORT)
     log.debug("Server URL http://localhost:%d" % APIPORT)
-    
+
     try:
         while(True):
             log.debug("Discovered Devices: %d   " % len(deviceslist))
+            if forcescan:
+                print(" + ForceScan: Scan for new devices started...")
+                forcescan = False
+                retrytimer = time.time() + RETRYTIME
+                # def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
+                #   discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+                #   maxdevices=0)
+                try:
+                    found = scanner.devices(forcescan=True, verbose=False, discover=False, tuyadevices=tuyadevices)
+                except:
+                    log.error("Error during scanner.devices()")
+                    found = []
+                print(f" - ForceScan: Found {len(found)} devices")
+                for f in found:
+                    log.debug(f"   - {found[f]}")
+                    gwId = found[f]["id"]
+                    result = {}
+                    dname = dkey = mac = ""
+                    try:
+                        # Try to pull name and key data
+                        (dname, dkey, mac) = tuyaLookup(gwId)
+                    except:
+                        pass
+                    # set values
+                    result["name"] = dname
+                    result["mac"] = mac
+                    result["key"] = dkey
+                    result["id"] = gwId
+                    result["ip"] = found[f]["ip"]
+                    result["version"] = found[f]["version"]
+                    result["forced"] = True
+
+                    # add device if new
+                    if not appenddevice(result, deviceslist):
+                        # Added device to list
+                        if dname == "" and dkey == "" and result["id"] not in newdevices:
+                            # If fetching the key failed, save it to retry later
+                            retrydevices[result["id"]] = RETRYCOUNT
+                            newdevices.append(result["id"])
+                forcescandone = True
 
             if retrytimer <= time.time() or '*' in retrydevices:
                 if len(retrydevices) > 0:
@@ -671,4 +719,4 @@ if __name__ == "__main__":
         # Close down API thread
         print("Stopping threads...")
         log.debug("Stoppping threads")
-        requests.get('http://localhost:%d/stop' % APIPORT)
+        requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)

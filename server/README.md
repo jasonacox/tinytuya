@@ -110,6 +110,12 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### t12 - Force Scan
+
+* Added "Force Scan" button to cause server to run a network scan for devices not broadcasting.
+* Minor updates to UI for a cleaner title and footer to accommodate button.
+* Added logic to allow settings via environmental variables.
+
 ### t11 - Minimize Container
 
 * Reduce size of Docker container by removing rust build and using python:3.12-bookworm.
