@@ -104,7 +104,7 @@ docker start tinytuya
 
 The UI at http://localhost:8888 allows you to view and control the devices.
 
-![image](https://user-images.githubusercontent.com/836718/227736045-adb6e359-c0c1-44b9-b9ad-7e978f6b7b84.png)
+![image](https://github.com/jasonacox/tinytuya/assets/836718/e00a1f9a-48e2-400c-afa1-7a81799efa89)
 
 ![image](https://user-images.githubusercontent.com/836718/227736057-e5392c13-554f-457e-9082-43c4d41a98ed.png)
 
