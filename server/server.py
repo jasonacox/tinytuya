@@ -62,11 +62,10 @@ import tinytuya
 from tinytuya import scanner
 import os
 
-BUILD = "p12"
+BUILD = "p13"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
-DEBUGMODE = os.getenv("DEBUGMODE", "False").lower() == "true"
 DEVICEFILE = os.getenv("DEVICEFILE", tinytuya.DEVICEFILE)
 SNAPSHOTFILE = os.getenv("SNAPSHOTFILE", tinytuya.SNAPSHOTFILE)
 CONFIGFILE = os.getenv("CONFIGFILE", tinytuya.CONFIGFILE)
@@ -81,6 +80,14 @@ RETRYTIME = int(os.getenv("RETRYTIME", "30"))
 RETRYCOUNT = int(os.getenv("RETRYCOUNT", "5"))
 SAVEDEVICEFILE = os.getenv("SAVEDEVICEFILE", "True").lower() == "true"
 DEBUGMODE = os.getenv("DEBUGMODE", "no").lower() == "yes"
+HOST = os.getenv("HOST", None)
+BROADCAST = os.getenv("BROADCAST", None)
+
+# Set up broadcast address
+if HOST and not BROADCAST:
+    BROADCAST = HOST.split('.')
+    BROADCAST[3] = '255'
+    BROADCAST = '.'.join(BROADCAST)
 
 # Logging
 log = logging.getLogger(__name__)
@@ -275,6 +282,7 @@ def tuyalisten(port):
     """
     Thread to listen for Tuya devices UDP broadcast on port 
     """
+    global BROADCAST
     log.debug("Started tuyalisten thread on %d", port)
     print(" - tuyalisten %d Running" % port)
     last_broadcast = 0
@@ -290,11 +298,20 @@ def tuyalisten(port):
     client.bind(("", port))
     client.settimeout(5)
 
+    iface_list = None
+    if HOST:
+        iface_list = {}
+        iface_list[HOST] = { 'broadcast': BROADCAST }
+        log.debug("Using iface_list: %r", iface_list)
+
     while(running):
         if port == UDPPORTAPP and time.time() - last_broadcast > scanner.BROADCASTTIME:
-                log.debug("Sending discovery request to all 3.5 devices on the network")
+            log.debug("Sending discovery request to all 3.5 devices on the network")
+            if HOST:
+                scanner.send_discovery_request(iface_list)
+            else:
                 scanner.send_discovery_request()
-                last_broadcast = time.time()
+            last_broadcast = time.time()
         try:
             data, addr = client.recvfrom(4048)
         except (KeyboardInterrupt, SystemExit) as err:
@@ -653,6 +670,28 @@ if __name__ == "__main__":
         "\n%sTinyTuya %s(Server)%s [%s%s]\n"
         % (bold, normal, dim, tinytuya.__version__, BUILD)
     )
+
+    # IP Address
+    print("%sConfiguration Settings:" % dim)
+    if HOST:
+        print("   Using Host IP: %s%s%s" % (cyan, HOST, dim))
+    if BROADCAST:
+        print("   Using Broadcast IP: %s%s%s" % (cyan, BROADCAST, dim))
+    print("   UDP Ports: %s%d%s, %s%d%s, %s%d%s" % (cyan, UDPPORT, dim, cyan, UDPPORTS, dim, cyan, UDPPORTAPP, dim))
+    print("   TCP Port: %s%d%s" % (cyan, TCPPORT, dim))
+    print("   API Port: %s%d%s" % (cyan, APIPORT, dim))
+    print("   Device File: %s%s%s" % (cyan, DEVICEFILE, dim))
+    print("   Snapshot File: %s%s%s" % (cyan, SNAPSHOTFILE, dim))
+    print("   Config File: %s%s%s" % (cyan, CONFIGFILE, dim))
+    print("   TCP Timeout: %s%s%s" % (cyan, TCPTIMEOUT, dim))
+    print("   UDP Timeout: %s%s%s" % (cyan, TIMEOUT, dim))
+    print("   Max Devices: %s%s%s" % (cyan, MAXCOUNT, dim))
+    print("   Retry Time: %s%s%s" % (cyan, RETRYTIME, dim))
+    print("   Retry Count: %s%s%s" % (cyan, RETRYCOUNT, dim))
+    print("   Save Device File: %s%s%s" % (cyan, SAVEDEVICEFILE, dim))
+    print("   Debug Mode: %s%s%s" % (cyan, DEBUGMODE, dim))
+    print("")
+
     if len(tuyadevices) > 0:
         print("%s[Loaded devices.json - %d devices]%s\n" % (dim, len(tuyadevices), normal))
     else:
@@ -681,9 +720,10 @@ if __name__ == "__main__":
                 #   maxdevices=0)
                 try:
                     found = scanner.devices(forcescan=True, verbose=False, discover=False, assume_yes=True, tuyadevices=tuyadevices)
-                except:
-                    log.error("Error during scanner.devices()")
+                except Exception as err:
+                    log.error(f"Error during scanner.devices() {err}")
                     found = []
+                forcescandone = True
                 print(f" - ForceScan: Found {len(found)} devices")
                 for f in found:
                     log.debug(f"   - {found[f]}")
@@ -711,7 +751,6 @@ if __name__ == "__main__":
                             # If fetching the key failed, save it to retry later
                             retrydevices[result["id"]] = RETRYCOUNT
                             newdevices.append(result["id"])
-                forcescandone = True
 
             if cloudsync:
                 cloudsync = False
@@ -760,6 +799,13 @@ if __name__ == "__main__":
                         del retrydevices[devid]
             time.sleep(2)
     except (KeyboardInterrupt, SystemExit):
+        running = False
+        # Close down API thread
+        print("Stopping threads...")
+        log.debug("Stoppping threads")
+        requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)
+    except Exception as err:
+        log.error(f"Error in main loop: {err}")
         running = False
         # Close down API thread
         print("Stopping threads...")
