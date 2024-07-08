@@ -50,7 +50,7 @@ Starting threads...
 
 ## Docker Container
 
-1. Run the Server as a Docker Container listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container.
+1. Run the Server as a Docker Container listening on port 8888. Make sure your Tinytuya `devices.json` file is located in the directory where you start the container. Set `HOST` to the primary IP address of your docker host, otherwise a request to Force Scan the network will scan every possible docker IP network on your host.
 
     ```bash
     docker run \
