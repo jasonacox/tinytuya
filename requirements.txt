@@ -2,3 +2,4 @@
 cryptography>=3.1   # Encryption - AES can also be provided via PyCryptodome or pyaes or pyca/cryptography
 requests            # Used for Setup Wizard - Tuya IoT Platform calls
 colorama            # Makes ANSI escape character sequences work under MS Windows.
+netifaces           # Used to get the IP address of the local machine for scanning for devices.
