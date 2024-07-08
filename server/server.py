@@ -50,6 +50,7 @@ import os
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn 
+import ipaddress
 
 # Terminal color capability for all platforms
 try:
@@ -82,12 +83,20 @@ SAVEDEVICEFILE = os.getenv("SAVEDEVICEFILE", "True").lower() == "true"
 DEBUGMODE = os.getenv("DEBUGMODE", "no").lower() == "yes"
 HOST = os.getenv("HOST", None)
 BROADCAST = os.getenv("BROADCAST", None)
+NETWORK = None
 
-# Set up broadcast address
-if HOST and not BROADCAST:
-    BROADCAST = HOST.split('.')
-    BROADCAST[3] = '255'
-    BROADCAST = '.'.join(BROADCAST)
+# If HOST specified, set up broadcast address and calculate network
+if HOST:
+    if not BROADCAST:
+        BROADCAST = HOST.split('.')
+        BROADCAST[3] = '255'
+        BROADCAST = '.'.join(BROADCAST)
+    host_ip = ipaddress.IPv4Address(HOST)
+    broadcast_ip = ipaddress.IPv4Address(BROADCAST)
+    host_bits = int(host_ip)
+    broadcast_bits = int(broadcast_ip)
+    mask_length = 32 - (broadcast_bits - host_bits).bit_length()
+    NETWORK = str(ipaddress.IPv4Network(f"{host_ip}/{mask_length}", strict=False))
 
 # Logging
 log = logging.getLogger(__name__)
@@ -677,6 +686,8 @@ if __name__ == "__main__":
         print("   Using Host IP: %s%s%s" % (cyan, HOST, dim))
     if BROADCAST:
         print("   Using Broadcast IP: %s%s%s" % (cyan, BROADCAST, dim))
+    if NETWORK:
+        print("   Using Network: %s%s%s" % (cyan, NETWORK, dim))
     print("   UDP Ports: %s%d%s, %s%d%s, %s%d%s" % (cyan, UDPPORT, dim, cyan, UDPPORTS, dim, cyan, UDPPORTAPP, dim))
     print("   TCP Port: %s%d%s" % (cyan, TCPPORT, dim))
     print("   API Port: %s%d%s" % (cyan, APIPORT, dim))
@@ -719,7 +730,10 @@ if __name__ == "__main__":
                 #   discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
                 #   maxdevices=0)
                 try:
-                    found = scanner.devices(forcescan=True, verbose=False, discover=False, assume_yes=True, tuyadevices=tuyadevices)
+                    if NETWORK:
+                        found = scanner.devices(forcescan=[NETWORK], verbose=False, discover=False, assume_yes=True, tuyadevices=tuyadevices)
+                    else:
+                        found = scanner.devices(forcescan=True, verbose=False, discover=False, assume_yes=True, tuyadevices=tuyadevices)
                 except Exception as err:
                     log.error(f"Error during scanner.devices() {err}")
                     found = []
