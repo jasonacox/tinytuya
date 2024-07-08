@@ -104,11 +104,20 @@ docker start tinytuya
 
 The UI at http://localhost:8888 allows you to view and control the devices.
 
-![image](https://user-images.githubusercontent.com/836718/227736045-adb6e359-c0c1-44b9-b9ad-7e978f6b7b84.png)
+![image](https://github.com/jasonacox/tinytuya/assets/836718/e00a1f9a-48e2-400c-afa1-7a81799efa89)
 
 ![image](https://user-images.githubusercontent.com/836718/227736057-e5392c13-554f-457e-9082-43c4d41a98ed.png)
 
 ## Release Notes
+
+### p12 - Force Scan
+
+* Added "Force Scan" button to cause server to run a network scan for devices not broadcasting.
+* Minor updates to UI for a cleaner title and footer to accommodate button.
+* Added logic to allow settings via environmental variables.
+* Add broadcast request to local network for 3.5 devices. 
+* Fix bug with cloud sync refresh losing device mappings.
+* Added "Cloud Sync" button to poll cloud for updated device data.
 
 ### t11 - Minimize Container
 

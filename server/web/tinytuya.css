@@ -4,6 +4,11 @@ body {
     font-size: small;
 }
 .title {
+    /* Center the title  at top with blue background white text */
+    background-color: blue;
+    color: white;
+    text-align: center;
+    padding: 5px;
     font-size: large;
     font-weight: bold;
 }
@@ -11,13 +16,13 @@ body {
     color: green;
 }
 .id {
-    color: darkblue;
+    color: blue;
 }
 .offlinetext {
     color: red;
 }
 .version {
-    color: rgb(200, 200, 3);
+    color: rgb(195, 172, 89);
 }
 table {
     border-collapse: collapse;
@@ -56,6 +61,10 @@ a:hover, a:active {
     padding: 5px;
 }
 .row {
+    /* Full window height minus title and button */
+    height: calc(100vh - 100px);
+    /* Allow scroll */
+    overflow: auto;
     display: flex;
   }
 /* Clear floats after the columns */
@@ -66,4 +75,23 @@ a:hover, a:active {
 }
 .value {
     color: rgb(73, 73, 73);
+}
+.button {
+    /* put button a bottom of the page */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 40px;
+    width: 100%;
+    /* make it look like a button */
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    padding: 5px 5px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+    margin: 4px 2px;
+    cursor: pointer;
 }

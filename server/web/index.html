@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <title>TinyTuya API Server</title>
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="jquery-3.7.1.min.js"></script>
     <link rel="stylesheet" href="tinytuya.css">
 </head>
 
@@ -18,7 +18,11 @@
             <div class="offline"></div>
         </div>
     </div>
-    <div class="number"></div>
+    <div class="button">
+        <div class="number"></div>
+        <input id='forcescan' type='button' value='Force Scan' onclick='forcescan()'>
+        <input id='cloudsync' type='button' value='Cloud Sync' onclick='cloudsync()'>
+    </div>
     <script>
 
     // Get Version
@@ -31,6 +35,32 @@
         setTimeout(showversion, 10000);
     }
 
+    // Force Scan
+    function forcescan() {
+        // Change button text and disable - restore on scan completion
+        // via numdevices() function
+        $("#forcescan").prop('value', 'Scanning...');
+        $("#forcescan").prop('disabled', true);
+        // Call the scan API
+        var pwurl = window.location.protocol + "//" + window.location.host + "/scan";
+        $.getJSON(pwurl, function(data) {
+            console.log(data);
+        });        
+    }
+
+    // Cloud Sync
+    function cloudsync() {
+        // Change button text and disable - restore on sync completion
+        // via numdevices() function
+        $("#cloudsync").prop('value', 'Syncing...');
+        $("#cloudsync").prop('disabled', true);
+        // Call the sync API
+        var pwurl = window.location.protocol + "//" + window.location.host + "/sync";
+        $.getJSON(pwurl, function(data) {
+            console.log(data);
+        });        
+    }
+
     // Number of Devices
     function numdevices() {
         var pwurl = window.location.protocol + "//" + window.location.host + "/numdevices";
@@ -39,11 +69,36 @@
             ` - Registered: ${data.registered}`;
             var online = `Devices Online: ${data.found}`;
             var numoff = data.registered - data.found;
+            var forcescandone = data.forcescandone;
+            var cloudsyncdone = data.cloudsyncdone;
+            var cloudcreds = data.cloudcreds;
             if(numoff<0) numoff = 0;
             var offline = `Devices Offline: ${numoff}`;
             $(".onlinetext").html(online)
             $(".offlinetext").html(offline)
             $(".number").html(text);
+            // Update Force Scan button based on scan status
+            if(forcescandone) {
+                $("#forcescan").prop('value', 'Force Scan');
+                $("#forcescan").prop('disabled', false);
+            } else {
+                $("#forcescan").prop('value', 'Scanning...');
+                $("#forcescan").prop('disabled', true);
+            }
+            if(cloudsyncdone) {
+                if(cloudcreds) {
+                    $("#cloudsync").prop('value', 'Cloud Sync');
+                    $("#cloudsync").prop('disabled', false);
+                } else {
+                    $("#cloudsync").prop('value', 'Cloud Sync (No Credentials)');
+                    $("#cloudsync").prop('disabled', true);
+                }
+                $("#cloudsync").prop('value', 'Cloud Sync');
+                $("#cloudsync").prop('disabled', false);
+            } else {
+                $("#cloudsync").prop('value', 'Syncing...');
+                $("#cloudsync").prop('disabled', true);
+            }
         });
         setTimeout(numdevices, 1000);
     }
@@ -60,13 +115,15 @@
             var ip = "";
             var name = "";
             var ver = "";
+            var forced = "";
             for (let x in data) {
                 //console.log(x + ": "+ data[x])
                 let device = {
                     "name": data[x].name,
                     "id": x,
                     "ip": data[x].ip,
-                    "version": data[x].version
+                    "version": data[x].version,
+                    "forced": data[x].forced
                 }
                 deviceDB.push(device)
             }
@@ -77,12 +134,17 @@
             output = "<table><thead>\n<tr>\n<th>#</th><th>Device Name</th><th>Device ID</th>" +
                 "<th>IP Address</th><th>Version</th><th>Control</th>\n</tr></thead>\n<tbody>";
             for (let x in sortedDevices) {
+                if (sortedDevices[x].forced) {
+                    forced = " (F)";
+                } else {
+                    forced = "";
+                }
                 output = output + "<tr>\n<td>" + rownum + "</td>" + 
                     " <td> <a href='device_dps.html?id=" + sortedDevices[x].id + "'>" +
                     (sortedDevices[x].name.length > 0 ? sortedDevices[x].name : '[' + sortedDevices[x].id + ']') +
                     "</a> </td><td>" + 
                     "<div class='id'>" + sortedDevices[x].id + "</div></td><td>" +
-                    "<div class='address'>" + sortedDevices[x].ip + "</div></td><td>" +
+                    "<div class='address'>" + sortedDevices[x].ip + forced + "</div></td><td>" +
                     "<div class='version'>" + sortedDevices[x].version + "</div></td>" +  
                     " <td> <a href='device_dps.html?id=" + sortedDevices[x].id + "'>View</a></td>"
                     "\n</tr>\n";

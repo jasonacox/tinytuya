@@ -48,7 +48,7 @@ import signal
 import sys
 import os
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn 
 
 # Terminal color capability for all platforms
@@ -59,30 +59,28 @@ except:
     pass
 
 import tinytuya
+from tinytuya import scanner
+import os
 
-BUILD = "t11"
+BUILD = "p12"
 
-# Defaults
-APIPORT = 8888
-DEBUGMODE = False
-DEVICEFILE = tinytuya.DEVICEFILE
-SNAPSHOTFILE = tinytuya.SNAPSHOTFILE
-CONFIGFILE = tinytuya.CONFIGFILE
-TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
-TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
-MAXCOUNT = tinytuya.MAXCOUNT        # How many tries before stopping
-UDPPORT = tinytuya.UDPPORT          # Tuya 3.1 UDP Port
-UDPPORTS = tinytuya.UDPPORTS        # Tuya 3.3 encrypted UDP Port
-UDPPORTAPP = tinytuya.UDPPORTAPP    # Tuya App
-TIMEOUT = tinytuya.TIMEOUT          # Socket Timeout
-RETRYTIME = 30
-RETRYCOUNT = 5
-SAVEDEVICEFILE = True
-
-# Check for Environmental Overrides
-debugmode = os.getenv("DEBUG", "no")
-if debugmode.lower() == "yes":
-    DEBUGMODE = True
+# Defaults from Environment
+APIPORT = int(os.getenv("APIPORT", "8888"))
+DEBUGMODE = os.getenv("DEBUGMODE", "False").lower() == "true"
+DEVICEFILE = os.getenv("DEVICEFILE", tinytuya.DEVICEFILE)
+SNAPSHOTFILE = os.getenv("SNAPSHOTFILE", tinytuya.SNAPSHOTFILE)
+CONFIGFILE = os.getenv("CONFIGFILE", tinytuya.CONFIGFILE)
+TCPTIMEOUT = float(os.getenv("TCPTIMEOUT", str(tinytuya.TCPTIMEOUT)))
+TCPPORT = int(os.getenv("TCPPORT", str(tinytuya.TCPPORT)))
+MAXCOUNT = int(os.getenv("MAXCOUNT", str(tinytuya.MAXCOUNT)))
+UDPPORT = int(os.getenv("UDPPORT", str(tinytuya.UDPPORT)))
+UDPPORTS = int(os.getenv("UDPPORTS", str(tinytuya.UDPPORTS)))
+UDPPORTAPP = int(os.getenv("UDPPORTAPP", str(tinytuya.UDPPORTAPP)))
+TIMEOUT = float(os.getenv("TIMEOUT", str(tinytuya.TIMEOUT)))
+RETRYTIME = int(os.getenv("RETRYTIME", "30"))
+RETRYCOUNT = int(os.getenv("RETRYCOUNT", "5"))
+SAVEDEVICEFILE = os.getenv("SAVEDEVICEFILE", "True").lower() == "true"
+DEBUGMODE = os.getenv("DEBUGMODE", "no").lower() == "yes"
 
 # Logging
 log = logging.getLogger(__name__)
@@ -124,7 +122,11 @@ newdevices = []
 retrydevices = {}
 retrytimer = 0
 cloudconfig = {'apiKey':'', 'apiSecret':'', 'apiRegion':'', 'apiDeviceID':''}
-
+forcescan = False
+forcescandone = True
+cloudsync = False
+cloudsyncdone = True
+cloudcreds = True
 
 # Terminal formatting
 (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(True)
@@ -238,19 +240,25 @@ def tuyaLoadConfig():
 tuyadevices = tuyaLoadJson()
 cloudconfig = tuyaLoadConfig()
 
+# Start with Cloud API credentials
+if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
+    cloudcreds = False
+
 def tuyaCloudRefresh():
+    global tuyadevices
+    print(" + Cloud Refresh Requested")
     log.debug("Calling Cloud Refresh")
     if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
         log.debug("Cloud API config missing, not loading")
         return {'Error': 'Cloud API config missing'}
 
-    global tuyadevices
     cloud = tinytuya.Cloud( **cloudconfig )
     # on auth error, getdevices() will implode
     if cloud.error:
         return cloud.error
-    tuyadevices = cloud.getdevices(False)
+    tuyadevices = cloud.getdevices(verbose=False, oldlist=tuyadevices, include_map=True)
     tuyaSaveJson()
+    print(f" - Cloud Refresh Complete: {len(tuyadevices)} devices")
     return {'devices': tuyadevices}
 
 def getDeviceIdByName(name):
@@ -269,6 +277,7 @@ def tuyalisten(port):
     """
     log.debug("Started tuyalisten thread on %d", port)
     print(" - tuyalisten %d Running" % port)
+    last_broadcast = 0
 
     # Enable UDP listening broadcasting mode on UDP port 
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -282,6 +291,10 @@ def tuyalisten(port):
     client.settimeout(5)
 
     while(running):
+        if port == UDPPORTAPP and time.time() - last_broadcast > scanner.BROADCASTTIME:
+                log.debug("Sending discovery request to all 3.5 devices on the network")
+                scanner.send_discovery_request()
+                last_broadcast = time.time()
         try:
             data, addr = client.recvfrom(4048)
         except (KeyboardInterrupt, SystemExit) as err:
@@ -305,11 +318,14 @@ def tuyalisten(port):
             (dname, dkey, mac) = tuyaLookup(gwId)
         except:
             pass
+        if not gwId:
+            continue
         # set values
         result["name"] = dname
         result["mac"] = mac
         result["key"] = dkey
         result["id"] = gwId
+        result["forced"] = False
 
         # add device if new
         if not appenddevice(result, deviceslist):
@@ -323,7 +339,6 @@ def tuyalisten(port):
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
-    pass
 
 def delayoff(d, sw):
     d.turn_off(switch=sw, nowait=True)
@@ -355,8 +370,13 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(bytes(message, "utf8"))
 
     def do_GET(self):
+        # pylint: disable=global-variable-not-assigned
         global retrytimer, retrydevices
         global cloudconfig, deviceslist
+        global forcescan, forcescandone
+        global serverstats, running
+        global cloudcreds, cloudsync, cloudsyncdone
+        global tuyadevices, newdevices
 
         self.send_response(200)
         message = "Error"
@@ -381,6 +401,11 @@ class handler(BaseHTTPRequestHandler):
             # Give Internal Stats
             serverstats['ts'] = int(time.time())
             serverstats['mem'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            serverstats['cloudcreds'] = cloudcreds
+            serverstats['cloudsync'] = cloudsync
+            serverstats['cloudsyncdone'] = cloudsyncdone
+            serverstats['forcescan'] = forcescan
+            serverstats['forcescandone'] = forcescandone
             message = json.dumps(serverstats)
         elif self.path.startswith('/set/'):
             try:
@@ -516,6 +541,11 @@ class handler(BaseHTTPRequestHandler):
             jout = {}
             jout["found"] = len(deviceslist)
             jout["registered"] = len(tuyadevices)
+            jout["forcescan"] = forcescan
+            jout["forcescandone"] = forcescandone
+            jout["cloudsync"] = cloudsync
+            jout["cloudsyncdone"] = cloudsyncdone
+            jout["cloudcreds"] = cloudcreds
             message = json.dumps(jout)
         elif self.path.startswith('/status/'):
             id = self.path.split('/status/')[1]
@@ -542,8 +572,14 @@ class handler(BaseHTTPRequestHandler):
                 message = json.dumps({"Error": "Device ID not found.", "id": id})
                 log.debug("Device ID not found: %s" % id)  
         elif self.path == '/sync':
-            message = json.dumps(tuyaCloudRefresh())
-            retrytimer = time.time() + RETRYTIME
+            if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
+                message = json.dumps({"Error": "Cloud API config missing."})
+                log.debug("Cloud API config missing")
+            else:
+                message = json.dumps({"OK": "Cloud Sync Started."})
+            cloudsync = True
+            cloudsyncdone = False
+            retrytimer = 0
             retrydevices['*'] = 1
         elif self.path.startswith('/cloudconfig/'):
             cfgstr = self.path.split('/cloudconfig/')[1]
@@ -559,8 +595,14 @@ class handler(BaseHTTPRequestHandler):
                 message = json.dumps(tuyaCloudRefresh())
                 retrytimer = time.time() + RETRYTIME
                 retrydevices['*'] = 1
+                cloudcreds = all(cfg)
         elif self.path == '/offline':
             message = json.dumps(offlineDevices())
+        elif self.path == '/scan':
+            # Force Scan for new devices
+            forcescan = True
+            forcescandone = False
+            message = json.dumps({"OK": "Forcing a scan for new devices."})
         else:
             # Serve static assets from web root first, if found.
             fcontent, ftype = get_static(web_root, self.path)
@@ -571,7 +613,7 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(fcontent)
                 return
 
-        # Counts 
+        # Counts
         if "Error" in message:
             serverstats['errors'] = serverstats['errors'] + 1
         serverstats['gets'] = serverstats['gets'] + 1
@@ -606,7 +648,7 @@ if __name__ == "__main__":
     tuyaUDPs = threading.Thread(target=tuyalisten, args=(UDPPORTS,))
     tuyaUDP7 = threading.Thread(target=tuyalisten, args=(UDPPORTAPP,))
     apiServer = threading.Thread(target=api, args=(APIPORT,))
-    
+
     print(
         "\n%sTinyTuya %s(Server)%s [%s%s]\n"
         % (bold, normal, dim, tinytuya.__version__, BUILD)
@@ -626,17 +668,68 @@ if __name__ == "__main__":
 
     print(" * API and UI Endpoint on http://localhost:%d" % APIPORT)
     log.debug("Server URL http://localhost:%d" % APIPORT)
-    
+
     try:
         while(True):
             log.debug("Discovered Devices: %d   " % len(deviceslist))
+            if forcescan:
+                print(" + ForceScan: Scan for new devices started...")
+                forcescan = False
+                retrytimer = time.time() + RETRYTIME
+                # def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
+                #   discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+                #   maxdevices=0)
+                try:
+                    found = scanner.devices(forcescan=True, verbose=False, discover=False, assume_yes=True, tuyadevices=tuyadevices)
+                except:
+                    log.error("Error during scanner.devices()")
+                    found = []
+                print(f" - ForceScan: Found {len(found)} devices")
+                for f in found:
+                    log.debug(f"   - {found[f]}")
+                    gwId = found[f]["id"]
+                    result = {}
+                    dname = dkey = mac = ""
+                    try:
+                        # Try to pull name and key data
+                        (dname, dkey, mac) = tuyaLookup(gwId)
+                    except:
+                        pass
+                    # set values
+                    result["name"] = dname
+                    result["mac"] = mac
+                    result["key"] = dkey
+                    result["id"] = gwId
+                    result["ip"] = found[f]["ip"]
+                    result["version"] = found[f]["version"]
+                    result["forced"] = True
+
+                    # add device if new
+                    if not appenddevice(result, deviceslist):
+                        # Added device to list
+                        if dname == "" and dkey == "" and result["id"] not in newdevices:
+                            # If fetching the key failed, save it to retry later
+                            retrydevices[result["id"]] = RETRYCOUNT
+                            newdevices.append(result["id"])
+                forcescandone = True
+
+            if cloudsync:
+                cloudsync = False
+                cloudsyncdone = False
+                tuyaCloudRefresh()
+                cloudsyncdone = True
+                print(" - Cloud Sync Complete")
+                retrytimer = time.time() + RETRYTIME
+                retrydevices['*'] = 1
 
             if retrytimer <= time.time() or '*' in retrydevices:
                 if len(retrydevices) > 0:
                     # only refresh the cloud if we are not here because /sync was called
                     if '*' not in retrydevices:
+                        cloudsyncdone = False
                         tuyaCloudRefresh()
                         retrytimer = time.time() + RETRYTIME
+                        cloudsyncdone = True
                     found = []
                     # Try all unknown devices, even if the retry count expired
                     for devid in newdevices:
@@ -671,4 +764,4 @@ if __name__ == "__main__":
         # Close down API thread
         print("Stopping threads...")
         log.debug("Stoppping threads")
-        requests.get('http://localhost:%d/stop' % APIPORT)
+        requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)

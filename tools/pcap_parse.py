@@ -268,6 +268,7 @@ def process_pcap( pcap_file, args ):
     ignore_flows = {}
     flow_count = 0
     ip_devs = {}
+    bcast_devs = []
 
     if not args.sortable:
         print( 'Processing file %d %r' % (args.fnum, pcap_file.name) )
@@ -279,16 +280,23 @@ def process_pcap( pcap_file, args ):
             continue
 
         if( isinstance(eth.ip.data, dpkt.udp.UDP) ):
-            if( (eth.ip.udp.dport == 6667 or eth.ip.udp.dport == 6666) and eth.ip.src not in ip_devs ):
+            if( (eth.ip.udp.dport == 6667 or eth.ip.udp.dport == 6666 or eth.ip.udp.dport == 7000) and eth.ip.src not in ip_devs ):
                 try:
                     data = eth.ip.udp.data
                     devmac = mac_to_str( eth.src )
                     devip = inet_to_str( eth.ip.src )
-                    payload = json.loads( tinytuya.decrypt_udp( data ) )
-                    did, dkey, dver = get_key( dev=payload['gwId'], mac=devmac )
-                    payload['id'] = did
-                    payload['key'] = dkey.encode('utf8')
-                    ip_devs[devip] = payload
+                    payload_raw = tinytuya.decrypt_udp( data )
+                    payload = json.loads( payload_raw )
+                    bcast_dev = devip + ':' + str(eth.ip.udp.dport)
+                    if bcast_dev not in bcast_devs:
+                        if 'gwId' not in payload:
+                            print( 'Non-device broadcast from ', devip, '-', payload )
+                        bcast_devs.append( bcast_dev )
+                    if 'gwId' in payload:
+                        did, dkey, dver = get_key( dev=payload['gwId'], mac=devmac )
+                        payload['id'] = did
+                        payload['key'] = dkey.encode('utf8')
+                        ip_devs[devip] = payload
                 except:
                     traceback.print_exc()
 

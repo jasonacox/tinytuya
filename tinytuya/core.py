@@ -123,7 +123,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 14, 0)
+version_tuple = (1, 14, 1)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -171,6 +171,7 @@ UPDATEDPS       = 0x12 # 18 # FRM_LAN_QUERY_DP    # Request refresh of DPS
 UDP_NEW         = 0x13 # 19 # FR_TYPE_ENCRYPTION
 AP_CONFIG_NEW   = 0x14 # 20 # FRM_AP_CFG_WF_V40
 BOARDCAST_LPV34 = 0x23 # 35 # FR_TYPE_BOARDCAST_LPV34
+REQ_DEVINFO     = 0x25 # broadcast to port 7000 to get v3.5 devices to send their info
 LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
 
 # Protocol Versions and Headers
@@ -628,74 +629,28 @@ def find_device(dev_id=None, address=None):
         {'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}
     """
     if dev_id is None and address is None:
-        return (None, None, None)
-    log.debug("Listening for device %s on the network", dev_id)
+        return {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
 
-    # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
-    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    try:
-        client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    except AttributeError:
-        # SO_REUSEPORT not available
-        pass
-    client.bind(("", UDPPORT))
-    client.setblocking(False)
+    from . import scanner
 
-    # Enable UDP listening broadcasting mode on encrypted UDP port 6667 - 3.3 Devices
-    clients = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    clients.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    try:
-        clients.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    except AttributeError:
-        # SO_REUSEPORT not available
-        pass
-    clients.bind(("", UDPPORTS))
-    clients.setblocking(False)
-
-    deadline = time.time() + SCANTIME
-    selecttime = SCANTIME
+    want_ids = (dev_id,) if dev_id else None
+    want_ips = (address,) if address else None
+    all_results = scanner.devices(verbose=False, poll=False, forcescan=False, byID=True, wantids=want_ids, wantips=want_ips)
     ret = None
 
-    while (ret is None) and (selecttime > 0):
-        rd, _, _ = select.select( [client, clients], [], [], selecttime )
-        for sock in rd:
-            try:
-                data, addr = sock.recvfrom(4048)
-            except:
-                # Timeout
-                continue
-            ip = addr[0]
-            gwId = version = "" # pylint: disable=W0621
-            result = data
-            try:
-                result = decrypt_udp(result)
-                result = json.loads(result)
-                ip = result["ip"]
-                gwId = result["gwId"]
-                version = result["version"]
-                product_id = '' if 'productKey' not in result else result['productKey']
-                log.debug( 'find() received broadcast from %r: %r', ip, result )
-            except:
-                result = {"ip": ip}
-                log.debug( 'find() failed to decode broadcast from %r: %r', addr, data )
-                continue
+    for gwId in all_results:
+        # Check to see if we are only looking for one device
+        if dev_id and gwId != dev_id:
+            continue
+        if address and address != all_results[gwId]['ip']:
+            continue
 
-            # Check to see if we are only looking for one device
-            if dev_id and gwId == dev_id:
-                # We found it by dev_id!
-                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
-                break
-            elif address and address == ip:
-                # We found it by ip!
-                ret = {'ip':ip, 'version':version, 'id':gwId, 'product_id':product_id, 'data':result}
-                break
+        # We found it!
+        result = all_results[gwId]
+        product_id = '' if 'productKey' not in result else result['productKey']
+        ret = {'ip':result['ip'], 'version':result['version'], 'id':gwId, 'product_id':product_id, 'data':result}
+        break
 
-        selecttime = deadline - time.time()
-
-    # while
-    clients.close()
-    client.close()
     if ret is None:
         ret = {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
     log.debug( 'find() is returning: %r', ret )
@@ -1654,6 +1609,7 @@ class XenonDevice(object):
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
     def set_version(self, version): # pylint: disable=W0621
+        version = float(version)
         self.version = version
         self.version_str = "v" + str(version)
         self.version_bytes = str(version).encode('latin1')
