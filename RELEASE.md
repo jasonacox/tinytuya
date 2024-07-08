@@ -2,7 +2,14 @@
 
 ## v1.14.1 - Scanner Fixes
 
-* Fix force-scanning bug in scanner introduced in last release by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/511.
+* Fix force-scanning bug in scanner introduced in last release and add broadcast request feature to help discover Tuya version 3.5 devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/511.
+* Server p12 updates:
+    * Added "Force Scan" button to cause server to run a network scan for devices not broadcasting.
+    * Minor updates to UI for a cleaner title and footer to accommodate button.
+    * Added logic to allow settings via environmental variables.
+    * Add broadcast request to local network for version 3.5 devices. 
+    * Fix bug with cloud sync refresh that was losing device mappings.
+    * Added "Cloud Sync" button to poll cloud for updated device data.
 
 ## v1.14.0 - Command Line Updates
 

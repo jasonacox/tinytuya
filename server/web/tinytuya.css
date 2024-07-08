@@ -16,13 +16,13 @@ body {
     color: green;
 }
 .id {
-    color: darkblue;
+    color: blue;
 }
 .offlinetext {
     color: red;
 }
 .version {
-    color: rgb(200, 200, 3);
+    color: rgb(195, 172, 89);
 }
 table {
     border-collapse: collapse;
