@@ -931,6 +931,7 @@ class XenonDevice(object):
             self.socket = None
         if self.socket is None:
             # Set up Socket
+            self._last_status = {}
             retries = 0
             err = ERR_OFFLINE
             while retries < self.socketRetryLimit:
@@ -1002,6 +1003,7 @@ class XenonDevice(object):
         if (force or not self.socketPersistent) and self.socket:
             self.socket.close()
             self.socket = None
+            self._last_status = {}
 
     def _recv_all(self, length):
         tries = 2
@@ -1289,8 +1291,10 @@ class XenonDevice(object):
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
                     if found_child:
+                        found_child._cache_response(result)
                         result = found_child._process_response(result)
                     else:
+                        self._cache_response(result)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
@@ -1300,8 +1304,10 @@ class XenonDevice(object):
         self._check_socket_close()
 
         if found_child:
+            found_child._cache_response(result)
             return found_child._process_response(result)
 
+        self._cache_response(result)
         return self._process_response(result)
 
     def _decode_payload(self, payload):
@@ -1380,6 +1386,25 @@ class XenonDevice(object):
             json_payload['dps'] = json_payload['data']['dps']
 
         return json_payload
+
+    def _cache_response(self, response): # pylint: disable=R0201
+        """
+        Save (cache) the last value of every DP
+        """
+        if (not self.socketPersistent) or (not self.socket):
+            return
+
+        if response and isinstance(response, dict) and 'Error' not in response and 'Err' not in response:
+            for k in response:
+                if k == 'dps' and response[k] and isinstance(response[k], dict):
+                    if 'dps' not in self._last_status or not isinstance(self._last_status['dps'], dict):
+                        self._last_status['dps'] = {}
+                    for dkey in response[k]:
+                        self._last_status['dps'][dkey] = response[k][dkey]
+                #elif k == 'data' and response[k] and isinstance(response[k], dict) and 'dps' in response[k]:
+                #    pass
+                else:
+                    self._last_status[k] = response[k]
 
     def _process_response(self, response): # pylint: disable=R0201
         """
@@ -1565,6 +1590,17 @@ class XenonDevice(object):
 
         return data
 
+    def last_status(self, nowait=True):
+        if (not self.socketPersistent) or (not self.socket) or (not self._last_status):
+            if not nowait:
+                log.debug("Last status caching not available, requesting status from device")
+                return self.status()
+            log.debug("Last status caching not available, returning None")
+            return None
+
+        log.debug("Have status cache, returning it")
+        return self._last_status
+
     def subdev_query( self, nowait=False ):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
@@ -1625,6 +1661,7 @@ class XenonDevice(object):
         if self.socket and not persist:
             self.socket.close()
             self.socket = None
+            self._last_status = {}
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
