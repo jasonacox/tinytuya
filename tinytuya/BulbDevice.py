@@ -208,7 +208,7 @@ class BulbDevice(Device):
         super(BulbDevice, self).set_version(version)
 
         # Try to determine type of BulbDevice Type based on DPS indexes
-        status = self.status()
+        status = self.cached_status()
         if status is not None:
             if "dps" in status:
                 if "1" not in status["dps"]:
@@ -546,25 +546,25 @@ class BulbDevice(Device):
 
     def brightness(self):
         """Return brightness value"""
-        return self.status()[self.DPS][self.DPS_INDEX_BRIGHTNESS[self.bulb_type]]
+        return self.cached_status()[self.DPS][self.DPS_INDEX_BRIGHTNESS[self.bulb_type]]
 
     def colourtemp(self):
         """Return colour temperature"""
-        return self.status()[self.DPS][self.DPS_INDEX_COLOURTEMP[self.bulb_type]]
+        return self.cached_status()[self.DPS][self.DPS_INDEX_COLOURTEMP[self.bulb_type]]
 
     def colour_rgb(self):
         """Return colour as RGB value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
+        hexvalue = self.cached_status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
         return BulbDevice._hexvalue_to_rgb(hexvalue, self.bulb_type)
 
     def colour_hsv(self):
         """Return colour as HSV value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
+        hexvalue = self.cached_status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
         return BulbDevice._hexvalue_to_hsv(hexvalue, self.bulb_type)
 
     def state(self):
         """Return state of Bulb"""
-        status = self.status()
+        status = self.cached_status()
         state = {}
         if not status:
             return error_json(ERR_JSON, "state: empty response")
