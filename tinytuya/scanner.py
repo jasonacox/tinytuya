@@ -199,7 +199,7 @@ def get_ip_to_broadcast():
     ip_to_broadcast['255.255.255.255'] = getmyIP()
     return ip_to_broadcast
 
-def send_discovery_request( iface_list=None ):
+def send_discovery_request(iface_list=None):
     close_sockets = False
 
     if not iface_list:
@@ -208,31 +208,37 @@ def send_discovery_request( iface_list=None ):
         client_bcast_addrs = get_ip_to_broadcast()
         for bcast in client_bcast_addrs:
             addr = client_bcast_addrs[bcast]
-            iface_list[addr] = { 'broadcast': bcast }
+            iface_list[addr] = {'broadcast': bcast}
 
     for address in iface_list:
         iface = iface_list[address]
         if 'socket' not in iface:
-            iface['socket'] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
-            iface['socket'].setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            iface['socket'].bind( (address,0) )
+            try:
+                print(f"Attempting to bind to address: {address}")
+                iface['socket'] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+                iface['socket'].setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                iface['socket'].bind((address, 0))
+            except socket.gaierror as e:
+                print(f"Failed to bind to {address}: {e}")
+                continue
 
         if 'payload' not in iface:
-            bcast = json.dumps( {"from":"app","ip":address} ).encode()
-            bcast_msg = tinytuya.TuyaMessage( 0, tinytuya.REQ_DEVINFO, None, bcast, 0, True, tinytuya.PREFIX_6699_VALUE, True )
-            iface['payload'] = tinytuya.pack_message( bcast_msg, hmac_key=tinytuya.udpkey )
+            bcast = json.dumps({"from": "app", "ip": address}).encode()
+            bcast_msg = tinytuya.TuyaMessage(0, tinytuya.REQ_DEVINFO, None, bcast, 0, True, tinytuya.PREFIX_6699_VALUE, True)
+            iface['payload'] = tinytuya.pack_message(bcast_msg, hmac_key=tinytuya.udpkey)
 
         if 'port' not in iface:
             iface['port'] = 7000
 
-        log.debug( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
+        log.debug('Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'])
         # the official app always sends it twice, so do the same
-        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
-        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
+        iface['socket'].sendto(iface['payload'], (iface['broadcast'], iface['port']))
+        iface['socket'].sendto(iface['payload'], (iface['broadcast'], iface['port']))
 
         if close_sockets:
             iface['socket'].close()
             del iface['socket']
+
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
