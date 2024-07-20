@@ -364,6 +364,7 @@ while(True):
     # print(" > Send DPS Update Request < ")
     # payload = d.generate_payload(tinytuya.UPDATEDPS)
     # d.send(payload)    
+
 ```
 
 ### Tuya Cloud Access

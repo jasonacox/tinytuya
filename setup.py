@@ -9,7 +9,7 @@ with open("README.md", "r") as fh:
 INSTALL_REQUIRES = [
     'requests',      # Used for Setup Wizard - Tuya IoT Platform calls
     'colorama',      # Makes ANSI escape character sequences work under MS Windows.
-    'netifaces',     # Used for device discovery
+    #'netifaces',     # Used for device discovery, mainly required on multi-interface machines
 ]
 
 CHOOSE_CRYPTO_LIB = [
