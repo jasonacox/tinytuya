@@ -23,8 +23,7 @@ TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to
 # Example Usage of TinyTuya
 import tinytuya
 
-d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
 data = d.status() 
 print('Device status: %r' % data)
 ```
@@ -276,8 +275,7 @@ import tinytuya
 """
 OUTLET Device
 """
-d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
 data = d.status()  
 
 # Show status and state of first controlled switch on device
@@ -342,13 +340,10 @@ You can set up a persistent connection to a device and then monitor the state ch
 ```python
 import tinytuya
 
-d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY')
-d.set_version(3.3)
-d.set_socketPersistent(True)
+d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)
 
 print(" > Send Request for Status < ")
-payload = d.generate_payload(tinytuya.DP_QUERY)
-d.send(payload)
+d.status(nowait=True)
 
 print(" > Begin Monitor Loop <")
 while(True):
@@ -356,20 +351,20 @@ while(True):
     data = d.receive()
     print('Received Payload: %r' % data)
 
-    # Send keyalive heartbeat
-    print(" > Send Heartbeat Ping < ")
-    payload = d.generate_payload(tinytuya.HEART_BEAT)
-    d.send(payload)
+    # Send keep-alive heartbeat
+    if not data:
+        print(" > Send Heartbeat Ping < ")
+    	d.heartbeat()
 
     # NOTE If you are not seeing updates, you can force them - uncomment:
     # print(" > Send Request for Status < ")
-    # payload = d.generate_payload(tinytuya.DP_QUERY)
-    # d.send(payload)
+    # d.status(nowait=True)
 
     # NOTE Some smart plugs require an UPDATEDPS command to update power data
     # print(" > Send DPS Update Request < ")
     # payload = d.generate_payload(tinytuya.UPDATEDPS)
     # d.send(payload)    
+
 ```
 
 ### Tuya Cloud Access
@@ -565,9 +560,9 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 
 ```python
 # Example usage of community contributed device modules
-from tinytuya import Contrib
+from tinytuya.Contrib import ThermostatDevice
 
-thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+thermo = ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
 ```
 
 ## Tuya Data Points - DPS Table
@@ -869,9 +864,9 @@ NOTE (*) - Depending on the firmware, either 18/19/20/26/27 or 108/109/110/111/x
 A user contributed module is available for this device in the [Contrib library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
 
 ```python
-from tinytuya import Contrib
+from tinytuya.Contrib import ThermostatDevice
 
-thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+thermo = ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
 ```
 
 For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/discussions/139

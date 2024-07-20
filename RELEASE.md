@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.15.1 - Scanner Fixes
+
+* Fix scanner broadcast attempting to bind to the wrong IP address, introduced in v1.15.0
+
 ## v1.15.0 - Scanner Fixes
 
 * Fix force-scanning bug in scanner introduced in last release and add broadcast request feature to help discover Tuya version 3.5 devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/511.

@@ -96,13 +96,16 @@ FSCAN_FINAL_POLL = 100
 log = logging.getLogger(__name__)
 
 # Helper Functions
-def getmyIP():
+def getmyIPaddr():
     # Fetch my IP address and assume /24 network
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
-    r = s.getsockname()[0]
+    r = str(s.getsockname()[0])
     s.close()
-    r = str(r).split('.')
+    return r
+
+def getmyIP():
+    r = getmyIPaddr().split('.')
     # assume a /24 network
     return '%s.%s.%s.0/24' % tuple(r[:3])
 
@@ -196,7 +199,7 @@ def get_ip_to_broadcast():
         if ip_to_broadcast:
             return ip_to_broadcast
 
-    ip_to_broadcast['255.255.255.255'] = getmyIP()
+    ip_to_broadcast['255.255.255.255'] = getmyIPaddr()
     return ip_to_broadcast
 
 def send_discovery_request( iface_list=None ):
@@ -215,7 +218,11 @@ def send_discovery_request( iface_list=None ):
         if 'socket' not in iface:
             iface['socket'] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
             iface['socket'].setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            iface['socket'].bind( (address,0) )
+            try:
+                iface['socket'].bind( (address,0) )
+            except:
+                log.debug( 'Failed to bind to address %r for discovery broadcasts, skipping interface!', address, exc_info=True )
+                continue
 
         if 'payload' not in iface:
             bcast = json.dumps( {"from":"app","ip":address} ).encode()
