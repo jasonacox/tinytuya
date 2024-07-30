@@ -820,7 +820,7 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT, max_simultaneous_dps=0 # pylint: disable=W0621
     ):
         """
         Represents a Tuya device.
@@ -864,6 +864,7 @@ class XenonDevice(object):
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
         self.payload_dict = None
+        self.max_simultaneous_dps = max_simultaneous_dps
 
         if not local_key:
             local_key = ""
@@ -1394,17 +1395,7 @@ class XenonDevice(object):
         if (not self.socketPersistent) or (not self.socket):
             return
 
-        if response and isinstance(response, dict) and 'Error' not in response and 'Err' not in response:
-            for k in response:
-                if k == 'dps' and response[k] and isinstance(response[k], dict):
-                    if 'dps' not in self._last_status or not isinstance(self._last_status['dps'], dict):
-                        self._last_status['dps'] = {}
-                    for dkey in response[k]:
-                        self._last_status['dps'][dkey] = response[k][dkey]
-                #elif k == 'data' and response[k] and isinstance(response[k], dict) and 'dps' in response[k]:
-                #    pass
-                else:
-                    self._last_status[k] = response[k]
+        _merge_results(self._last_status, response)
 
     def _process_response(self, response): # pylint: disable=R0201
         """
@@ -1929,9 +1920,7 @@ class Device(XenonDevice):
             index = str(index)  # index and payload is a string
 
         payload = self.generate_payload(CONTROL, {index: value})
-
         data = self._send_receive(payload, getresponse=(not nowait))
-
         return data
 
     def set_multiple_values(self, data, nowait=False):
@@ -1942,11 +1931,53 @@ class Device(XenonDevice):
             data(dict): array of index/value pairs to set
             nowait(bool): True to send without waiting for response.
         """
+        # if nowait is set we can't detect failure
+        if nowait:
+            if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
+                # too many DPs, break it up into smaller chunks
+                ret = None
+                for k in data:
+                    ret = self.set_value(k, data[k], nowait=nowait)
+                return ret
+            else:
+                # send them all. since nowait is set we can't detect failure
+                out = {}
+                for k in data:
+                    out[str(k)] = data[k]
+                payload = self.generate_payload(CONTROL, out)
+                return self._send_receive(payload, getresponse=(not nowait))
+
+        if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
+            # too many DPs, break it up into smaller chunks
+            ret = {}
+            for k in data:
+                result = self.set_value(k, data[k], nowait=nowait)
+                _merge_results(ret, result)
+                time.sleep(1)
+            return ret
+
+        # send them all, but try to detect devices which cannot handle multiple
         out = {}
-        for i in data:
-            out[str(i)] = data[i]
+        for k in data:
+            out[str(k)] = data[k]
+
         payload = self.generate_payload(CONTROL, out)
-        return self._send_receive(payload, getresponse=(not nowait))
+        result = self._send_receive(payload, getresponse=(not nowait))
+
+        if result and 'Err' in result and len(out) > 1:
+            # sending failed! device might only be able to handle 1 DP at a time
+            for k in out:
+                res = self.set_value(k, out[k], nowait=nowait)
+                del out[k]
+                break
+            if res and 'Err' not in res:
+                # single DP succeeded! set limit to 1
+                self.max_simultaneous_dps = 1
+                result = res
+                for k in out:
+                    res = self.set_value(k, out[k], nowait=nowait)
+                    _merge_results(result, res)
+        return result
 
     def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""
@@ -2089,3 +2120,22 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
     """
     from . import scanner
     return scanner.devices(verbose=verbose, scantime=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
+
+# Merge multiple results into a single dict
+def _merge_results(dest, src):
+    if src and isinstance(src, dict) and 'Error' not in src and 'Err' not in src:
+        for k in src:
+            if k == 'dps' and src[k] and isinstance(src[k], dict):
+                if 'dps' not in dest or not isinstance(dest['dps'], dict):
+                    dest['dps'] = {}
+                for dkey in src[k]:
+                    dest['dps'][dkey] = src[k][dkey]
+            elif k == 'data' and src[k] and isinstance(src[k], dict) and 'dps' in src[k] and isinstance(src[k]['dps'], dict):
+                if k not in dest or not isinstance(dest[k], dict):
+                    dest[k] = {'dps': {}}
+                if 'dps' not in dest[k] or not isinstance(dest[k]['dps'], dict):
+                    dest[k]['dps'] = {}
+                for dkey in src[k]['dps']:
+                    dest[k]['dps'][dkey] = src[k]['dps'][dkey]
+            else:
+                dest[k] = src[k]
