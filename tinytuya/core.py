@@ -1591,6 +1591,7 @@ class XenonDevice(object):
         return data
 
     def cached_status(self, nowait=False):
+        """Return device last status."""
         if (not self.socketPersistent) or (not self.socket) or (not self._last_status):
             if not nowait:
                 log.debug("Last status caching not available, requesting status from device")

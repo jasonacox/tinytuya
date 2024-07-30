@@ -78,17 +78,23 @@ class BulbDevice(Device):
         "24": "colour",
     }
 
-    # Set Default Bulb Types
-    bulb_type = "A"
-    has_brightness = False
-    has_colourtemp = False
-    has_colour = False
-
     def __init__(self, *args, **kwargs):
+        # Set Default Bulb Types
+        self.bulb_type = None
+        self.has_brightness = None
+        self.has_colourtemp = None
+        self.has_colour = None
+
         # set the default version to None so we do not immediately connect and call status()
         if 'version' not in kwargs or not kwargs['version']:
             kwargs['version'] = None
         super(BulbDevice, self).__init__(*args, **kwargs)
+
+    def status(self, nowait=False):
+        result = super(BulbDevice, self).status(nowait=nowait)
+        if result and (not self.bulb_type) and (self.DPS in result):
+            self.detect_bulb(result)
+        return result
 
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):
@@ -197,49 +203,39 @@ class BulbDevice(Device):
         
         return (h, s, v)
 
-    def set_version(self, version): # pylint: disable=W0621
-        """
-        Set the Tuya device version 3.1 or 3.3 for BulbDevice
-        Attempt to determine BulbDevice Type: A or B based on:
-            Type A has keys 1-5 (default)
-            Type B has keys 20-29
-            Type C is Feit type bulbs from costco
-        """
-        super(BulbDevice, self).set_version(version)
-
-        # Try to determine type of BulbDevice Type based on DPS indexes
-        status = self.cached_status()
-        if status is not None:
-            if "dps" in status:
-                if "1" not in status["dps"]:
-                    self.bulb_type = "B"
-                if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in status["dps"]:
-                    self.has_brightness = True
-                if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in status["dps"]:
-                    self.has_colourtemp = True
-                if self.DPS_INDEX_COLOUR[self.bulb_type] in status["dps"]:
-                    self.has_colour = True
-            else:
-                self.bulb_type = "B"
-        else:
-            # response has no dps
-            self.bulb_type = "B"
-        log.debug("bulb type set to %s", self.bulb_type)
-
     def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
         if switch == 0:
+            if not self.bulb_type:
+                self.detect_bulb()
             switch = self.DPS_INDEX_ON[self.bulb_type]
         self.set_status(True, switch, nowait=nowait)
 
     def turn_off(self, switch=0, nowait=False):
         """Turn the device on"""
         if switch == 0:
+            if not self.bulb_type:
+                self.detect_bulb()
             switch = self.DPS_INDEX_ON[self.bulb_type]
         self.set_status(False, switch, nowait=nowait)
 
-    def set_bulb_type(self, type):
+    def set_bulb_type(self, type, has_brightness=None, has_colourtemp=None, has_colour=None):
         self.bulb_type = type
+
+        if has_brightness is not None:
+            self.has_brightness = has_brightness
+        elif self.has_brightness is None:
+            self.has_brightness = bool(self.DPS_INDEX_BRIGHTNESS[self.bulb_type])
+
+        if has_colourtemp is not None:
+            self.has_colourtemp = has_colourtemp
+        elif self.has_colourtemp is None:
+            self.has_colourtemp = bool(self.DPS_INDEX_COLOURTEMP[self.bulb_type])
+
+        if has_colour is not None:
+            self.has_colour = has_colour
+        elif self.has_colour is None:
+            self.has_colour = bool(self.DPS_INDEX_COLOUR[self.bulb_type])
 
     def set_mode(self, mode="white", nowait=False):
         """
@@ -249,6 +245,8 @@ class BulbDevice(Device):
             mode(string): white,colour,scene,music
             nowait(bool): True to send without waiting for response.
         """
+        if not self.bulb_type:
+            self.detect_bulb()
         return self.set_value( self.DPS_INDEX_MODE[self.bulb_type], mode, nowait=nowait )
 
     def set_scene(self, scene, nowait=False):
@@ -263,6 +261,9 @@ class BulbDevice(Device):
             return error_json(
                 ERR_RANGE, "set_scene: The value for scene needs to be between 1 and 4."
             )
+
+        if not self.bulb_type:
+            self.detect_bulb()
 
         if scene == 1:
             s = self.DPS_MODE_SCENE_1
@@ -304,12 +305,31 @@ class BulbDevice(Device):
                 "set_colour: The value for blue needs to be between 0 and 255.",
             )
 
+        if not self.bulb_type:
+            self.detect_bulb()
+
         hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b, self.bulb_type)
 
         payload = {
-            self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
             self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue,
         }
+
+        dp_index_mode = self.DPS_INDEX_MODE[self.bulb_type]
+        dp_index_on = self.DPS_INDEX_ON[self.bulb_type]
+
+        # check to see if power and mode also need to be set
+        state = self.cached_status(nowait=True)
+        if state and self.DPS in state and state[self.DPS]:
+            # last state is cached, so check to see if 'mode' needs to be set
+            if (dp_index_mode not in state[self.DPS]) or (state[self.DPS][dp_index_mode] != self.DPS_MODE_COLOUR):
+                payload[dp_index_mode] = self.DPS_MODE_COLOUR
+            # last state is cached, so check to see if 'power' needs to be set
+            if (dp_index_on not in state[self.DPS]) or (not state[self.DPS][dp_index_on]):
+                payload[dp_index_on] = True
+        else:
+            # last state not cached so just assume they're needed
+            payload[dp_index_mode] = self.DPS_MODE_COLOUR
+            payload[dp_index_on] = True
 
         return self.set_multiple_values( payload, nowait=nowait )
 
@@ -361,10 +381,13 @@ class BulbDevice(Device):
                 "set_white_percentage: Brightness percentage needs to be between 0 and 100.",
             )
 
-        b = int(25 + (255 - 25) * brightness / 100)
+        if not self.bulb_type:
+            self.detect_bulb()
 
         if self.bulb_type == "B":
             b = int(10 + (1000 - 10) * brightness / 100)
+        else:
+            b = int(25 + (255 - 25) * brightness / 100)
 
         # Colourtemp
         if not 0 <= colourtemp <= 100:
@@ -373,10 +396,10 @@ class BulbDevice(Device):
                 "set_white_percentage: Colourtemp percentage needs to be between 0 and 100.",
             )
 
-        c = int(255 * colourtemp / 100)
-
         if self.bulb_type == "B":
             c = int(1000 * colourtemp / 100)
+        else:
+            c = int(255 * colourtemp / 100)
 
         data = self.set_white(b, c, nowait=nowait)
         return data
@@ -392,6 +415,9 @@ class BulbDevice(Device):
 
             Default: Max Brightness and Min Colourtemp
         """
+        if not self.bulb_type:
+            self.detect_bulb()
+
         # Brightness (default Max)
         if brightness < 0:
             brightness = 255
@@ -421,10 +447,26 @@ class BulbDevice(Device):
             )
 
         payload = {
-            self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_WHITE,
             self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness,
             self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp,
         }
+
+        dp_index_mode = self.DPS_INDEX_MODE[self.bulb_type]
+        dp_index_on = self.DPS_INDEX_ON[self.bulb_type]
+
+        # check to see if power and mode also need to be set
+        state = self.cached_status(nowait=True)
+        if state and self.DPS in state and state[self.DPS]:
+            # last state is cached, so check to see if 'mode' needs to be set
+            if (dp_index_mode not in state[self.DPS]) or (state[self.DPS][dp_index_mode] != self.DPS_MODE_COLOUR):
+                payload[dp_index_mode] = self.DPS_MODE_WHITE
+            # last state is cached, so check to see if 'power' needs to be set
+            if (dp_index_on not in state[self.DPS]) or (not state[self.DPS][dp_index_on]):
+                payload[dp_index_on] = True
+        else:
+            # last state not cached so just assume they're needed
+            payload[dp_index_mode] = self.DPS_MODE_WHITE
+            payload[dp_index_on] = True
 
         return self.set_multiple_values( payload, nowait=nowait )
 
@@ -441,6 +483,10 @@ class BulbDevice(Device):
                 ERR_RANGE,
                 "set_brightness_percentage: Brightness percentage needs to be between 0 and 100.",
             )
+
+        if not self.bulb_type:
+            self.detect_bulb()
+
         b = int(25 + (255 - 25) * brightness / 100)
         if self.bulb_type == "B":
             b = int(10 + (1000 - 10) * brightness / 100)
@@ -456,6 +502,9 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness (25-255).
             nowait(bool): True to send without waiting for response.
         """
+        if not self.bulb_type:
+            self.detect_bulb()
+
         if self.bulb_type == "A" and not 25 <= brightness <= 255:
             return error_json(
                 ERR_RANGE,
@@ -513,6 +562,10 @@ class BulbDevice(Device):
                 ERR_RANGE,
                 "set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.",
             )
+
+        if not self.bulb_type:
+            self.detect_bulb()
+
         c = int(255 * colourtemp / 100)
         if self.bulb_type == "B":
             c = int(1000 * colourtemp / 100)
@@ -528,6 +581,10 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature (0-255).
             nowait(bool): True to send without waiting for response.
         """
+
+        if not self.bulb_type:
+            self.detect_bulb()
+
         if not self.has_colourtemp:
             log.debug("set_colourtemp: Device does not appear to support colortemp.")
             # return error_json(ERR_FUNCTION, "set_colourtemp: Device does not support colortemp.")
@@ -546,19 +603,23 @@ class BulbDevice(Device):
 
     def brightness(self):
         """Return brightness value"""
+        if not self.bulb_type: self.detect_bulb()
         return self.cached_status()[self.DPS][self.DPS_INDEX_BRIGHTNESS[self.bulb_type]]
 
     def colourtemp(self):
         """Return colour temperature"""
+        if not self.bulb_type: self.detect_bulb()
         return self.cached_status()[self.DPS][self.DPS_INDEX_COLOURTEMP[self.bulb_type]]
 
     def colour_rgb(self):
         """Return colour as RGB value"""
+        if not self.bulb_type: self.detect_bulb()
         hexvalue = self.cached_status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
         return BulbDevice._hexvalue_to_rgb(hexvalue, self.bulb_type)
 
     def colour_hsv(self):
         """Return colour as HSV value"""
+        if not self.bulb_type: self.detect_bulb()
         hexvalue = self.cached_status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
         return BulbDevice._hexvalue_to_hsv(hexvalue, self.bulb_type)
 
@@ -580,3 +641,54 @@ class BulbDevice(Device):
                 state[self.DPS_2_STATE[key]] = status[self.DPS][key]
 
         return state
+
+    def detect_bulb(self, response=None, default='B'):
+        """
+        Attempt to determine BulbDevice Type: A, B or C based on:
+            Type A has keys 1-5
+            Type B has keys 20-29
+            Type C is Feit type bulbs from costco
+        """
+        if not response:
+            response = self.cached_status(nowait=True)
+            if (not response) or (self.DPS not in response):
+                response = self.status()
+                # return here as self.status() will call us again
+                return
+        if response and self.DPS in response:
+            # Try to determine type of BulbDevice Type based on DPS indexes
+            if self.bulb_type is None:
+                if self.DPS_INDEX_ON['B'] in response[self.DPS]:
+                    self.bulb_type = "B"
+                elif self.DPS_INDEX_ON['A'] in response[self.DPS] and self.DPS_INDEX_BRIGHTNESS['A'] in response[self.DPS]:
+                    if self.DPS_INDEX_COLOURTEMP['A'] in response[self.DPS] or self.DPS_INDEX_COLOUR['A'] in response[self.DPS]:
+                        self.bulb_type = 'A'
+                    else:
+                        self.bulb_type = 'C'
+
+            if self.bulb_type:
+                if self.has_brightness is None:
+                    if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in response["dps"]:
+                        self.has_brightness = True
+                if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in response["dps"]:
+                    self.has_colourtemp = True
+                if self.DPS_INDEX_COLOUR[self.bulb_type] in response["dps"]:
+                    self.has_colour = True
+                log.debug("Bulb type set to %r. has brightness: %r, has colourtemp: %r, has colour: %r", self.bulb_type, self.has_brightness, self.has_colourtemp, self.has_colour)
+            else:
+                log.debug("No known DPs, bulb type detection failed!")
+                self.bulb_type = default
+                self.assume_bulb_attribs()
+        else:
+            # response has no dps
+            log.debug("No DPs in response, cannot detect bulb type!")
+            self.bulb_type = default
+            self.assume_bulb_attribs()
+
+    def assume_bulb_attribs(self):
+        if self.has_brightness is None:
+            self.has_brightness = bool(self.DPS_INDEX_BRIGHTNESS[self.bulb_type])
+        if self.has_colourtemp is None:
+            self.has_colourtemp = bool(self.DPS_INDEX_COLOURTEMP[self.bulb_type])
+        if self.has_colour is None:
+            self.has_colour = bool(self.DPS_INDEX_COLOUR[self.bulb_type])
