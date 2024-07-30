@@ -276,7 +276,7 @@ class BulbDevice(Device):
 
         return self.set_value( self.DPS_INDEX_MODE[self.bulb_type], s, nowait=nowait )
 
-    def set_colour(self, r, g, b, nowait=False):
+    def set_colour(self, r, g, b, nowait=False, force=False):
         """
         Set colour of an rgb bulb.
 
@@ -319,7 +319,7 @@ class BulbDevice(Device):
 
         # check to see if power and mode also need to be set
         state = self.cached_status(nowait=True)
-        if state and self.DPS in state and state[self.DPS]:
+        if (not force) and state and self.DPS in state and state[self.DPS]:
             # last state is cached, so check to see if 'mode' needs to be set
             if (dp_index_mode not in state[self.DPS]) or (state[self.DPS][dp_index_mode] != self.DPS_MODE_COLOUR):
                 payload[dp_index_mode] = self.DPS_MODE_COLOUR
@@ -404,7 +404,7 @@ class BulbDevice(Device):
         data = self.set_white(b, c, nowait=nowait)
         return data
 
-    def set_white(self, brightness=-1, colourtemp=-1, nowait=False):
+    def set_white(self, brightness=-1, colourtemp=-1, nowait=False, force=False):
         """
         Set white coloured theme of an rgb bulb.
 
@@ -456,9 +456,9 @@ class BulbDevice(Device):
 
         # check to see if power and mode also need to be set
         state = self.cached_status(nowait=True)
-        if state and self.DPS in state and state[self.DPS]:
+        if (not force) and state and self.DPS in state and state[self.DPS]:
             # last state is cached, so check to see if 'mode' needs to be set
-            if (dp_index_mode not in state[self.DPS]) or (state[self.DPS][dp_index_mode] != self.DPS_MODE_COLOUR):
+            if (dp_index_mode not in state[self.DPS]) or (state[self.DPS][dp_index_mode] != self.DPS_MODE_WHITE):
                 payload[dp_index_mode] = self.DPS_MODE_WHITE
             # last state is cached, so check to see if 'power' needs to be set
             if (dp_index_on not in state[self.DPS]) or (not state[self.DPS][dp_index_on]):
