@@ -163,6 +163,27 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
         time.sleep(20)
     ```
 
+### BlanketDevice
+
+* BlanketDevice - A community-contributed Python module to add support for Tuya WiFi smart electric blankets
+* Author: [Leo Denham](https://github.com/leodenham)
+* Tested: [Goldair Platinum Electric Blanket GPFAEB-Q](https://www.target.com.au/p/goldair-platinum-electric-blanket-gpfaeb-q/8300270020_white)
+
+  ```python
+  from tinytuya.Contrib import BlanketDevice
+  import time
+
+  device = BlanketDevice.BlanketDevice(dev_id="XXXX", address="Y.Y.Y.Y", local_key="ZZZZ", version=3.3)
+
+  device.turn_on()
+
+  # Heat up for 20 minutes then maintain nice temperature overnight.
+  device.set_body_level(6)
+  time.sleep(60*20)
+  device.set_body_level(2)
+  device.set_body_time(12)
+  ```
+
 ## Submit Your Device
 
 * We welcome new device modules!
