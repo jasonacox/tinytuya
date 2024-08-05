@@ -34,7 +34,8 @@
 
 import colorsys
 
-from .core import * # pylint: disable=W0401, W0614
+from .core import Device, log
+from .core import error_json, ERR_JSON, ERR_RANGE, ERR_STATE
 
 class BulbDevice(Device):
     """

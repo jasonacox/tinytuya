@@ -26,6 +26,8 @@
     device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
     assign_dp_mappings(tuyadevices, mappings)   # Adds mappings to all the devices in the tuyadevices list
     decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
+    merge_dps_results(dest, src)                # Merge multiple receive() responses into a single dict
+                                                #   `src` will be combined with and merged into `dest`
 
  Device Functions
     json = status()                    # returns json payload
@@ -872,6 +874,7 @@ class XenonDevice(object):
         self.remote_nonce = b''
         self.payload_dict = None
         self._last_status = {}
+        self._have_status = False
         self.max_simultaneous_dps = max_simultaneous_dps if max_simultaneous_dps else 0
         self.version = 0.0
         self.version_str = 'v0.0'
@@ -937,7 +940,7 @@ class XenonDevice(object):
             self.socket = None
         if self.socket is None:
             # Set up Socket
-            self._last_status = {}
+            self.cache_clear()
             retries = 0
             err = ERR_OFFLINE
             while retries < self.socketRetryLimit:
@@ -1009,7 +1012,7 @@ class XenonDevice(object):
         if (force or not self.socketPersistent) and self.socket:
             self.socket.close()
             self.socket = None
-            self._last_status = {}
+            self.cache_clear()
 
     def _recv_all(self, length):
         tries = 2
@@ -1598,7 +1601,7 @@ class XenonDevice(object):
                 json from status() if nowait=False, or
                 None if nowait=True
         """
-        if (not self.socketPersistent) or (not self.socket) or (not self._last_status):
+        if (not self._have_status) or (not self.socketPersistent) or (not self.socket) or (not self._last_status):
             if not nowait:
                 log.debug("Last status caching not available, requesting status from device")
                 return self.status()
@@ -1610,6 +1613,7 @@ class XenonDevice(object):
 
     def cache_clear(self):
         self._last_status = {}
+        self._have_status = False
 
     def subdev_query( self, nowait=False ):
         """Query for a list of sub-devices and their status"""
@@ -1671,7 +1675,7 @@ class XenonDevice(object):
         if self.socket and not persist:
             self.socket.close()
             self.socket = None
-            self._last_status = {}
+            self.cache_clear()
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
@@ -1800,6 +1804,10 @@ class XenonDevice(object):
 
         if command_override is None:
             command_override = command
+
+        if command == DP_QUERY:
+            self._have_status = True
+
         if json_data is None:
             # I have yet to see a device complain about included but unneeded attribs, but they *will*
             # complain about missing attribs, so just include them all unless otherwise specified
@@ -2147,7 +2155,8 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
     from . import scanner
     return scanner.devices(verbose=verbose, scantime=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
 
-# Merge multiple results into a single dict
+# Merge multiple receive() responses into a single dict
+# `src` will be combined with and merged into `dest`
 def merge_dps_results(dest, src):
     if src and isinstance(src, dict) and 'Error' not in src and 'Err' not in src:
         for k in src:
