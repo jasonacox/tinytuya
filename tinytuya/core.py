@@ -29,6 +29,10 @@
 
  Device Functions
     json = status()                    # returns json payload
+    json = cached_status(nowait=False) # When a persistent connection is open, this will return a cached version of the device status
+                                       #   if nowait=False (the default), a status() call will be made if no cached status is available.
+                                       #   if nowait=True, `None` will be returned immediately if no cached status is available.
+    cache_clear()                      # Clears the cache, causing cached_status() to either call status() or return None
     subdev_query(nowait)               # query sub-device status (only for gateway devices)
     set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
     set_socketPersistent(False/True)   # False [default] or True
@@ -122,7 +126,7 @@ if CRYPTOLIB is None:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 15, 0)
+version_tuple = (1, 15, 2)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -1583,7 +1587,17 @@ class XenonDevice(object):
         return data
 
     def cached_status(self, nowait=False):
-        """Return device last status."""
+        """
+        Return device last status if a persistent connection is open.
+
+        Args:
+            nowait(bool): If cached status is is not available, either call status() (when nowait=False) or immediately return None (when nowait=True)
+
+        Response:
+            json if cache is available, else
+                json from status() if nowait=False, or
+                None if nowait=True
+        """
         if (not self.socketPersistent) or (not self.socket) or (not self._last_status):
             if not nowait:
                 log.debug("Last status caching not available, requesting status from device")

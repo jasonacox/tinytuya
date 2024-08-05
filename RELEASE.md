@@ -1,5 +1,17 @@
 # RELEASE NOTES
 
+## v1.15.2 - Caching and BulbDevice updates
+
+* When a persistent connection is open, the new function `d.cached_status()` will return a cached version of the device status.
+    * When called as `d.cached_status(nowait=False)` (the default) a `d.status()` call will be made if no cached status is available.
+    * When called as `d.cached_status(nowait=True)` then `None` will be returned immediately if no cached status is available.
+* BulbDevice now uses the cached status (when available) to minimize the number of DPs sent when changing color.  Call `d.cache_clear()` before changing color to force it to send all DPs.
+* New device argument `max_simultaneous_dps` added to limit the number of simultaneous DP updates sent by `d.set_multiple_values()`.  Some bulbs cannot handle multiple DPs set in a single command and require `max_simultaneous_dps=1`. (#504)
+
+## v1.15.1 - Scanner Fixes
+
+* Fix scanner broadcast attempting to bind to the wrong IP address, introduced in v1.15.0
+
 ## v1.15.0 - Scanner Fixes
 
 * Fix force-scanning bug in scanner introduced in last release and add broadcast request feature to help discover Tuya version 3.5 devices by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/511.
