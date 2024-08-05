@@ -218,7 +218,11 @@ def send_discovery_request( iface_list=None ):
         if 'socket' not in iface:
             iface['socket'] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
             iface['socket'].setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            iface['socket'].bind( (address,0) )
+            try:
+                iface['socket'].bind( (address,0) )
+            except:
+                log.debug( 'Failed to bind to address %r for discovery broadcasts, skipping interface!', address, exc_info=True )
+                continue
 
         if 'payload' not in iface:
             bcast = json.dumps( {"from":"app","ip":address} ).encode()
