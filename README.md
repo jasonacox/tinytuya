@@ -83,6 +83,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Click "Service API" tab
         - Click "**Go to Authorize**" button
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
+    * **RENEWAL:** The subscription to the `IoT Core` service expires after some time. By default, when you subscribe to it for the first time, it will last for one month. Once expired, the setup wizard won't be able to communicate with the Tuya account anymore, so it needs to be renewed. As of November 12th 2024, it can be renewed for a duration of 1, 3 or 6 months by simply filling in a form with some basic information (e.g. purpose of the project, type of developer).
 
 5. WIZARD - Run Setup Wizard:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
