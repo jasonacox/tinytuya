@@ -184,6 +184,45 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
   device.set_body_time(12)
   ```
 
+### ColorfulX7Device
+
+* ColorfulX7Device - A community-contributed Python module to add support for Tuya Smart WiFi Zigbee BT 'Colorful-X7' LED Music Controller
+* Author: [Ahmed Chehaibi](https://github.com/CheAhMeD)
+* Tested: [Colorful-X7 mini](https://www.superlightingled.com/colorful-x7-mini-smart-wifi-addressable-rgb-led-music-controller-p-6494.html)
+
+  ```python
+    from tinytuya.Contrib import ColorfulX7Device
+    import time
+    
+    EQUILIZER_DEVICE_ID  = 'XXXXXxx'                                                                  
+    EQUILIZER_DEVICE_IP  = 'Y.Y.Y.Y'                                                                           
+    EQUILIZER_DEVICE_KEY = 'ZzZzZzZ'
+    
+    controller = ColorfulX7Device.ColorfulX7Device(
+        dev_id=EQUILIZER_DEVICE_ID, 
+        address=EQUILIZER_DEVICE_IP, 
+        local_key=EQUILIZER_DEVICE_KEY, 
+        version="3.5")
+    
+    controller.switch_off()
+    state = "ON" if controller.is_on() else "OFF"
+    print("Colorful-X7 Status: {}".format(state))
+    time.sleep(0.5)
+    controller.switch_on()
+    state = "ON" if controller.is_on() else "OFF"
+    print("Colorful-X7 Status: {}".format(state))
+    # Set up the controller for 16x16 WS2811 led matrix
+    controller.set_segments_number(16)
+    controller.set_leds_PerSegment(16)
+    controller.set_led_brand("WS2811")
+    # Loop through the dynamic modes
+    controller.set_work_mode('DYNAMIC')
+    for i in range(1, 180):
+        controller.set_dynamic_mode(i)
+        time.sleep(2)
+  
+  ```
+
 ## Submit Your Device
 
 * We welcome new device modules!
