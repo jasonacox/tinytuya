@@ -238,7 +238,7 @@ class ColorfulX7Device(Device):
         if not 0 <= value <= 100:
             return error_json(
                 ERR_RANGE,
-                "setSpeed: The value for speed needs to be between 0 and 100 (ms)."
+                "set_speed: The value for speed needs to be between 0 and 100 (ms)."
             )
         self.set_value(self.DPS_INDEX_DYNAMIC_INTV, value)
 
@@ -274,7 +274,7 @@ class ColorfulX7Device(Device):
         if not 1 <= mode <= 22:
             return error_json(
                 ERR_RANGE,
-                "setMusicMode: The music mode needs to be between 1 and 22."
+                "set_music_mode: The music mode needs to be between 1 and 22."
             )
         self.set_value(self.DPS_INDEX_MUSIC_MODE, mode)
 
@@ -282,7 +282,7 @@ class ColorfulX7Device(Device):
         if not 0 <= value <= 100:
             return error_json(
                 ERR_RANGE,
-                "setSensitivity: The music sensitivity needs to be between 0 and 100."
+                "set_sensitivity: The music sensitivity needs to be between 0 and 100."
             )
         self.set_value(self.DPS_INDEX_SENSITIVITY, value)
 
@@ -329,7 +329,7 @@ class ColorfulX7Device(Device):
         if not 1 <= mode <= 30:
             return error_json(
                 ERR_RANGE,
-                "setScreenMode: The screen mode needs to be between 1 and 30."
+                "set_screen_mode: The screen mode needs to be between 1 and 30."
             )
         self.set_value(self.DPS_INDEX_SCREEN_MODE, mode)
 
