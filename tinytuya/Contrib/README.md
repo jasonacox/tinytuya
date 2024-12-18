@@ -223,6 +223,28 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
   
   ```
 
+### WiFiDualMeterDevice
+
+* WiFiDualMeterDevice - A community-contributed Python module to add support for Tuya WiFi Dual Meter device
+* Author: [Guillaume Gardet](https://github.com/ggardet)
+
+```
+from tinytuya.Contrib import WiFiDualMeterDevice
+
+wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
+      dev_id='YOUR_DEV_ID',
+      address='192.168.XX.YY',      # Or set to 'Auto' to auto-discover IP address
+      local_key='LOCAL_KEY',
+      version=3.4)
+
+# Print all known values
+wdm.print_all()
+
+# Only print Voltage and frequency
+print(wdm.get_freq())
+print(wdm.get_voltage())
+
+
 ## Submit Your Device
 
 * We welcome new device modules!

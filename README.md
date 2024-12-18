@@ -872,6 +872,51 @@ thermo = ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '12345678
 
 For info on the Sensor Data lists, see https://github.com/jasonacox/tinytuya/discussions/139
 
+#### Version 3.4 - WIFI Dual Meter (i.e. PJ1103A)
+| DP ID        | Function Point | Type        | Range       | Units |
+| ------------- | ------------- | ------------- | ------------- |------------- |
+|1|Forward energy total|integer||kWh x 100|
+|2|Reverse energy total|integer||kWh x 100|
+|101|Power (A)|integer||W x 10|
+|102|Direction of current flow (A)| enum | <ul><li>FORWARD</li><li>REVERSE</li></ul> ||
+|104|Direction of current flow (B)| enum | <ul><li>FORWARD</li><li>REVERSE</li></ul> ||
+|105|Power (B)|integer||W x 10|
+|106|Energy forward (A)|integer||kWh x 100|
+|107|Energy reverse (A)|integer||kWh x 100|
+|108|Energy forward (B)|integer||kWh x 100|
+|109|Energy reverse (B)|integer||kWh x 100|
+|110|Power Factor (A)|integer||value x 100|
+|111|AC frequency|integer||Hz x 100|
+|112|AC voltage|integer||V x 10|
+|113|Current (A)|integer||mA|
+|114|Current (B)|integer||mA|
+|115|Total power|integer||W x 10|
+|116|Voltage Calibration|integer|800-1200|value * 1000|
+|117|Current Calibration (A)|integer|800-1200|value * 1000|
+|118|Power Calibration (A)|integer|800-1200|value * 1000|
+|119|Energy Calibration forward (A)|integer|800-1200|value * 1000|
+|121|Power Factor (B)|integer||value x 100|
+|122|Frequency Calibration|integer|800-1200|value * 1000|
+|123|Current Calibration (B)|integer|800-1200|value * 1000|
+|124|Power Calibration (B)|integer|800-1200|value * 1000|
+|125|Energy Calibration forward (B)|integer|800-1200|value * 1000|
+|127|Energy Calibration reverse (A)|integer|800-1200|value * 1000|
+|128|Energy Calibration reverse (B)|integer|800-1200|value * 1000|
+|129|Report Rate Control|integer|3-60|s|
+
+Note: (A) or (B) means channel A or channel B
+
+A user contributed module is available for this device in the [Contrib library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
+
+```python                                                                                                                                                                                                         from tinytuya.Contrib import WiFiDualMeterDevice
+
+wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
+    dev_id='abcdefghijklmnop123456',
+    address='192.168.0.29',      # Or set to 'Auto' to auto-discover IP address
+    local_key='1234567890123abc',
+    version=3.4)
+```
+
 ### Tuya References
 
 * Tuya Hardware Development - Protocol: https://developer.tuya.com/en/docs/iot/device-development/embedded-software-development/mcu-development-access/wifi-mcu-sdk-solution/tuya-cloud-universal-serial-port-access-protocol?id=K9hhi0xxtn9cb
