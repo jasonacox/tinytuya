@@ -11,11 +11,11 @@ import struct
 import time
 import sys
 
-from tinytuya.const import DEVICEFILE, TCPPORT
-from tinytuya.crypto_helper import AESCipher
-from tinytuya.error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ERR_OFFLINE, ERR_PAYLOAD, error_json
-from tinytuya.exceptions import DecodeError
-from tinytuya.message_helper import AP_CONFIG, CONTROL, CONTROL_NEW, DP_QUERY, DP_QUERY_NEW, HEART_BEAT, LAN_EXT_STREAM, MESSAGE_HEADER_FMT_55AA, MESSAGE_HEADER_FMT_6699, NO_PROTOCOL_HEADER_CMDS, PREFIX_55AA_BIN, PREFIX_55AA_VALUE, PREFIX_6699_BIN, PREFIX_6699_VALUE, PROTOCOL_VERSION_BYTES_31, SESS_KEY_NEG_FINISH, SESS_KEY_NEG_RESP, SESS_KEY_NEG_START, STATUS, SUFFIX_BIN, UPDATEDPS, MessagePayload, PROTOCOL_3x_HEADER, TuyaMessage, pack_message, unpack_message, parse_header
+from .const import DEVICEFILE, TCPPORT
+from .crypto_helper import AESCipher
+from .error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ERR_OFFLINE, ERR_PAYLOAD, error_json
+from .exceptions import DecodeError
+from .message_helper import AP_CONFIG, CONTROL, CONTROL_NEW, DP_QUERY, DP_QUERY_NEW, HEART_BEAT, LAN_EXT_STREAM, MESSAGE_HEADER_FMT_55AA, MESSAGE_HEADER_FMT_6699, NO_PROTOCOL_HEADER_CMDS, PREFIX_55AA_BIN, PREFIX_55AA_VALUE, PREFIX_6699_BIN, PREFIX_6699_VALUE, PROTOCOL_VERSION_BYTES_31, SESS_KEY_NEG_FINISH, SESS_KEY_NEG_RESP, SESS_KEY_NEG_START, STATUS, SUFFIX_BIN, UPDATEDPS, MessagePayload, PROTOCOL_3x_HEADER, TuyaMessage, pack_message, unpack_message, parse_header
 
 
 log = logging.getLogger(__name__)

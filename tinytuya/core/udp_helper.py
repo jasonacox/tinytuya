@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 from hashlib import md5
 
-from tinytuya.crypto_helper import AESCipher
-from tinytuya.message_helper import PREFIX_55AA_VALUE, PREFIX_6699_VALUE, parse_header, unpack_message
+from .crypto_helper import AESCipher
+from .message_helper import PREFIX_55AA_VALUE, PREFIX_6699_VALUE, parse_header, unpack_message
 
 
 def encrypt(msg, key):

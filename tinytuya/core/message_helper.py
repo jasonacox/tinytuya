@@ -8,8 +8,8 @@ import logging
 import struct
 from hashlib import sha256
 
-from tinytuya.crypto_helper import AESCipher
-from tinytuya.exceptions import DecodeError
+from .crypto_helper import AESCipher
+from .exceptions import DecodeError
 
 log = logging.getLogger(__name__)
 
