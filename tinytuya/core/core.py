@@ -72,12 +72,7 @@ import logging
 import sys
 from colorama import init
 
-from .const import *
-from .XenonDevice import XenonDevice
-from .message_helper import parse_header, unpack_message
 from .crypto_helper import AESCipher
-from .message_helper import *
-from .error_helper import *
 
 # Backward compatibility for python2
 try:
