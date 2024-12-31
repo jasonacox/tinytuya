@@ -70,17 +70,20 @@
 from __future__ import print_function  # python 2.7 support
 import binascii
 from collections import namedtuple
-import base64
 from hashlib import md5,sha256
 import hmac
 import json
 import logging
 import socket
-import select
 import struct
 import sys
 import time
 from colorama import init
+
+from tinytuya.message_helper import pack_message, parse_header, unpack_message
+
+from .crypto_helper import AESCipher
+
 
 # Backward compatibility for python2
 try:
@@ -88,37 +91,6 @@ try:
 except NameError:
     pass
 
-for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
-    Crypto = Crypto_modes = AES = CRYPTOLIB = None
-    try:
-        if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
-            from cryptography import __version__ as Crypto_version
-            if (Crypto_version[:2] in ('0.', '1.', '2.')) or (Crypto_version == '3.0'):
-                # cryptography <= 3.0 requires a backend= parameter
-                continue
-            from cryptography.hazmat.primitives.ciphers import Cipher as Crypto
-            from cryptography.hazmat.primitives.ciphers import modes as Crypto_modes
-            from cryptography.hazmat.primitives.ciphers.algorithms import AES
-        elif clib == 'PyCryptodomex': # https://pycryptodome.readthedocs.io/en/latest/
-            # PyCryptodome is installed as "Cryptodome" when installed by
-            #  `apt install python3-pycryptodome` or `pip install pycryptodomex`
-            import Cryptodome as Crypto
-            from Cryptodome.Cipher import AES
-        elif clib == 'PyCrypto': # https://www.pycrypto.org/
-            import Crypto
-            from Crypto.Cipher import AES
-            # v1/v2 is PyCrypto, v3 is PyCryptodome
-            clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
-        elif clib == 'pyaes':
-            import pyaes  # https://github.com/ricmoo/pyaes
-        else:
-            continue
-        CRYPTOLIB = clib
-        break
-    except ImportError:
-        continue
-if CRYPTOLIB is None:
-    raise ModuleNotFoundError('No crypto library found, please "pip install" cryptography, pycryptodome, or pyaes')
 
 # Colorama terminal color capability for all platforms
 init()
@@ -250,171 +222,6 @@ error_codes = {
 class DecodeError(Exception):
     pass
 
-# Cryptography Helpers
-class _AESCipher_Base(object):
-    def __init__(self, key):
-        self.key = key
-
-    @classmethod
-    def get_encryption_iv( cls, iv ):
-        if not cls.CRYPTOLIB_HAS_GCM:
-            raise NotImplementedError( 'Crypto library does not support GCM' )
-        if iv is True:
-            if log.isEnabledFor( logging.DEBUG ):
-                iv = b'0123456789ab'
-            else:
-                iv = str(time.time() * 10)[:12].encode('utf8')
-        return iv
-
-    @classmethod
-    def get_decryption_iv( cls, iv, data ):
-        if not cls.CRYPTOLIB_HAS_GCM:
-            raise NotImplementedError( 'Crypto library does not support GCM' )
-        if iv is True:
-            iv = data[:12]
-            data = data[12:]
-        return iv, data
-
-    @staticmethod
-    def _pad(s, bs):
-        padnum = bs - len(s) % bs
-        return s + padnum * chr(padnum).encode()
-
-    @staticmethod
-    def _unpad(s, verify_padding=False):
-        padlen = ord(s[-1:])
-        if padlen < 1 or padlen > 16:
-            raise ValueError("invalid padding length byte")
-        if verify_padding and s[-padlen:] != (padlen * chr(padlen).encode()):
-            raise ValueError("invalid padding data")
-        return s[:-padlen]
-
-class _AESCipher_pyca(_AESCipher_Base):
-    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
-        if iv: # initialization vector or nonce (number used once)
-            iv = self.get_encryption_iv( iv )
-            encryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv) ).encryptor()
-            if header:
-                encryptor.authenticate_additional_data(header)
-            crypted_text = encryptor.update(raw) + encryptor.finalize()
-            crypted_text = iv + crypted_text + encryptor.tag
-        else:
-            if pad: raw = self._pad(raw, 16)
-            encryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).encryptor()
-            crypted_text = encryptor.update(raw) + encryptor.finalize()
-
-        return base64.b64encode(crypted_text) if use_base64 else crypted_text
-
-    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
-        if not iv:
-            if use_base64:
-                enc = base64.b64decode(enc)
-            if len(enc) % 16 != 0:
-                raise ValueError("invalid length")
-        if iv:
-            iv, enc = self.get_decryption_iv( iv, enc )
-            if tag is None:
-                decryptor = Crypto( AES(self.key), Crypto_modes.CTR(iv + b'\x00\x00\x00\x02') ).decryptor()
-            else:
-                decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
-            if header and (tag is not None):
-                decryptor.authenticate_additional_data( header )
-            raw = decryptor.update( enc ) + decryptor.finalize()
-        else:
-            decryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).decryptor()
-            raw = decryptor.update( enc ) + decryptor.finalize()
-            raw = self._unpad(raw, verify_padding)
-        return raw.decode("utf-8") if decode_text else raw
-
-class _AESCipher_PyCrypto(_AESCipher_Base):
-    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
-        if iv: # initialization vector or nonce (number used once)
-            iv = self.get_encryption_iv( iv )
-            cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
-            if header:
-                cipher.update(header)
-            crypted_text, tag = cipher.encrypt_and_digest(raw)
-            crypted_text = cipher.nonce + crypted_text + tag
-        else:
-            if pad: raw = self._pad(raw, 16)
-            cipher = AES.new(self.key, mode=AES.MODE_ECB)
-            crypted_text = cipher.encrypt(raw)
-
-        return base64.b64encode(crypted_text) if use_base64 else crypted_text
-
-    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
-        if not iv:
-            if use_base64:
-                enc = base64.b64decode(enc)
-            if len(enc) % 16 != 0:
-                raise ValueError("invalid length")
-        if iv:
-            iv, enc = self.get_decryption_iv( iv, enc )
-            cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
-            if header:
-                cipher.update(header)
-            if tag:
-                raw = cipher.decrypt_and_verify(enc, tag)
-            else:
-                raw = cipher.decrypt(enc)
-        else:
-            cipher = AES.new(self.key, AES.MODE_ECB)
-            raw = cipher.decrypt(enc)
-            raw = self._unpad(raw, verify_padding)
-        return raw.decode("utf-8") if decode_text else raw
-
-class _AESCipher_pyaes(_AESCipher_Base):
-    def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
-        if iv:
-            # GCM required for 3.5 devices
-            raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
-
-        # pylint: disable-next=used-before-assignment
-        cipher = pyaes.blockfeeder.Encrypter(
-            pyaes.AESModeOfOperationECB(self.key),
-            pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE
-        )  # no IV, auto pads to 16
-        crypted_text = cipher.feed(raw)
-        crypted_text += cipher.feed()  # flush final block
-        return base64.b64encode(crypted_text) if use_base64 else crypted_text
-
-    def decrypt(self, enc, use_base64=True, decode_text=True, verify_padding=False, iv=False, header=None, tag=None):
-        if iv:
-            # GCM required for 3.5 devices
-            raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
-
-        if use_base64:
-            enc = base64.b64decode(enc)
-
-        if len(enc) % 16 != 0:
-            raise ValueError("invalid length")
-
-        cipher = pyaes.blockfeeder.Decrypter(
-            pyaes.AESModeOfOperationECB(self.key),
-            pyaes.PADDING_NONE if verify_padding else pyaes.PADDING_DEFAULT
-        )  # no IV, auto pads to 16
-
-        raw = cipher.feed(enc)
-        raw += cipher.feed()  # flush final block
-
-        if verify_padding: raw = self._unpad(raw, verify_padding)
-        return raw.decode("utf-8") if decode_text else raw
-
-if CRYPTOLIB[:8] == 'PyCrypto': # PyCrypto, PyCryptodome, and PyCryptodomex
-    class AESCipher(_AESCipher_PyCrypto):
-        CRYPTOLIB = CRYPTOLIB
-        CRYPTOLIB_VER = '.'.join( [str(x) for x in Crypto.version_info] )
-        CRYPTOLIB_HAS_GCM = getattr( AES, 'MODE_GCM', False ) # only PyCryptodome supports GCM, PyCrypto does not
-elif CRYPTOLIB == 'pyaes':
-    class AESCipher(_AESCipher_pyaes):
-        CRYPTOLIB = CRYPTOLIB
-        CRYPTOLIB_VER = '.'.join( [str(x) for x in pyaes.VERSION] )
-        CRYPTOLIB_HAS_GCM = False
-elif CRYPTOLIB == 'pyca/cryptography':
-    class AESCipher(_AESCipher_pyca):
-        CRYPTOLIB = CRYPTOLIB
-        CRYPTOLIB_VER = Crypto_version
-        CRYPTOLIB_HAS_GCM = getattr( Crypto_modes, 'GCM', False )
 
 # Misc Helpers
 def bin2hex(x, pretty=False):
@@ -453,150 +260,6 @@ def set_debug(toggle=True, color=True):
             log.debug("Using %s %s for crypto, GCM is supported", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
     else:
         log.setLevel(logging.NOTSET)
-
-def pack_message(msg, hmac_key=None):
-    """Pack a TuyaMessage into bytes."""
-    if msg.prefix == PREFIX_55AA_VALUE:
-        header_fmt = MESSAGE_HEADER_FMT_55AA
-        end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT_55AA
-        msg_len = len(msg.payload) + struct.calcsize(end_fmt)
-        header_data = ( msg.prefix, msg.seqno, msg.cmd, msg_len )
-    elif msg.prefix == PREFIX_6699_VALUE:
-        if not hmac_key:
-            raise TypeError( 'key must be provided to pack 6699-format messages' )
-        header_fmt = MESSAGE_HEADER_FMT_6699
-        end_fmt = MESSAGE_END_FMT_6699
-        msg_len = len(msg.payload) + (struct.calcsize(end_fmt) - 4) + 12
-        if type(msg.retcode) == int:
-            msg_len += struct.calcsize(MESSAGE_RETCODE_FMT)
-        header_data = ( msg.prefix, 0, msg.seqno, msg.cmd, msg_len )
-    else:
-        raise ValueError( 'pack_message() cannot handle message format %08X' % msg.prefix )
-
-    # Create full message excluding CRC and suffix
-    data = struct.pack( header_fmt, *header_data )
-
-    if msg.prefix == PREFIX_6699_VALUE:
-        cipher = AESCipher( hmac_key )
-        if type(msg.retcode) == int:
-            raw = struct.pack( MESSAGE_RETCODE_FMT, msg.retcode ) + msg.payload
-        else:
-            raw = msg.payload
-        data2 = cipher.encrypt( raw, use_base64=False, pad=False, iv=True if not msg.iv else msg.iv, header=data[4:])
-        data += data2 + SUFFIX_6699_BIN
-    else:
-        data += msg.payload
-        if hmac_key:
-            crc = hmac.new(hmac_key, data, sha256).digest()
-        else:
-            crc = binascii.crc32(data) & 0xFFFFFFFF
-        # Calculate CRC, add it together with suffix
-        data += struct.pack( end_fmt, crc, SUFFIX_VALUE )
-
-    return data
-
-def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
-    """Unpack bytes into a TuyaMessage."""
-    if header is None:
-        header = parse_header(data)
-
-    if header.prefix == PREFIX_55AA_VALUE:
-        # 4-word header plus return code
-        header_len = struct.calcsize(MESSAGE_HEADER_FMT_55AA)
-        end_fmt = MESSAGE_END_FMT_HMAC if hmac_key else MESSAGE_END_FMT_55AA
-        retcode_len = 0 if no_retcode else struct.calcsize(MESSAGE_RETCODE_FMT)
-        msg_len = header_len + header.length
-    elif header.prefix == PREFIX_6699_VALUE:
-        if not hmac_key:
-            raise TypeError( 'key must be provided to unpack 6699-format messages' )
-        header_len = struct.calcsize(MESSAGE_HEADER_FMT_6699)
-        end_fmt = MESSAGE_END_FMT_6699
-        retcode_len = 0
-        msg_len = header_len + header.length + 4
-    else:
-        raise ValueError( 'unpack_message() cannot handle message format %08X' % header.prefix )
-
-    if len(data) < msg_len:
-        log.debug('unpack_message(): not enough data to unpack payload! need %d but only have %d', header_len+header.length, len(data))
-        raise DecodeError('Not enough data to unpack payload')
-
-    end_len = struct.calcsize(end_fmt)
-    # the retcode is technically part of the payload, but strip it as we do not want it here
-    retcode = 0 if not retcode_len else struct.unpack(MESSAGE_RETCODE_FMT, data[header_len:header_len+retcode_len])[0]
-    payload = data[header_len+retcode_len:msg_len]
-    crc, suffix = struct.unpack(end_fmt, payload[-end_len:])
-    crc_good = False
-    payload = payload[:-end_len]
-
-    if header.prefix == PREFIX_55AA_VALUE:
-        if hmac_key:
-            have_crc = hmac.new(hmac_key, data[:(header_len+header.length)-end_len], sha256).digest()
-        else:
-            have_crc = binascii.crc32(data[:(header_len+header.length)-end_len]) & 0xFFFFFFFF
-
-        if suffix != SUFFIX_VALUE:
-            log.debug('Suffix prefix wrong! %08X != %08X', suffix, SUFFIX_VALUE)
-
-        if crc != have_crc:
-            if hmac_key:
-                log.debug('HMAC checksum wrong! %r != %r', binascii.hexlify(have_crc), binascii.hexlify(crc))
-            else:
-                log.debug('CRC wrong! %08X != %08X', have_crc, crc)
-        crc_good = crc == have_crc
-        iv = None
-    elif header.prefix == PREFIX_6699_VALUE:
-        iv = payload[:12]
-        payload = payload[12:]
-        try:
-            cipher = AESCipher( hmac_key )
-            payload = cipher.decrypt( payload, use_base64=False, decode_text=False, verify_padding=False, iv=iv, header=data[4:header_len], tag=crc)
-            crc_good = True
-        except:
-            crc_good = False
-
-        retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
-        if no_retcode is False:
-            pass
-        elif no_retcode is None and payload[0:1] != b'{' and payload[retcode_len:retcode_len+1] == b'{':
-            retcode_len = struct.calcsize(MESSAGE_RETCODE_FMT)
-        else:
-            retcode_len = 0
-        if retcode_len:
-            retcode = struct.unpack(MESSAGE_RETCODE_FMT, payload[:retcode_len])[0]
-            payload = payload[retcode_len:]
-
-    return TuyaMessage(header.seqno, header.cmd, retcode, payload, crc, crc_good, header.prefix, iv)
-
-def parse_header(data):
-    if( data[:4] == PREFIX_6699_BIN ):
-        fmt = MESSAGE_HEADER_FMT_6699
-    else:
-        fmt = MESSAGE_HEADER_FMT_55AA
-
-    header_len = struct.calcsize(fmt)
-
-    if len(data) < header_len:
-        raise DecodeError('Not enough data to unpack header')
-
-    unpacked = struct.unpack( fmt, data[:header_len] )
-    prefix = unpacked[0]
-
-    if prefix == PREFIX_55AA_VALUE:
-        prefix, seqno, cmd, payload_len = unpacked
-        total_length = payload_len + header_len
-    elif prefix == PREFIX_6699_VALUE:
-        prefix, unknown, seqno, cmd, payload_len = unpacked
-        #seqno |= unknown << 32
-        total_length = payload_len + header_len + len(SUFFIX_6699_BIN)
-    else:
-        #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
-        raise DecodeError('Header prefix wrong! %08X is not %08X or %08X' % (prefix, PREFIX_55AA_VALUE, PREFIX_6699_VALUE))
-
-    # sanity check. currently the max payload length is somewhere around 300 bytes
-    if payload_len > 1000:
-        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (payload_len,fmt,unpacked))
-
-    return TuyaHeader(prefix, seqno, cmd, payload_len, total_length)
 
 def has_suffix(payload):
     """Check to see if payload has valid Tuya suffix"""

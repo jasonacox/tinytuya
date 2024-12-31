@@ -27,6 +27,7 @@ import base64
 import traceback
 from colorama import init
 import tinytuya
+import tinytuya.message_helper
 
 # Optional libraries required for forced scanning
 #try:
@@ -227,7 +228,7 @@ def send_discovery_request( iface_list=None ):
         if 'payload' not in iface:
             bcast = json.dumps( {"from":"app","ip":address} ).encode()
             bcast_msg = tinytuya.TuyaMessage( 0, tinytuya.REQ_DEVINFO, None, bcast, 0, True, tinytuya.PREFIX_6699_VALUE, True )
-            iface['payload'] = tinytuya.pack_message( bcast_msg, hmac_key=tinytuya.udpkey )
+            iface['payload'] = tinytuya.message_helper.pack_message( bcast_msg, hmac_key=tinytuya.udpkey )
 
         if 'port' not in iface:
             iface['port'] = 7000
@@ -651,7 +652,7 @@ class ForceScannedDevice(DeviceDetect):
                             self.device.set_version(3.5)
                             self.ver_found = True
                 hmac_key = self.device.local_key if self.deviceinfo['version'] >= 3.4 else None
-                msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
+                msg = tinytuya.message_helper.unpack_message(data, hmac_key=hmac_key)
             except:
                 break
 
@@ -969,7 +970,7 @@ class PollDevice(DeviceDetect):
                 if prefix_offset > 0:
                     data = data[prefix_offset:]
                 hmac_key = self.device.local_key if self.device.version >= 3.4 else None
-                msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
+                msg = tinytuya.message_helper.unpack_message(data, hmac_key=hmac_key)
             except:
                 break
 
