@@ -3,7 +3,7 @@
 
 import logging
 
-from . import XenonDevice
+from .XenonDevice import XenonDevice
 from .command_types import AP_CONFIG, CONTROL, HEART_BEAT, UPDATEDPS
 
 
