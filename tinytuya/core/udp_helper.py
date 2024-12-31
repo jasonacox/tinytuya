@@ -3,7 +3,8 @@
 from hashlib import md5
 
 from .crypto_helper import AESCipher
-from .message_helper import PREFIX_55AA_VALUE, PREFIX_6699_VALUE, parse_header, unpack_message
+from .header import PREFIX_55AA_VALUE, PREFIX_6699_VALUE
+from .message_helper import parse_header, unpack_message
 
 
 def encrypt(msg, key):

@@ -4,7 +4,7 @@
 import logging
 
 from . import XenonDevice
-from .message_helper import AP_CONFIG, CONTROL, HEART_BEAT, UPDATEDPS
+from .command_types import AP_CONFIG, CONTROL, HEART_BEAT, UPDATEDPS
 
 
 log = logging.getLogger(__name__)

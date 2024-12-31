@@ -10,6 +10,8 @@ from .const import *
 from .XenonDevice import *
 from .udp_helper import *
 from .Device import *
+from .command_types import *
+from .header import *
 
 from .core import *
 from .core import __version__
