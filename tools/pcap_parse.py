@@ -36,7 +36,6 @@ from hashlib import md5,sha256
 import hmac
 
 import tinytuya
-import tinytuya.message_helper
 
 devices = {}
 
@@ -70,7 +69,7 @@ def pop_packet_from_data( data, from_dev ):
     else:
         prefix = tinytuya.PREFIX_6699_BIN
 
-    header = tinytuya.message_helper.parse_header(data)
+    header = tinytuya.parse_header(data)
     remaining = header.total_length - len(data)
     if remaining > 0:
         return None, None, prefix, data
@@ -113,16 +112,16 @@ def process_data( data, from_dev, devinfo, flow, args ):
 
         if not flow['ver']:
             # try <=3.3
-            packet = tinytuya.message_helper.unpack_message(pdata, header=header, hmac_key=None, no_retcode=(not from_dev))
+            packet = tinytuya.unpack_message(pdata, header=header, hmac_key=None, no_retcode=(not from_dev))
             if( not packet.crc_good ):
                 # next try v3.4
-                try2 = tinytuya.message_helper.unpack_message(pdata, header=header, hmac_key=devinfo['key'], no_retcode=True)
+                try2 = tinytuya.unpack_message(pdata, header=header, hmac_key=devinfo['key'], no_retcode=True)
                 if try2.crc_good:
                     print( '%s %-11s %s' % (src_str, '', '<Auto-detected v3.4 device>') )
                     flow['ver'] = 3.4
                     packet = try2
         if flow['ver'] <= 3.3:
-            packet = tinytuya.message_helper.unpack_message(pdata, header=header, hmac_key=None, no_retcode=(not from_dev))
+            packet = tinytuya.unpack_message(pdata, header=header, hmac_key=None, no_retcode=(not from_dev))
             payload = packet.payload
 
             if not flow['ver']:
@@ -165,9 +164,9 @@ def process_data( data, from_dev, devinfo, flow, args ):
             else:
                 hmac_key = flow['session_key']
 
-            packet = tinytuya.message_helper.unpack_message(pdata, header=header, hmac_key=hmac_key, no_retcode=(not from_dev))
+            packet = tinytuya.unpack_message(pdata, header=header, hmac_key=hmac_key, no_retcode=(not from_dev))
             if( (not packet.crc_good) and (hmac_key != devinfo['key']) ):
-                try2 = tinytuya.message_helper.unpack_message(pdata, header=header, hmac_key=devinfo['key'], no_retcode=True)
+                try2 = tinytuya.unpack_message(pdata, header=header, hmac_key=devinfo['key'], no_retcode=True)
                 if try2.crc_good:
                     packet = try2
                     flow['session_key'] = b''
