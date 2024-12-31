@@ -69,7 +69,6 @@
 # Modules
 from __future__ import print_function  # python 2.7 support
 import binascii
-from collections import namedtuple
 from hashlib import md5,sha256
 import hmac
 import json
@@ -80,10 +79,14 @@ import sys
 import time
 from colorama import init
 
-from tinytuya.message_helper import pack_message, parse_header, unpack_message
+from .error_helper import error_json
+
+from .exceptions import DecodeError
+from .message_helper import pack_message, parse_header, unpack_message
 
 from .crypto_helper import AESCipher
-
+from .message_helper import *
+from .error_helper import *
 
 # Backward compatibility for python2
 try:
@@ -120,107 +123,9 @@ SNAPSHOTFILE = 'snapshot.json'
 
 DEVICEFILE_SAVE_VALUES = ('category', 'product_name', 'product_id', 'biz_type', 'model', 'sub', 'icon', 'version', 'last_ip', 'uuid', 'node_id', 'sn', 'mapping')
 
-# Tuya Command Types
-# Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
-AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
-ACTIVE          = 2  # FRM_TP_ACTV (discard) # WORK_MODE_CMD
-SESS_KEY_NEG_START  = 3  # FRM_SECURITY_TYPE3 # negotiate session key
-SESS_KEY_NEG_RESP   = 4  # FRM_SECURITY_TYPE4 # negotiate session key response
-SESS_KEY_NEG_FINISH = 5  # FRM_SECURITY_TYPE5 # finalize session key negotiation
-UNBIND          = 6  # FRM_TP_UNBIND_DEV  # DATA_QUERT_CMD - issue command
-CONTROL         = 7  # FRM_TP_CMD         # STATE_UPLOAD_CMD
-STATUS          = 8  # FRM_TP_STAT_REPORT # STATE_QUERY_CMD
-HEART_BEAT      = 9  # FRM_TP_HB
-DP_QUERY        = 0x0a # 10 # FRM_QUERY_STAT      # UPDATE_START_CMD - get data points
-QUERY_WIFI      = 0x0b # 11 # FRM_SSID_QUERY (discard) # UPDATE_TRANS_CMD
-TOKEN_BIND      = 0x0c # 12 # FRM_USER_BIND_REQ   # GET_ONLINE_TIME_CMD - system time (GMT)
-CONTROL_NEW     = 0x0d # 13 # FRM_TP_NEW_CMD      # FACTORY_MODE_CMD
-ENABLE_WIFI     = 0x0e # 14 # FRM_ADD_SUB_DEV_CMD # WIFI_TEST_CMD
-WIFI_INFO       = 0x0f # 15 # FRM_CFG_WIFI_INFO
-DP_QUERY_NEW    = 0x10 # 16 # FRM_QUERY_STAT_NEW
-SCENE_EXECUTE   = 0x11 # 17 # FRM_SCENE_EXEC
-UPDATEDPS       = 0x12 # 18 # FRM_LAN_QUERY_DP    # Request refresh of DPS
-UDP_NEW         = 0x13 # 19 # FR_TYPE_ENCRYPTION
-AP_CONFIG_NEW   = 0x14 # 20 # FRM_AP_CFG_WF_V40
-BOARDCAST_LPV34 = 0x23 # 35 # FR_TYPE_BOARDCAST_LPV34
-REQ_DEVINFO     = 0x25 # broadcast to port 7000 to get v3.5 devices to send their info
-LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
-
-# Protocol Versions and Headers
-PROTOCOL_VERSION_BYTES_31 = b"3.1"
-PROTOCOL_VERSION_BYTES_33 = b"3.3"
-PROTOCOL_VERSION_BYTES_34 = b"3.4"
-PROTOCOL_VERSION_BYTES_35 = b"3.5"
-PROTOCOL_3x_HEADER = 12 * b"\x00"
-PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + PROTOCOL_3x_HEADER
-PROTOCOL_34_HEADER = PROTOCOL_VERSION_BYTES_34 + PROTOCOL_3x_HEADER
-PROTOCOL_35_HEADER = PROTOCOL_VERSION_BYTES_35 + PROTOCOL_3x_HEADER
-MESSAGE_HEADER_FMT = MESSAGE_HEADER_FMT_55AA = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
-MESSAGE_HEADER_FMT_6699 = ">IHIII"  # 4*uint32: prefix, unknown, seqno, cmd, length
-MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
-MESSAGE_END_FMT = MESSAGE_END_FMT_55AA = ">2I"  # 2*uint32: crc, suffix
-MESSAGE_END_FMT_HMAC = ">32sI"  # 32s:hmac, uint32:suffix
-MESSAGE_END_FMT_6699 = ">16sI"  # 16s:tag, suffix
-PREFIX_VALUE = PREFIX_55AA_VALUE = 0x000055AA
-PREFIX_BIN = PREFIX_55AA_BIN = b"\x00\x00U\xaa"
-SUFFIX_VALUE = SUFFIX_55AA_VALUE = 0x0000AA55
-SUFFIX_BIN = SUFFIX_55AA_BIN = b"\x00\x00\xaaU"
-PREFIX_6699_VALUE = 0x00006699
-PREFIX_6699_BIN = b"\x00\x00\x66\x99"
-SUFFIX_6699_VALUE = 0x00009966
-SUFFIX_6699_BIN = b"\x00\x00\x99\x66"
-
-NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH, LAN_EXT_STREAM ]
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
-
-# Tuya Packet Format
-TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
-MessagePayload = namedtuple("MessagePayload", "cmd payload")
-try:
-    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv", defaults=(True,0x55AA,None))
-except:
-    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv")
-
-# TinyTuya Error Response Codes
-ERR_JSON = 900
-ERR_CONNECT = 901
-ERR_TIMEOUT = 902
-ERR_RANGE = 903
-ERR_PAYLOAD = 904
-ERR_OFFLINE = 905
-ERR_STATE = 906
-ERR_FUNCTION = 907
-ERR_DEVTYPE = 908
-ERR_CLOUDKEY = 909
-ERR_CLOUDRESP = 910
-ERR_CLOUDTOKEN = 911
-ERR_PARAMS = 912
-ERR_CLOUD = 913
-ERR_KEY_OR_VER = 914
-
-error_codes = {
-    ERR_JSON: "Invalid JSON Response from Device",
-    ERR_CONNECT: "Network Error: Unable to Connect",
-    ERR_TIMEOUT: "Timeout Waiting for Device",
-    ERR_RANGE: "Specified Value Out of Range",
-    ERR_PAYLOAD: "Unexpected Payload from Device",
-    ERR_OFFLINE: "Network Error: Device Unreachable",
-    ERR_STATE: "Device in Unknown State",
-    ERR_FUNCTION: "Function Not Supported by Device",
-    ERR_DEVTYPE: "Device22 Detected: Retry Command",
-    ERR_CLOUDKEY: "Missing Tuya Cloud Key and Secret",
-    ERR_CLOUDRESP: "Invalid JSON Response from Cloud",
-    ERR_CLOUDTOKEN: "Unable to Get Cloud Token",
-    ERR_PARAMS: "Missing Function Parameters",
-    ERR_CLOUD: "Error Response from Tuya Cloud",
-    ERR_KEY_OR_VER: "Check device key or version",
-    None: "Unknown Error",
-}
-
-class DecodeError(Exception):
-    pass
 
 
 # Misc Helpers
@@ -260,26 +165,6 @@ def set_debug(toggle=True, color=True):
             log.debug("Using %s %s for crypto, GCM is supported", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
     else:
         log.setLevel(logging.NOTSET)
-
-def has_suffix(payload):
-    """Check to see if payload has valid Tuya suffix"""
-    if len(payload) < 4:
-        return False
-    log.debug("buffer %r = %r", payload[-4:], SUFFIX_BIN)
-    return payload[-4:] == SUFFIX_BIN
-
-def error_json(number=None, payload=None):
-    """Return error details in JSON"""
-    try:
-        spayload = json.dumps(payload)
-        # spayload = payload.replace('\"','').replace('\'','')
-    except:
-        spayload = '""'
-
-    vals = (error_codes[number], str(number), spayload)
-    log.debug("ERROR %s - %s - payload: %s", *vals)
-
-    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
 
 def find_device(dev_id=None, address=None):
     """Scans network for Tuya devices with either ID = dev_id or IP = address

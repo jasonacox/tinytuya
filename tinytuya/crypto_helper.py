@@ -3,9 +3,7 @@
 
 # Modules
 from __future__ import print_function  # python 2.7 support
-from collections import namedtuple
 import base64
-from hashlib import md5,sha256
 import logging
 import time
 

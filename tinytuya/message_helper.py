@@ -1,11 +1,78 @@
-from tinytuya.core import MESSAGE_END_FMT_55AA, MESSAGE_END_FMT_6699, MESSAGE_END_FMT_HMAC, MESSAGE_HEADER_FMT_55AA, MESSAGE_HEADER_FMT_6699, MESSAGE_RETCODE_FMT, PREFIX_55AA_VALUE, PREFIX_6699_BIN, PREFIX_6699_VALUE, SUFFIX_6699_BIN, SUFFIX_VALUE, DecodeError, TuyaHeader, log
-from tinytuya.crypto_helper import AESCipher
-
+# TinyTuya Module
+# -*- coding: utf-8 -*-
 
 import binascii
+from collections import namedtuple
 import hmac
+import logging
 import struct
 from hashlib import sha256
+
+from tinytuya.crypto_helper import AESCipher
+from tinytuya.exceptions import DecodeError
+
+log = logging.getLogger(__name__)
+
+# Tuya Command Types
+# Reference: https://github.com/tuya/tuya-iotos-embeded-sdk-wifi-ble-bk7231n/blob/master/sdk/include/lan_protocol.h
+AP_CONFIG       = 1  # FRM_TP_CFG_WF      # only used for ap 3.0 network config
+ACTIVE          = 2  # FRM_TP_ACTV (discard) # WORK_MODE_CMD
+SESS_KEY_NEG_START  = 3  # FRM_SECURITY_TYPE3 # negotiate session key
+SESS_KEY_NEG_RESP   = 4  # FRM_SECURITY_TYPE4 # negotiate session key response
+SESS_KEY_NEG_FINISH = 5  # FRM_SECURITY_TYPE5 # finalize session key negotiation
+UNBIND          = 6  # FRM_TP_UNBIND_DEV  # DATA_QUERT_CMD - issue command
+CONTROL         = 7  # FRM_TP_CMD         # STATE_UPLOAD_CMD
+STATUS          = 8  # FRM_TP_STAT_REPORT # STATE_QUERY_CMD
+HEART_BEAT      = 9  # FRM_TP_HB
+DP_QUERY        = 0x0a # 10 # FRM_QUERY_STAT      # UPDATE_START_CMD - get data points
+QUERY_WIFI      = 0x0b # 11 # FRM_SSID_QUERY (discard) # UPDATE_TRANS_CMD
+TOKEN_BIND      = 0x0c # 12 # FRM_USER_BIND_REQ   # GET_ONLINE_TIME_CMD - system time (GMT)
+CONTROL_NEW     = 0x0d # 13 # FRM_TP_NEW_CMD      # FACTORY_MODE_CMD
+ENABLE_WIFI     = 0x0e # 14 # FRM_ADD_SUB_DEV_CMD # WIFI_TEST_CMD
+WIFI_INFO       = 0x0f # 15 # FRM_CFG_WIFI_INFO
+DP_QUERY_NEW    = 0x10 # 16 # FRM_QUERY_STAT_NEW
+SCENE_EXECUTE   = 0x11 # 17 # FRM_SCENE_EXEC
+UPDATEDPS       = 0x12 # 18 # FRM_LAN_QUERY_DP    # Request refresh of DPS
+UDP_NEW         = 0x13 # 19 # FR_TYPE_ENCRYPTION
+AP_CONFIG_NEW   = 0x14 # 20 # FRM_AP_CFG_WF_V40
+BOARDCAST_LPV34 = 0x23 # 35 # FR_TYPE_BOARDCAST_LPV34
+REQ_DEVINFO     = 0x25 # broadcast to port 7000 to get v3.5 devices to send their info
+LAN_EXT_STREAM  = 0x40 # 64 # FRM_LAN_EXT_STREAM
+
+# Protocol Versions and Headers
+PROTOCOL_VERSION_BYTES_31 = b"3.1"
+PROTOCOL_VERSION_BYTES_33 = b"3.3"
+PROTOCOL_VERSION_BYTES_34 = b"3.4"
+PROTOCOL_VERSION_BYTES_35 = b"3.5"
+PROTOCOL_3x_HEADER = 12 * b"\x00"
+PROTOCOL_33_HEADER = PROTOCOL_VERSION_BYTES_33 + PROTOCOL_3x_HEADER
+PROTOCOL_34_HEADER = PROTOCOL_VERSION_BYTES_34 + PROTOCOL_3x_HEADER
+PROTOCOL_35_HEADER = PROTOCOL_VERSION_BYTES_35 + PROTOCOL_3x_HEADER
+MESSAGE_HEADER_FMT = MESSAGE_HEADER_FMT_55AA = ">4I"  # 4*uint32: prefix, seqno, cmd, length [, retcode]
+MESSAGE_HEADER_FMT_6699 = ">IHIII"  # 4*uint32: prefix, unknown, seqno, cmd, length
+MESSAGE_RETCODE_FMT = ">I"  # retcode for received messages
+MESSAGE_END_FMT = MESSAGE_END_FMT_55AA = ">2I"  # 2*uint32: crc, suffix
+MESSAGE_END_FMT_HMAC = ">32sI"  # 32s:hmac, uint32:suffix
+MESSAGE_END_FMT_6699 = ">16sI"  # 16s:tag, suffix
+PREFIX_VALUE = PREFIX_55AA_VALUE = 0x000055AA
+PREFIX_BIN = PREFIX_55AA_BIN = b"\x00\x00U\xaa"
+SUFFIX_VALUE = SUFFIX_55AA_VALUE = 0x0000AA55
+SUFFIX_BIN = SUFFIX_55AA_BIN = b"\x00\x00\xaaU"
+PREFIX_6699_VALUE = 0x00006699
+PREFIX_6699_BIN = b"\x00\x00\x66\x99"
+SUFFIX_6699_VALUE = 0x00009966
+SUFFIX_6699_BIN = b"\x00\x00\x99\x66"
+
+NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH, LAN_EXT_STREAM ]
+
+
+# Tuya Packet Format
+TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
+MessagePayload = namedtuple("MessagePayload", "cmd payload")
+try:
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv", defaults=(True,0x55AA,None))
+except:
+    TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv")
 
 
 def pack_message(msg, hmac_key=None):
@@ -153,3 +220,13 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
             payload = payload[retcode_len:]
 
     return TuyaMessage(header.seqno, header.cmd, retcode, payload, crc, crc_good, header.prefix, iv)
+
+
+def has_suffix(payload):
+    """Check to see if payload has valid Tuya suffix"""
+    if len(payload) < 4:
+        return False
+    log.debug("buffer %r = %r", payload[-4:], SUFFIX_BIN)
+    return payload[-4:] == SUFFIX_BIN
+
+
