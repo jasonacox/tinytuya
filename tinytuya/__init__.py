@@ -89,6 +89,14 @@
 
 """
 
+from .crypto_helper import *
+from .message_helper import *
+from .exceptions import *
+from .error_helper import *
+from .const import *
+from .XenonDevice import *
+from .udp_helper import *
+
 from .core import *
 from .core import __version__
 from .core import __author__
@@ -97,10 +105,3 @@ from .OutletDevice import OutletDevice
 from .CoverDevice import CoverDevice
 from .BulbDevice import BulbDevice
 from .Cloud import Cloud
-
-from .crypto_helper import *
-from .message_helper import *
-from .exceptions import *
-from .error_helper import *
-from .const import *
-from .XenonDevice import *
