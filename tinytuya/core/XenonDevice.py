@@ -24,12 +24,6 @@ log = logging.getLogger(__name__)
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
 
-# FIXME: The place where this is used looks like it might have meant `self.version`, but I'm not really sure yet
-#        this is copy/pasted instead of moved because it feels like a bug to me
-version_tuple = (1, 15, 1)
-version = __version__ = "%d.%d.%d" % version_tuple
-
-
 def find_device(dev_id=None, address=None):
     """Scans network for Tuya devices with either ID = dev_id or IP = address
 
