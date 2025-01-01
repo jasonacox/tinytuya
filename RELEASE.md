@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.16.0 - Code Refactoring
+
+* This update refactors core.py by splitting it up into smaller, more logical files. It puts it in a `core` directory, so existing code that imports from `tinytuya.core` should be unaffected.
+* PR https://github.com/jasonacox/tinytuya/pull/575 by @tringenbach 
+
 ## v1.15.1 - Scanner Fixes
 
 * Fix scanner broadcast attempting to bind to the wrong IP address, introduced in v1.15.0
