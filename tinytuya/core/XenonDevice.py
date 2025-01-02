@@ -16,8 +16,7 @@ from .crypto_helper import AESCipher
 from .error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ERR_OFFLINE, ERR_PAYLOAD, error_json
 from .exceptions import DecodeError
 from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_message, parse_header
-from .command_types import AP_CONFIG, CONTROL, CONTROL_NEW, DP_QUERY, DP_QUERY_NEW, HEART_BEAT, LAN_EXT_STREAM, SESS_KEY_NEG_FINISH, SESS_KEY_NEG_RESP, SESS_KEY_NEG_START, STATUS, UPDATEDPS
-from .header import MESSAGE_HEADER_FMT_55AA, MESSAGE_HEADER_FMT_6699, NO_PROTOCOL_HEADER_CMDS, PREFIX_55AA_BIN, PREFIX_55AA_VALUE, PREFIX_6699_BIN, PREFIX_6699_VALUE, PROTOCOL_3x_HEADER, PROTOCOL_VERSION_BYTES_31, SUFFIX_BIN
+from . import command_types as CT, header as H
 
 log = logging.getLogger(__name__)
 
@@ -101,64 +100,64 @@ def device_info( dev_id ):
 payload_dict = {
     # Default Device
     "default": {
-        AP_CONFIG: {  # [BETA] Set Control Values on Device
+        CT.AP_CONFIG: {  # [BETA] Set Control Values on Device
             "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
         },
-        CONTROL: {  # Set Control Values on Device
+        CT.CONTROL: {  # Set Control Values on Device
             "command": {"devId": "", "uid": "", "t": ""},
         },
-        STATUS: {  # Get Status from Device
+        CT.STATUS: {  # Get Status from Device
             "command": {"gwId": "", "devId": ""},
         },
-        HEART_BEAT: {"command": {"gwId": "", "devId": ""}},
-        DP_QUERY: {  # Get Data Points from Device
+        CT.HEART_BEAT: {"command": {"gwId": "", "devId": ""}},
+        CT.DP_QUERY: {  # Get Data Points from Device
             "command": {"gwId": "", "devId": "", "uid": "", "t": ""},
         },
-        CONTROL_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
-        DP_QUERY_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
-        UPDATEDPS: {"command": {"dpId": [18, 19, 20]}},
-        LAN_EXT_STREAM: { "command": { "reqType": "", "data": {} }},
+        CT.CONTROL_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
+        CT.DP_QUERY_NEW: {"command": {"devId": "", "uid": "", "t": ""}},
+        CT.UPDATEDPS: {"command": {"dpId": [18, 19, 20]}},
+        CT.LAN_EXT_STREAM: { "command": { "reqType": "", "data": {} }},
     },
     # Special Case Device with 22 character ID - Some of these devices
     # Require the 0d command as the DP_QUERY status request and the list of
     # dps requested payload
     "device22": {
-        DP_QUERY: {  # Get Data Points from Device
-            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command for some reason
+        CT.DP_QUERY: {  # Get Data Points from Device
+            "command_override": CT.CONTROL_NEW,  # Uses CONTROL_NEW command for some reason
             "command": {"devId": "", "uid": "", "t": ""},
         },
     },
     # v3.3+ devices do not need devId/gwId/uid
     "v3.4": {
-        CONTROL: {
-            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
+        CT.CONTROL: {
+            "command_override": CT.CONTROL_NEW,  # Uses CONTROL_NEW command
             "command": {"protocol":5, "t": "int", "data": {}}
             },
-        CONTROL_NEW: {
+        CT.CONTROL_NEW: {
             "command": {"protocol":5, "t": "int", "data": {}}
         },
-        DP_QUERY: {
-            "command_override": DP_QUERY_NEW,
+        CT.DP_QUERY: {
+            "command_override": CT.DP_QUERY_NEW,
             "command": {} #"protocol":4, "t": "int", "data": {}}
         },
-        DP_QUERY_NEW: {
+        CT.DP_QUERY_NEW: {
             "command": {}
         },
     },
     # v3.5 is just a copy of v3.4
     "v3.5": {
-        CONTROL: {
-            "command_override": CONTROL_NEW,  # Uses CONTROL_NEW command
+        CT.CONTROL: {
+            "command_override": CT.CONTROL_NEW,  # Uses CONTROL_NEW command
             "command": {"protocol":5, "t": "int", "data": {}}
         },
-        CONTROL_NEW: {
+        CT.CONTROL_NEW: {
             "command": {"protocol":5, "t": "int", "data": {}}
         },
-        DP_QUERY: {
-            "command_override": DP_QUERY_NEW,
+        CT.DP_QUERY: {
+            "command_override": CT.DP_QUERY_NEW,
             "command": {}
         },
-        DP_QUERY_NEW: {
+        CT.DP_QUERY_NEW: {
             "command": {}
         },
     },
@@ -167,24 +166,24 @@ payload_dict = {
     "gateway_v3.4": { },
     "gateway_v3.5": { },
     "zigbee": {
-        CONTROL: { "command": {"t": "int", "cid": ""} },
-        DP_QUERY: { "command": {"t": "int", "cid": ""} },
+        CT.CONTROL: { "command": {"t": "int", "cid": ""} },
+        CT.DP_QUERY: { "command": {"t": "int", "cid": ""} },
     },
     "zigbee_v3.4": {
-        CONTROL: {
-            "command_override": CONTROL_NEW,
+        CT.CONTROL: {
+            "command_override": CT.CONTROL_NEW,
             "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
-        CONTROL_NEW: {
+        CT.CONTROL_NEW: {
             "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
     },
     "zigbee_v3.5": {
-        CONTROL: {
-            "command_override": CONTROL_NEW,
+        CT.CONTROL: {
+            "command_override": CT.CONTROL_NEW,
             "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
-        CONTROL_NEW: {
+        CT.CONTROL_NEW: {
             "command": {"protocol":5, "t": "int", "data": {"cid":""}}
         },
     },
@@ -226,6 +225,9 @@ class XenonDevice(object):
         self.socketRetryLimit = connection_retry_limit
         self.socketRetryDelay = connection_retry_delay
         self.version = 0
+        self.version_str = None
+        self.version_bytes = None
+        self.version_header = None
         self.dps_to_request = {}
         self.seqno = 1
         self.sendWait = 0.01
@@ -317,10 +319,9 @@ class XenonDevice(object):
                         # this may trigger a network call which will call _get_socket() again
                         #self.set_version(new_version)
                         self.version = new_version
-                        # FIXME: check if we really meant the global `version` here or not
-                        self.version_str = "v" + str(version)
-                        self.version_bytes = str(version).encode('latin1')
-                        self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
+                        self.version_str = "v" + str(self.version)
+                        self.version_bytes = str(self.version).encode('latin1')
+                        self.version_header = self.version_bytes + H.PROTOCOL_3x_HEADER
                         self.payload_dict = None
 
                 if not self.address:
@@ -401,18 +402,18 @@ class XenonDevice(object):
         if self.parent:
             return self.parent._receive()
         # message consists of header + retcode + [data] + crc (4 or 32) + footer
-        min_len_55AA = struct.calcsize(MESSAGE_HEADER_FMT_55AA) + 4 + 4 + len(SUFFIX_BIN)
+        min_len_55AA = struct.calcsize(H.MESSAGE_HEADER_FMT_55AA) + 4 + 4 + len(H.SUFFIX_BIN)
         # message consists of header + iv + retcode + [data] + crc (16) + footer
-        min_len_6699 = struct.calcsize(MESSAGE_HEADER_FMT_6699) + 12 + 4 + 16 + len(SUFFIX_BIN)
+        min_len_6699 = struct.calcsize(H.MESSAGE_HEADER_FMT_6699) + 12 + 4 + 16 + len(H.SUFFIX_BIN)
         min_len = min_len_55AA if min_len_55AA < min_len_6699 else min_len_6699
-        prefix_len = len( PREFIX_55AA_BIN )
+        prefix_len = len( H.PREFIX_55AA_BIN )
 
         data = self._recv_all( min_len )
 
         # search for the prefix.  if not found, delete everything except
         # the last (prefix_len - 1) bytes and recv more to replace it
-        prefix_offset_55AA = data.find( PREFIX_55AA_BIN )
-        prefix_offset_6699 = data.find( PREFIX_6699_BIN )
+        prefix_offset_55AA = data.find( H.PREFIX_55AA_BIN )
+        prefix_offset_6699 = data.find( H.PREFIX_6699_BIN )
 
         while prefix_offset_55AA != 0 and prefix_offset_6699 != 0:
             log.debug('Message prefix not at the beginning of the received data!')
@@ -424,8 +425,8 @@ class XenonDevice(object):
                 data = data[prefix_offset:]
 
             data += self._recv_all( min_len - len(data) )
-            prefix_offset_55AA = data.find( PREFIX_55AA_BIN )
-            prefix_offset_6699 = data.find( PREFIX_6699_BIN )
+            prefix_offset_55AA = data.find( H.PREFIX_55AA_BIN )
+            prefix_offset_6699 = data.find( H.PREFIX_6699_BIN )
 
         header = parse_header(data)
         remaining = header.total_length - len(data)
@@ -693,10 +694,10 @@ class XenonDevice(object):
             log.debug("decrypted 3.x payload=%r", payload)
             log.debug("payload type = %s", type(payload))
 
-        if payload.startswith(PROTOCOL_VERSION_BYTES_31):
+        if payload.startswith(H.PROTOCOL_VERSION_BYTES_31):
             # Received an encrypted payload
             # Remove version header
-            payload = payload[len(PROTOCOL_VERSION_BYTES_31) :]
+            payload = payload[len(H.PROTOCOL_VERSION_BYTES_31) :]
             # Decrypt payload
             # Remove 16-bytes of MD5 hexdigest of payload
             payload = cipher.decrypt(payload[16:])
@@ -774,7 +775,7 @@ class XenonDevice(object):
         self.remote_nonce = b''
         self.local_key = self.real_local_key
 
-        return MessagePayload(SESS_KEY_NEG_START, self.local_nonce)
+        return MessagePayload(CT.SESS_KEY_NEG_START, self.local_nonce)
 
     def _negotiate_session_key_generate_step_3( self, rkey ):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
@@ -782,7 +783,7 @@ class XenonDevice(object):
             log.debug("session key negotiation failed on step 1")
             return False
 
-        if rkey.cmd != SESS_KEY_NEG_RESP:
+        if rkey.cmd != CT.SESS_KEY_NEG_RESP:
             log.debug("session key negotiation step 2 returned wrong command: %d", rkey.cmd)
             return False
 
@@ -813,7 +814,7 @@ class XenonDevice(object):
         log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
 
         rkey_hmac = hmac.new(self.local_key, self.remote_nonce, sha256).digest()
-        return MessagePayload(SESS_KEY_NEG_FINISH, rkey_hmac)
+        return MessagePayload(CT.SESS_KEY_NEG_FINISH, rkey_hmac)
 
     def _negotiate_session_key_generate_finalize( self ):
         if IS_PY2:
@@ -846,7 +847,7 @@ class XenonDevice(object):
 
         if self.version >= 3.4:
             hmac_key = self.local_key
-            if msg.cmd not in NO_PROTOCOL_HEADER_CMDS:
+            if msg.cmd not in H.NO_PROTOCOL_HEADER_CMDS:
                 # add the 3.x header
                 payload = self.version_header + payload
             log.debug('final payload: %r', payload)
@@ -854,7 +855,7 @@ class XenonDevice(object):
             if self.version >= 3.5:
                 iv = True
                 # seqno cmd retcode payload crc crc_good, prefix, iv
-                msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, PREFIX_6699_VALUE, True)
+                msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
                 data = pack_message(msg,hmac_key=self.local_key)
                 log.debug("payload encrypted=%r",binascii.hexlify(data))
@@ -864,17 +865,17 @@ class XenonDevice(object):
         elif self.version >= 3.2:
             # expect to connect and then disconnect to set new
             payload = self.cipher.encrypt(payload, False)
-            if msg.cmd not in NO_PROTOCOL_HEADER_CMDS:
+            if msg.cmd not in H.NO_PROTOCOL_HEADER_CMDS:
                 # add the 3.x header
                 payload = self.version_header + payload
-        elif msg.cmd == CONTROL:
+        elif msg.cmd == CT.CONTROL:
             # need to encrypt
             payload = self.cipher.encrypt(payload)
             preMd5String = (
                 b"data="
                 + payload
                 + b"||lpv="
-                + PROTOCOL_VERSION_BYTES_31
+                + H.PROTOCOL_VERSION_BYTES_31
                 + b"||"
                 + self.local_key
             )
@@ -883,13 +884,13 @@ class XenonDevice(object):
             hexdigest = m.hexdigest()
             # some tuya libraries strip 8: to :24
             payload = (
-                PROTOCOL_VERSION_BYTES_31
+                H.PROTOCOL_VERSION_BYTES_31
                 + hexdigest[8:][:16].encode("latin1")
                 + payload
             )
 
         self.cipher = None
-        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, PREFIX_55AA_VALUE, False)
+        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
@@ -920,7 +921,7 @@ class XenonDevice(object):
 
     def status(self, nowait=False):
         """Return device status."""
-        query_type = DP_QUERY
+        query_type = CT.DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(query_type)
 
@@ -941,7 +942,7 @@ class XenonDevice(object):
     def subdev_query( self, nowait=False ):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
-        payload = self.generate_payload(LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
+        payload = self.generate_payload(CT.LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
         return self._send_receive(payload, 0, getresponse=(not nowait))
 
     def detect_available_dps(self):
@@ -986,7 +987,7 @@ class XenonDevice(object):
         self.version = version
         self.version_str = "v" + str(version)
         self.version_bytes = str(version).encode('latin1')
-        self.version_header = self.version_bytes + PROTOCOL_3x_HEADER
+        self.version_header = self.version_bytes + H.PROTOCOL_3x_HEADER
         self.payload_dict = None
         if version == 3.2: # 3.2 behaves like 3.3 with device22
             self.dev_type="device22"
@@ -1164,7 +1165,7 @@ class XenonDevice(object):
                 json_data["data"]["dps"] = data
             else:
                 json_data["dps"] = data
-        elif self.dev_type == "device22" and command == DP_QUERY:
+        elif self.dev_type == "device22" and command == CT.DP_QUERY:
             json_data["dps"] = self.dps_to_request
         if reqType and "reqType" in json_data:
             json_data["reqType"] = reqType

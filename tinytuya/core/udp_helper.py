@@ -3,7 +3,7 @@
 from hashlib import md5
 
 from .crypto_helper import AESCipher
-from .header import PREFIX_55AA_VALUE, PREFIX_6699_VALUE
+from . import header as H
 from .message_helper import parse_header, unpack_message
 
 
@@ -27,7 +27,7 @@ def decrypt_udp(msg):
         header = None
     if not header:
         return decrypt(msg, udpkey)
-    if header.prefix == PREFIX_55AA_VALUE:
+    if header.prefix == H.PREFIX_55AA_VALUE:
         payload = unpack_message(msg).payload
         try:
             if payload[:1] == b'{' and payload[-1:] == b'}':
@@ -35,7 +35,7 @@ def decrypt_udp(msg):
         except:
             pass
         return decrypt(payload, udpkey)
-    if header.prefix == PREFIX_6699_VALUE:
+    if header.prefix == H.PREFIX_6699_VALUE:
         unpacked = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
         payload = unpacked.payload.decode()
         # app sometimes has extra bytes at the end

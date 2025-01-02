@@ -4,7 +4,7 @@
 import logging
 
 from .XenonDevice import XenonDevice
-from .command_types import AP_CONFIG, CONTROL, HEART_BEAT, UPDATEDPS
+from . import command_types as CT
 
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
-        payload = self.generate_payload(CONTROL, {switch: on})
+        payload = self.generate_payload(CT.CONTROL, {switch: on})
 
         data = self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_status received data=%r", data)
@@ -38,7 +38,7 @@ class Device(XenonDevice):
 
         """
         # open device, send request, then close connection
-        payload = self.generate_payload(AP_CONFIG)
+        payload = self.generate_payload(CT.AP_CONFIG)
         data = self._send_receive(payload, 0)
         log.debug("product received data=%r", data)
         return data
@@ -53,7 +53,7 @@ class Device(XenonDevice):
             nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
-        payload = self.generate_payload(HEART_BEAT)
+        payload = self.generate_payload(CT.HEART_BEAT)
         data = self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("heartbeat received data=%r", data)
         return data
@@ -71,7 +71,7 @@ class Device(XenonDevice):
 
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
-        payload = self.generate_payload(UPDATEDPS, index)
+        payload = self.generate_payload(CT.UPDATEDPS, index)
         data = self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("updatedps received data=%r", data)
         return data
@@ -89,7 +89,7 @@ class Device(XenonDevice):
         if isinstance(index, int):
             index = str(index)  # index and payload is a string
 
-        payload = self.generate_payload(CONTROL, {index: value})
+        payload = self.generate_payload(CT.CONTROL, {index: value})
 
         data = self._send_receive(payload, getresponse=(not nowait))
 
@@ -106,7 +106,7 @@ class Device(XenonDevice):
         out = {}
         for i in data:
             out[str(i)] = data[i]
-        payload = self.generate_payload(CONTROL, out)
+        payload = self.generate_payload(CT.CONTROL, out)
         return self._send_receive(payload, getresponse=(not nowait))
 
     def turn_on(self, switch=1, nowait=False):
@@ -139,7 +139,7 @@ class Device(XenonDevice):
                 log.debug("set_timer received error=%r", status)
                 return status
 
-        payload = self.generate_payload(CONTROL, {dps_id: num_secs})
+        payload = self.generate_payload(CT.CONTROL, {dps_id: num_secs})
 
         data = self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_timer received data=%r", data)
