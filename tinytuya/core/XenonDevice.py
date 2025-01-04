@@ -36,7 +36,7 @@ def find_device(dev_id=None, address=None):
     if dev_id is None and address is None:
         return {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
 
-    from . import scanner
+    from .. import scanner
 
     want_ids = (dev_id,) if dev_id else None
     want_ips = (address,) if address else None

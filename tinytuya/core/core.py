@@ -208,7 +208,7 @@ def termcolor(color=True):
 # Scan function shortcut
 def scan(maxretry=None, color=True, forcescan=False):
     """Scans your network for Tuya devices with output to stdout"""
-    from . import scanner
+    from .. import scanner
     scanner.scan(scantime=maxretry, color=color, forcescan=forcescan)
 
 
@@ -237,5 +237,6 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
             dps = devices[ip]['dps']
 
     """
-    from . import scanner
+    from .. import scanner
+
     return scanner.devices(verbose=verbose, scantime=maxretry, color=color, poll=poll, forcescan=forcescan, byID=byID)
