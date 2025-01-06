@@ -3,7 +3,12 @@
 ## v1.16.0 - Code Refactoring
 
 * This update refactors core.py by splitting it up into smaller, more logical files. It puts it in a `core` directory, so existing code that imports from `tinytuya.core` should be unaffected.
-* PR https://github.com/jasonacox/tinytuya/pull/575 by @tringenbach 
+* Add Contrib support for Electric Blankets such as Goldair GPFAEB-Q by @leodenham in https://github.com/jasonacox/tinytuya/pull/528
+* Add IoT core service renewal info to the setup wizard in the README by @lorumic in https://github.com/jasonacox/tinytuya/pull/558
+* Contributing with a new device ColorfulX7Device by @CheAhMeD in https://github.com/jasonacox/tinytuya/pull/568
+* Add WiFi Dual Meter device by @ggardet in https://github.com/jasonacox/tinytuya/pull/569
+* Refactoring: split up core.py by @tringenbach in https://github.com/jasonacox/tinytuya/pull/575
+* fix: update tests.py to pass, add to github workflow by @tringenbach in https://github.com/jasonacox/tinytuya/pull/576
 
 ## v1.15.1 - Scanner Fixes
 
