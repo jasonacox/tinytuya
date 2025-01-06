@@ -757,7 +757,8 @@ class IRRemoteControlDevice(Device):
                 mylog.debug('!! need_abort !!')
                 continue
 
-            mylog.debug( 'zero sequence: %r, one sequence: %r', zero_symbol, one_symbol )
+            mylog.debug( 'zero sequence: %r, one sequence: %r', zero_symbol, one_symbol ) # pylint: disable=used-before-assignment
+
 
             raw_symbol_pattern = ''
             for c in symbol_pattern:
