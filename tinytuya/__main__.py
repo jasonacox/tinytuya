@@ -33,6 +33,7 @@ parser = argparse.ArgumentParser( prog=prog, description=description )
 # Options for all functions.
 # Add both here and in subparsers (with alternate `dest=`) if you want to allow it to be positioned anywhere
 parser.add_argument( '-debug', '-d', help='Enable debug messages', action='store_true' )
+parser.add_argument( '-v', '--version', help='Display version information', action='store_true' )
 
 subparser = parser.add_subparsers( dest='command', title='commands (run <command> -h to see usage information)' )
 subparsers = {}
@@ -87,6 +88,10 @@ if HAVE_ARGCOMPLETE:
     argcomplete.autocomplete( parser )
 
 args = parser.parse_args()
+
+if args.version:
+    print('TinyTuya version:', version)
+    sys.exit(0)
 
 if args.debug:
     print('Parsed args:', args)
