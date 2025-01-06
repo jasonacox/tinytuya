@@ -21,4 +21,4 @@ jobs:
         pip install -r requirements.txt
     - name: Analyzing the code with pylint
       run: |
-        pylint -E tinytuya/*.py
+        pylint --recursive y -E tinytuya/

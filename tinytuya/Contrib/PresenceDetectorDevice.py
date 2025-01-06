@@ -76,7 +76,7 @@ class PresenceDetectorDevice(Device):
         """
         status = self.status()
         if "Error" in status:
-            return satus
+            return status
         return status[self.DPS_KEY][self.SENSITIVITY_KEY]
 
     def set_sensitivity(self, sensitivity):
@@ -90,7 +90,7 @@ class PresenceDetectorDevice(Device):
         """
         status = self.status()
         if "Error" in status:
-            return satus
+            return status
         return status[self.DPS_KEY][self.NEAR_DETECTION_KEY]
 
     def set_near_detection(self, distance):
@@ -104,7 +104,7 @@ class PresenceDetectorDevice(Device):
         """
         status = self.status()
         if "Error" in status:
-            return satus
+            return status
         return status[self.DPS_KEY][self.FAR_DETECTION_KEY]
 
     def set_far_detection(self, distance):
@@ -118,7 +118,7 @@ class PresenceDetectorDevice(Device):
         """
         status = self.status()
         if "Error" in status:
-            return satus
+            return status
         return status[self.DPS_KEY][self.AUTO_DETECT_RESULT_KEY]
 
     def get_target_distance(self):
@@ -129,5 +129,5 @@ class PresenceDetectorDevice(Device):
         """
         status = self.status()
         if "Error" in status:
-            return satus
+            return status
         return status[self.DPS_KEY][self.TARGET_DISTANCE_KEY]
