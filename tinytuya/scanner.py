@@ -234,11 +234,8 @@ def send_discovery_request( iface_list=None ):
 
         log.debug( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
         # the official app always sends it twice, so do the same
-        try:
-            iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
-            iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
-        except socket.error as e:
-            log.error(f"Failed to send discovery broadcast to {iface['broadcast']}:{iface['port']}: {e}")
+        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
+        iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
 
         if close_sockets:
             iface['socket'].close()
