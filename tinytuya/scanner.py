@@ -213,6 +213,8 @@ def send_discovery_request( iface_list=None ):
             addr = client_bcast_addrs[bcast]
             iface_list[addr] = { 'broadcast': bcast }
 
+    at_least_one_succeeded = False
+    bcast_error_messages = []
     for address in iface_list:
         iface = iface_list[address]
         if 'socket' not in iface:
@@ -233,16 +235,22 @@ def send_discovery_request( iface_list=None ):
             iface['port'] = 7000
 
         log.debug( 'Sending discovery broadcast from %r to %r on port %r', address, iface['broadcast'], iface['port'] )
-        # the official app always sends it twice, so do the same
         try:
             iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
-            iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
+            at_least_one_succeeded = True
         except socket.error as e:
-            log.error(f"Failed to send discovery broadcast to {iface['broadcast']}:{iface['port']}: {e}")
+            log.debug( f"Failed to send discovery broadcast from {address} to {iface['broadcast']}:{iface['port']}: {e}" )
+            bcast_error_messages.append( f"Failed to send discovery broadcast from {address} to {iface['broadcast']}:{iface['port']}: {e}" )
 
         if close_sockets:
             iface['socket'].close()
             del iface['socket']
+
+    if not at_least_one_succeeded:
+        if log.level != logging.DEBUG:
+            for line in bcast_error_messages:
+                log.error( line )
+        log.error( 'Sending broadcast discovery packet failed, certain v3.5 devices will not be found!' )
 
 class KeyObj(object):
     def __init__( self, gwId, key ):
