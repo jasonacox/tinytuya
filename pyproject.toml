@@ -1,2 +1,152 @@
+[project]
+name = "tinytuya"
+dynamic = ["version", "readme"]
+authors = [
+    { name = "Jason Cox", email = "jason@jasonacox.com" },
+]
+description = "Python module to interface with Tuya WiFi smart devices"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "colorama",
+    "requests",
+]
+
+requires-python = ">= 3.8"
+
+[project.optional-dependencies]
+cryptography = ["cryptography>=3.1"]
+pycryptodome = ["pycryptodome"]
+pyaes = ["pyaes"]
+pycrypto = ["pycrypto"]
+
+[project.urls]
+Homepage = "https://github.com/jasonacox/tinytuya"
+Repository = "https://github.com/jasonacox/tinytuya"
+
+[project.scripts]
+tinytuya = "tinytuya.__main__:dummy"
+
 [build-system]
-requires = ["setuptools", "colorama", "requests", "cryptography"]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "tinytuya.__version__"}
+readme = {file = ["README.md"], content-type = "text/markdown"}
+
+[tool.setuptools.packages.find]
+exclude = ["sandbox"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.2",
+]
+
+
+[tool.ruff]
+include = [
+    "pyproject.toml",
+    "tinytuya/**/*.py",
+    "Contrib/**/*.py",
+    "server/**/*.py",
+    "examples/**/*.py",
+    "tools/**/*.py",
+]
+
+[tool.ruff.lint]
+select = [
+  "D419",  # empty-docstring
+  "W291",  # trailing-whitespace
+  "PLC0414",  # useless-import-alias
+  "PLC2401",  # non-ascii-name
+  "PLC3002",  # unnecessary-direct-lambda-call
+  "PLE0101",  # return-in-init
+  "F706",  # return-outside-function
+  "F704",  # yield-outside-function
+  "PLE0115",  # nonlocal-and-global
+  "PLE0116",  # continue-in-finally
+  "PLE0117",  # nonlocal-without-binding
+  "PLE0241",  # duplicate-bases
+  "PLE0302",  # unexpected-special-method-signature
+  "PLE0604",  # invalid-all-object
+  "PLE0605",  # invalid-all-format
+  "PLE0643",  # potential-index-error
+  "PLE0704",  # misplaced-bare-raise
+  "PLE1142",  # await-outside-async
+  "PLE1205",  # logging-too-many-args
+  "PLE1206",  # logging-too-few-args
+  "PLE1307",  # bad-string-format-type
+  "PLE1310",  # bad-str-strip-call
+  "PLE1507",  # invalid-envvar-value
+  "PLE1519",  # singledispatch-method
+  "PLE1520",  # singledispatchmethod-function
+  "PLE2502",  # bidirectional-unicode
+  "PLE2510",  # invalid-character-backspace
+  "PLE2512",  # invalid-character-sub
+  "PLE2513",  # invalid-character-esc
+  "PLE2514",  # invalid-character-nul
+  "PLE2515",  # invalid-character-zero-width-space
+  "PLR0124",  # comparison-with-itself
+  "PLR0206",  # property-with-parameters
+  "PLR1704",  # redefined-argument-from-local
+  "PLR1711",  # useless-return
+  "C416",  # unnecessary-comprehension
+  "PLR1736",  # unnecessary-list-index-lookup
+  "PLW0120",  # useless-else-on-loop
+  "PLW0127",  # self-assigning-variable
+  "PLW0128",  # redeclared-assigned-name
+  "PLW0129",  # assert-on-string-literal
+  "B033",  # duplicate-value
+  "PLW0131",  # named-expr-without-context
+  "PLW0211",  # bad-staticmethod-argument
+  "PLW0245",  # super-without-brackets
+  "PLW0406",  # import-self
+  "PLW0602",  # global-variable-not-assigned
+  "PLW0603",  # global-statement
+  "PLW0604",  # global-at-module-level
+  "F401",  # unused-import
+  "PLW0711",  # binary-op-exception
+  "PLW1501",  # bad-open-mode
+  "PLW1508",  # invalid-envvar-default
+  "PLW1509",  # subprocess-popen-preexec-fn
+  "PLW2101",  # useless-with-lock
+  "PLW3301",  # nested-min-max
+]
+
+ignore = [
+  "E501",  # line-too-long
+  "F401", # imported but unused
+  "UP004",  # useless-object-inheritance
+  "PLR0911",  # too-many-return-statements
+  "PLR0912",  # too-many-branches
+  "PLR0913",  # too-many-arguments
+  "PLR0914",  # too-many-locals
+  "PLR0915",  # too-many-statements
+  "PLR1702",  # too-many-nested-blocks
+  "F841",  # unused-variable
+  "E722",  # bare-except
+  "PLW1514",  # unspecified-encoding
+]
+
+[tool.ruff.lint.per-file-ignores]
+# this is grandfathering in some existing errors,
+# we may want to remove these in the future
+"tools/**/*.py" = [
+    "PLR1704",
+    "PLW0602",
+]
+"server/**/*.py" = [
+    "W291",
+    "PLW0602",
+    "PLW0603",
+]
+"examples/**/*.py" = [
+    "PLW0602",
+    "PLW0603",
+    "W291",
+]
