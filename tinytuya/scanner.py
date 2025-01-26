@@ -239,7 +239,7 @@ def send_discovery_request( iface_list=None ):
             iface['socket'].sendto( iface['payload'], (iface['broadcast'], iface['port']) )
             at_least_one_succeeded = True
         except socket.error as e:
-            log.debug( 'Failed to send discovery broadcast from %r to %r:%r', address, iface['broadcast'], iface['port'], exc_info=True )
+            log.debug( f"Failed to send discovery broadcast from {address} to {iface['broadcast']}:{iface['port']}: {e}" )
             bcast_error_messages.append( f"Failed to send discovery broadcast from {address} to {iface['broadcast']}:{iface['port']}: {e}" )
 
         if close_sockets:
