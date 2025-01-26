@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.16.1 - Scanner Error Handling
+
+* Adds error handling for cases when the scanner broadcasts fails by @x011 in https://github.com/jasonacox/tinytuya/pull/585 and @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/587
+
 ## v1.16.0 - Code Refactoring
 
 * This update refactors core.py by splitting it up into smaller, more logical files. It puts it in a `core` directory, so existing code that imports from `tinytuya.core` should be unaffected.
