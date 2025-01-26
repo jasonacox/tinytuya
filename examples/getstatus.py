@@ -10,6 +10,10 @@
 import tinytuya
 import time
 
+DEVICEID = "01234567891234567890"
+DEVICEIP = "10.0.1.99"
+DEVICEKEY = "0123456789abcdef"
+
 # Connect to the device - replace with real values
 d=tinytuya.OutletDevice(DEVICEID, DEVICEIP, DEVICEKEY)
 d.set_version(3.3)

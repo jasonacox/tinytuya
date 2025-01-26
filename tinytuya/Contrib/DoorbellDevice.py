@@ -5,11 +5,11 @@
 
  Author: JonesMeUp
  Tested: LSC-Bell 8S(AKV300_8M)
- Note: Without hack the device can't be used offline. 
+ Note: Without hack the device can't be used offline.
        With hack the DoorbellDevice is useless.
         
  For more information see https://github.com/jasonacox/tinytuya
-    https://github.com/jasonacox/tinytuya/issues/162 
+    https://github.com/jasonacox/tinytuya/issues/162
 
 Offline Device
     This DoorbellDevice works only if the device is online. Most stay
@@ -86,7 +86,7 @@ class DoorbellDevice(Device):
         if vol < 3:
             vol = 3 # Nothing to hear below 3
         if vol > 10:
-            vol = 10        
+            vol = 10
         self.set_value(160, int(vol), nowait)
 
     def set_motion_area(self, x=0,y=0,xlen=50, ylen=100, nowait=False):
@@ -99,10 +99,10 @@ class DoorbellDevice(Device):
         if ylen <   0: ylen =   0
         if xlen > 100: xlen = 100
         if ylen > 100: ylen = 100
-        if x+xlen >100: 
+        if x+xlen >100:
            x    = 25
            xlen = 75
-        if y+ylen >100: 
+        if y+ylen >100:
            y    = 25
            ylen = 75
         data = '{"num":1,"region0":{"x":'+str(x)+',"y":'+str(y)+',"xlen":'+str(xlen)+',"ylen":'+str(ylen)+'}}'

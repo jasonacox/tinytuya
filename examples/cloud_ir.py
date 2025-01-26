@@ -17,6 +17,8 @@ import json
 
 #tinytuya.set_debug()
 
+DEVICEID = "01234567891234567890"
+
 # Set this to the actual blaster device, not a virtual remote
 device_id = DEVICEID
 
