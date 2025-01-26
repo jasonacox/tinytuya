@@ -519,7 +519,7 @@ class ForceScannedDevice(DeviceDetect):
         elif forced:
             self.err_found = True
             self.message = "%s    Polling %s Failed: Unexpected close during read/write operation" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose']) 
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
         elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
@@ -1108,8 +1108,8 @@ def _print_device_info( result, note, term, extra_message=None, verbose=True ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
-            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None,
+            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[],
             maxdevices=0): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
