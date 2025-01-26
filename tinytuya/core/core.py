@@ -84,12 +84,7 @@ except NameError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 16, 1)
-version = __version__ = "%d.%d.%d" % version_tuple
-__author__ = "jasonacox"
-
 log = logging.getLogger(__name__)
-
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2

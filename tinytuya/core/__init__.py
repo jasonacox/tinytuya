@@ -14,5 +14,3 @@ from .command_types import *
 from .header import *
 
 from .core import *
-from .core import __version__
-from .core import __author__
