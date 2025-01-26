@@ -50,7 +50,7 @@ class PresenceDetectorDevice(Device):
            return status
         dps = status[self.DPS_KEY]
         retry = 5
-        while(retry > 0 and not self.PRESENCE_KEY in dps):
+        while(retry > 0 and self.PRESENCE_KEY not in dps):
             retry = retry - 1
             status = super().status()
             dps = status[self.DPS_KEY]

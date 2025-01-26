@@ -36,7 +36,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-version = {attr = "tinytuya.__version__"}
+version = {attr = "tinytuya.core.core.__version__"}
 readme = {file = ["README.md"], content-type = "text/markdown"}
 
 [tool.setuptools.packages.find]
@@ -59,7 +59,7 @@ include = [
 ]
 
 [tool.ruff.lint]
-select = [
+extend-select = [
   "D419",  # empty-docstring
   "W291",  # trailing-whitespace
   "PLC0414",  # useless-import-alias
@@ -131,12 +131,21 @@ ignore = [
   "F841",  # unused-variable
   "E722",  # bare-except
   "PLW1514",  # unspecified-encoding
+
+  "E701", # Multiple statements on one line (colon)
+  "E721", # Use `is` and `is not` for type comparisons, or `isinstance()` for isinstance checks
+  "F405", # undefined-local-with-import-star-usage
+  "F403", # undefined-local-with-import-star
+  "E741", # ambiguous-variable-name
+  "E711", # none-comparison
+  "E712", # true-false-comparison
 ]
 
 [tool.ruff.lint.per-file-ignores]
 # this is grandfathering in some existing errors,
 # we may want to remove these in the future
 "tools/**/*.py" = [
+    "F821", # undefined-name
     "PLR1704",
     "PLW0602",
 ]

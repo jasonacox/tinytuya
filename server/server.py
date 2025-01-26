@@ -61,7 +61,6 @@ except:
 
 import tinytuya
 from tinytuya import scanner
-import os
 
 BUILD = "p13"
 

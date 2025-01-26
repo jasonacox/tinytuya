@@ -90,11 +90,11 @@
 """
 
 from .core import *
+from .core import __version__
+from .core import __author__
+
 from .OutletDevice import OutletDevice
 from .CoverDevice import CoverDevice
 from .BulbDevice import BulbDevice
 from .Cloud import Cloud
 
-version = __version__ = "1.16.1"
-version_tuple = tuple(__version__.split("."))
-__author__ = "jasonacox"
