@@ -1,4 +1,4 @@
-name: Pylint
+name: RuffLint
 
 on: [push]
 
@@ -17,8 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
-        pip install -r requirements.txt
+        pip install ruff
     - name: Analyzing the code with pylint
       run: |
-        pylint --recursive y -E tinytuya/
+        ruff check --output-format=github .
