@@ -48,7 +48,7 @@ while (x<20):
     mode             = 0 # 0 - hard transitions (jumping), 1 - smooth transitions (gradient) 
     hue              = random.randint(0,360)  # 1111 (hue:        0–360,  0X0000–0X0168)
     saturation       = random.randint(0,1000) # 2222 (saturation: 0–1000, 0X0000–0X03E8)
-    brightness       = random.randint(0,1000) # 3333 (saturation: 0–1000, 0X0000–0X03E8)
+    brightness       = random.randint(0,1000) # 3333 (brightness: 0–1000, 0X0000–0X03E8)
     white_brightness = 0 # 4444: indicates brightness. It ranges from 0 to 1,000.
     temperature      = 0 # 5555: the temperature value (0–1000)
     value = f"{mode:01X}{hue:04X}{saturation:04X}{brightness:04X}{white_brightness:04X}{temperature:04X}"
