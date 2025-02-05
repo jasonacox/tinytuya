@@ -12,6 +12,7 @@
 """
 import tinytuya
 import time
+import random
 
 #tinytuya.set_debug()
 
@@ -40,12 +41,15 @@ print('Setting to Music')
 d.set_mode('music')
 data = d.status()
 
-# Send example music data to bulb 
-#  TODO: Figure out what the value does and how to use it to 
-#        represent real music data, beats, colors, fades
 x = 0
 while (x<20):
-    value = "%02d01" % x
+    # see: https://developer.tuya.com/en/docs/iot/solarlight-function-definition?id=K9tp16f086d5h#title-10-DP27(8)%3A%20music
+    hue = random.randint(0,360)
+    saturation = random.randint(0,1000)
+    brightness = random.randint(0,1000)
+    white_brightness = 0
+    temperature = 0
+    value = f"{mode:01X}{hue:04X}{saturation:04X}{brightness:04X}{white_brightness:04X}{temperature:04X}"
     print (" > Sending %s" % value)
     payload = d.generate_payload(tinytuya.CONTROL, {"27": value})
     d.send(payload)
