@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
  Python module to interface with Tuya Colorful-X7:
- Tuya Smart WiFi Zigbee BT Colorful X7 LED Music Controller SP107E 
+ Tuya Smart WiFi Zigbee BT Colorful X7 LED Music Controller SP107E
  Matrix 1024 Pixels LED Panel Light Music Spectrum Controller
 
  Author: Ahmed Chehaibi (https://github.com/CheAhMeD)
@@ -17,7 +17,7 @@
         switch_off()                       # turns off the device
         switch_on()                        # turns on the device
         set_mode(mode)                     # sets the mode to white | colour | scene | music | screen
-        set_color(r, g, b)                 # sets the colour 
+        set_color(r, g, b)                 # sets the colour
         set_countdown(value)               # sets the countdown timer value (max 86400)
         set_segments_number(number)        # sets the number of segments in led strip|matrix (1 to 64)
         set_leds_PerSegment(number)        # sets the number of leds per segment in led strip|matrix (1 to 150)
@@ -316,7 +316,7 @@ class ColorfulX7Device(Device):
 
     def set_screen_mode(self, mode):
         '''
-        Screen Mode: 
+        Screen Mode:
         Like Music mode but for matrix display
         choose between 30 available matrix modes
         modes don't have a name they are represented by numbers

@@ -397,7 +397,7 @@ class Cloud(object):
         """
         Return dictionary of all devices.
 
-        Args: 
+        Args:
             verbose - Returns raw JSON data from Tuya Cloud
             oldlist - List of devices from previous run
             include_map - Include the DPS mapping in the device list

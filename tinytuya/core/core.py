@@ -11,8 +11,8 @@
  Classes
   * AESCipher - Cryptography Helpers
   * XenonDevice(...) - Base Tuya Objects and Functions
-        XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, 
-            version="3.1", persist=False, cid/node_id=None, parent=None, connection_retry_limit=5, 
+        XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
+            version="3.1", persist=False, cid/node_id=None, parent=None, connection_retry_limit=5,
             connection_retry_delay=5)
   * Device(XenonDevice) - Tuya Class for Devices
 
@@ -84,12 +84,11 @@ except NameError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 16, 1)
-version = __version__ = "%d.%d.%d" % version_tuple
+version = __version__ = "1.16.1"
+version_tuple = tuple(__version__.split("."))
 __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
-
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2

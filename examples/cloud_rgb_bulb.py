@@ -14,6 +14,9 @@ import tinytuya
 import colorsys
 import time
 
+
+DEVICEID = "01234567891234567890"
+
 # Set these values for your device
 id = DEVICEID
 cmd_code = 'colour_data_v2'  # look at c.getstatus(id) to see what code should be used
