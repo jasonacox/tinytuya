@@ -950,6 +950,7 @@ Please feel free to submit a PR or open an issue to add your project.
 * https://github.com/make-all/tuya-local - Local support for Tuya devices in Home Assistant
 * https://github.com/teejo75/mtghs - Provides an HTTP service for Moonraker to control Tuya outlets.
 * https://github.com/Xenomes/Domoticz-TinyTUYA-Plugin - Plugin for Domoticz Home Automation
+* https://github.com/CmdrAvegan/AmbiTuya - Ambient lighting system for Tuya-based LED strips,
 
 ## Contributors
 
