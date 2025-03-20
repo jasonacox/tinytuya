@@ -122,7 +122,7 @@ class WiFiDualMeterDevice(Device):
             scale = 1
         try:
             unit = self.dps_data[dps_code]['unit']
-        except KeyError:            
+        except KeyError:
             unit = ""
         val = status_data['dps'][dps_code]
         if isinstance(val, int):
