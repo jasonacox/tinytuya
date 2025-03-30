@@ -35,7 +35,7 @@
 import colorsys
 
 from .core import Device, log
-from .core import error_json, ERR_JSON, ERR_RANGE, ERR_STATE, ERR_TIMEOUT
+from .core import error_json, ERR_JSON, ERR_RANGE, ERR_STATE, ERR_TIMEOUT, ERR_FUNCTION
 
 class BulbDevice(Device):
     """
@@ -532,7 +532,7 @@ class BulbDevice(Device):
                 if self.dpset[k]:
                     dps_values[self.dpset[k]] = check_values[k]
 
-        return self.set_multiple_values( payload, nowait=nowait )
+        return self.set_multiple_values( dps_values, nowait=nowait )
 
     def set_brightness_percentage(self, brightness=100, nowait=False):
         """
