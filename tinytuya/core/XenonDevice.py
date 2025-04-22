@@ -743,11 +743,12 @@ class XenonDevice(object):
             try:
                 payload = payload.decode()
             except UnicodeDecodeError:
-                try:
-                    invalid_json = payload
-                    payload = payload.decode( errors='replace' )
-                except:
-                    pass
+                if (payload[:1] == b'{') and (payload[-1:] == b'}'):
+                    try:
+                        invalid_json = payload
+                        payload = payload.decode( errors='replace' )
+                    except:
+                        pass
             except:
                 pass
 
