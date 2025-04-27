@@ -113,6 +113,10 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### p14 - Recovery Logic
+
+* Add main loop logic to try to recover when exception occurs.
+
 ### p12 - Force Scan
 
 * Added "Force Scan" button to cause server to run a network scan for devices not broadcasting.

@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## v1.16.3 - Cloud Error Handling
+
+* Add error handling in Cloud getdevices() function for edge case where old devices.json has corrupt or malformed device entries.
+* Server p14 update: Add main loop logic to try to recover when exception occurs.
+
 ## v1.16.2 - Invalid JSON Handling
 
 * Handle invalid binary data in the JSON from the device better by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/607 re: #606
