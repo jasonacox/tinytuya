@@ -819,4 +819,4 @@ if __name__ == "__main__":
         log.debug("Stoppping threads")
         requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)
     except Exception as err:
-        log.error("Error in main loop: %s", (err,))
+        log.error("Error in main loop: %s", err)
