@@ -700,7 +700,7 @@ class XenonDevice(object):
             payload = payload[len(H.PROTOCOL_VERSION_BYTES_31) :]
             # Decrypt payload
             # Remove 16-bytes of MD5 hexdigest of payload
-            payload = cipher.decrypt(payload[16:])
+            payload = cipher.decrypt(payload[16:], decode_text=False)
         elif self.version >= 3.2: # 3.2 or 3.3 or 3.4 or 3.5
             # Trim header for non-default device type
             if payload.startswith( self.version_bytes ):
@@ -713,7 +713,7 @@ class XenonDevice(object):
             if self.version < 3.4:
                 try:
                     log.debug("decrypting=%r", payload)
-                    payload = cipher.decrypt(payload, False)
+                    payload = cipher.decrypt(payload, False, decode_text=False)
                 except:
                     log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
                     return error_json(ERR_PAYLOAD)
@@ -722,13 +722,10 @@ class XenonDevice(object):
                 # Try to detect if device22 found
                 log.debug("payload type = %s", type(payload))
 
-            if not isinstance(payload, str):
-                try:
-                    payload = payload.decode()
-                except:
-                    log.debug("payload was not string type and decoding failed")
-                    return error_json(ERR_JSON, payload)
-            if not self.disabledetect and "data unvalid" in payload:
+            if isinstance(payload, str):
+                payload = payload.encode('utf-8')
+
+            if not self.disabledetect and b"data unvalid" in payload:
                 self.dev_type = "device22"
                 # set at least one DPS
                 self.dps_to_request = {"1": None}
@@ -741,13 +738,35 @@ class XenonDevice(object):
             log.debug("Unexpected payload=%r", payload)
             return error_json(ERR_PAYLOAD, payload)
 
+        invalid_json = None
         if not isinstance(payload, str):
-            payload = payload.decode()
+            try:
+                payload = payload.decode()
+            except UnicodeDecodeError:
+                if (payload[:1] == b'{') and (payload[-1:] == b'}'):
+                    try:
+                        invalid_json = payload
+                        payload = payload.decode( errors='replace' )
+                    except:
+                        pass
+            except:
+                pass
+
+            # if .decode() threw an exception, `payload` will still be bytes
+            if not isinstance(payload, str):
+                log.debug("payload was not string type and decoding failed")
+                return error_json(ERR_JSON, payload)
+
         log.debug("decoded results=%r", payload)
         try:
             json_payload = json.loads(payload)
         except:
             json_payload = error_json(ERR_JSON, payload)
+            json_payload['invalid_json'] = payload
+
+        if invalid_json and isinstance(json_payload, dict):
+            # give it to the user so they can try to decode it if they want
+            json_payload['invalid_json'] = invalid_json
 
         # v3.4 stuffs it into {"data":{"dps":{"1":true}}, ...}
         if "dps" not in json_payload and "data" in json_payload and "dps" in json_payload['data']:

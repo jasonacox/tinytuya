@@ -84,7 +84,7 @@ except NameError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 16, 1)
+version_tuple = (1, 16, 2)
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
