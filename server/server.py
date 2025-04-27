@@ -61,9 +61,8 @@ except:
 
 import tinytuya
 from tinytuya import scanner
-import os
 
-BUILD = "p13"
+BUILD = "p14"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
@@ -103,6 +102,7 @@ log = logging.getLogger(__name__)
 if len(sys.argv) > 1 and sys.argv[1].startswith("-d"):
     DEBUGMODE = True
 if DEBUGMODE:
+    tinytuya.set_debug(True)
     logging.basicConfig(
         format="\x1b[31;1m%(levelname)s [%(asctime)s]:%(message)s\x1b[0m", level=logging.DEBUG, 
         datefmt='%d/%b/%y %H:%M:%S'
@@ -819,9 +819,4 @@ if __name__ == "__main__":
         log.debug("Stoppping threads")
         requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)
     except Exception as err:
-        log.error(f"Error in main loop: {err}")
-        running = False
-        # Close down API thread
-        print("Stopping threads...")
-        log.debug("Stoppping threads")
-        requests.get('http://localhost:%d/stop' % APIPORT, timeout=5)
+        log.error("Error in main loop: %s", err)

@@ -405,6 +405,10 @@ class Cloud(object):
         old_devices = {}
         if oldlist:
             for dev in oldlist:
+                # make sure dev is a dict and has an id
+                if not isinstance( dev, dict ) or 'id' not in dev:
+                    log.warning("Skipping malformed device entry: %s", dev)
+                    continue
                 dev_id = dev['id']
                 old_devices[dev_id] = dev
 
