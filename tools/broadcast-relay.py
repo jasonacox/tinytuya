@@ -167,7 +167,10 @@ def send_broadcast():
     """
     Send broadcasts to query for newer v3.5 devices
     """
-    return send_discovery_request()
+    our_broadcasts = send_discovery_request()
+    if not our_broadcasts:
+        our_broadcasts = {}
+    return our_broadcasts
 
 if __name__ == '__main__':
     disc = 'Listens for broadcast packets from Tuya devices and sends them via unicast to App clients.  Useful to make the app work on broadcast-blocking WiFi networks.'
