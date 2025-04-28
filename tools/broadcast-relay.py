@@ -39,7 +39,7 @@ def relay( args ):
     log.info( 'Starting Relay' )
 
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    send_sock.bind(("0.0.0.0", 0))
+    #send_sock.bind(("", 0))
 
     # Enable UDP listening broadcasting mode on UDP port 6666 - 3.1 Devices
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
