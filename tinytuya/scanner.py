@@ -252,6 +252,8 @@ def send_discovery_request( iface_list=None ):
                 log.error( line )
         log.error( 'Sending broadcast discovery packet failed, certain v3.5 devices will not be found!' )
 
+    return iface_list
+
 class KeyObj(object):
     def __init__( self, gwId, key ):
         self.gwId = gwId
