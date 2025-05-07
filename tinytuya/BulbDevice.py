@@ -193,7 +193,9 @@ class BulbDevice(Device):
             b = int(rgb[2] * 255)
         else:
             # Unsupported bulb type
-            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine RGB values.")
+            raise ValueError(
+                "Unsupported bulb type {} - unable to determine RGB values.".format(bulb)
+            )
 
         return (r, g, b)
 
@@ -217,7 +219,9 @@ class BulbDevice(Device):
             v = int(hexvalue[8:12], 16) / 1000.0
         else:
             # Unsupported bulb type
-            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine HSV values.")
+            raise ValueError(
+                "Unsupported bulb type {} - unable to determine HSV values.".format(bulb)
+            )
         
         return (h, s, v)
 
