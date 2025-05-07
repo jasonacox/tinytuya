@@ -240,10 +240,10 @@ def get_key( dev=None, mac=None, ip=None ):
 
     # first lookup by device id, if provided
     if dev:
-        for dev in devices:
-            if 'id' in dev and 'key' in dev and dev['key']:
-                if dev == dev['id']:
-                    return dev['id'], dev['key'], ver
+        for check_dev in devices:
+            if 'id' in check_dev and 'key' in check_dev and check_dev['key']:
+                if dev == check_dev['id']:
+                    return check_dev['id'], check_dev['key'], ver
 
     # if no device id, try the mac
     if mac:
@@ -280,13 +280,30 @@ def process_pcap( pcap_file, args ):
             continue
 
         if( isinstance(eth.ip.data, dpkt.udp.UDP) ):
-            if( (eth.ip.udp.dport == 6667 or eth.ip.udp.dport == 6666 or eth.ip.udp.dport == 7000) and eth.ip.src not in ip_devs ):
+            if( eth.ip.udp.dport == 6667 or eth.ip.udp.dport == 6666 or eth.ip.udp.dport == 7000 ):
+                if( (eth.ip.dst == b'\xff\xff\xff\xff') or (eth.ip.udp.dport == 7000) ):
+                    devip = inet_to_str( eth.ip.src )
+                    if devip in ip_devs:
+                        continue
+                    devmac = mac_to_str( eth.src )
+                else:
+                    devip = None
+                    devmac = None
+
                 try:
                     data = eth.ip.udp.data
-                    devmac = mac_to_str( eth.src )
-                    devip = inet_to_str( eth.ip.src )
                     payload_raw = tinytuya.decrypt_udp( data )
                     payload = json.loads( payload_raw )
+
+                    if not devip:
+                        if payload and 'ip' in payload:
+                            devip = payload['ip']
+                            if devip in ip_devs:
+                                continue
+
+                        if not devip:
+                            print( 'No IP for device?? ', eth.ip.src, ':', eth.ip.udp.sport, '->', eth.ip.dst, ':', eth.ip.udp.dport, 'sent:', payload )
+
                     bcast_dev = devip + ':' + str(eth.ip.udp.dport)
                     if bcast_dev not in bcast_devs:
                         if 'gwId' not in payload:
@@ -299,6 +316,7 @@ def process_pcap( pcap_file, args ):
                         ip_devs[devip] = payload
                 except:
                     traceback.print_exc()
+            continue
 
         if( isinstance(eth.ip.data, dpkt.tcp.TCP) ):
             data = None
@@ -387,14 +405,31 @@ if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser( description=disc, epilog=epi )
     arg_parser.add_argument( '-z', '--hide-zero-len', help='Hide 0-length heartbeat packets', action='store_true' )
     arg_parser.add_argument( '-s', '--sortable', help='Output data in a way which is sortable by device ID', action='store_true' )
-    arg_parser.add_argument( '-d', '--devices', help='devices.json file to read local keys from', default='devices.json', metavar='devices.json', type=argparse.FileType('rb'), required=True )
+    arg_parser.add_argument( '-d', '--devices', help='devices.json file to read local keys from', default=None, metavar='devices.json' ) #, type=argparse.FileType('rb') )
     arg_parser.add_argument( 'files', metavar='INFILE.pcap', nargs='+', help='Input file(s) to parse', type=argparse.FileType('rb') )
 
     if HAVE_ARGCOMPLETE:
         argcomplete.autocomplete( arg_parser )
 
     args = arg_parser.parse_args()
-    devices = json.load( args.devices )
+
+    if not args.devices:
+        try:
+            with open( 'devices.json', 'rb' ) as fp:
+                devices = json.load( fp )
+            if not args.sortable:
+                print( 'Using \'devices.json\' for device keys' )
+        except Exception as e:
+            try:
+                with open( '../devices.json', 'rb' ) as fp:
+                    devices = json.load( fp )
+                if not args.sortable:
+                    print( 'Using \'../devices.json\' for device keys' )
+            except:
+                raise e
+    else:
+        with open( args.devices, 'rb' ) as fp:
+            devices = json.load( fp )
 
     args.fnum = 0
     args.ftot = len(args.files)
