@@ -100,7 +100,7 @@ class BulbDevice(Device):
         'scene': 25,
         'scene_idx': 25, # Type B prefixes scene with idx
         'timer': 26,
-        'music': 27,
+        'music': 28,
         'value_min': 10,
         'value_max': 1000,
         'value_rgb': False,
