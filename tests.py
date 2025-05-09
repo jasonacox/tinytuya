@@ -193,6 +193,25 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_set_brightness_C(self):
+        # arrange
+        d = build_mock_bulb('C')
+
+        # act
+        d.set_brightness_percentage(100)
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        # expected_payload = {"dps":{"2":"white", "3": 255, "4": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{'1': True, "2": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
 
 if __name__ == '__main__':
     unittest.main()
