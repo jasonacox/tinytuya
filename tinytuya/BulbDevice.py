@@ -11,72 +11,51 @@
         See OutletDevice() for constructor arguments
 
  Functions
+    BulbDevice Class methods
+        rgb_to_hexvalue(r, g, b, use_rgb=False):
+        hsv_to_hexvalue(h, s, v, use_rgb=False):
+        hexvalue_to_rgb(hexvalue, use_rgb=None):
+        hexvalue_to_hsv(hexvalue, use_rgb=None):
+
     BulbDevice
+        set_mode(self, mode="white", nowait=False):
+        set_scene(self, scene, scene_data=None, nowait=False):
+        set_timer(self, num_secs, nowait=False):
+        set_musicmode(self, transition, modify_settings=True, nowait=False):
+        unset_musicmode( self ):
+        set_music_colour( self, rh, gs, bv, brightness=None, colourtemp=None, transition=None, nowait=False ):
         set_colour(r, g, b, nowait):
         set_hsv(h, s, v, nowait):
-        set_white(brightness, colourtemp, nowait):
         set_white_percentage(brightness=100, colourtemp=0, nowait):
-        set_brightness(brightness, nowait):
         set_brightness_percentage(brightness=100, nowait):
-        set_colourtemp(colourtemp, nowait):
         set_colourtemp_percentage(colourtemp=100, nowait):
-        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white', nowait):       # white, colour, scene, music
-        result = brightness():
-        result = colourtemp():
+        result = get_value(self, feature, state=None, nowait=False):
+        result = get_mode(self, state=None, nowait=False):
+        result = get_brightness_percentage(self, state=None, nowait=False):
+        result = get_colourtemp_percentage(self, state=None, nowait=False):
         (r, g, b) = colour_rgb():
         (h,s,v) = colour_hsv()
         result = state():
+        bool = bulb_has_capability( self, feature, nowait=False ):
+        detect_bulb(self, response=None, nowait=False):
+        set_bulb_type(self, bulb_type=None, **kwargs):
+        set_bulb_capabilities(self, **kwargs):
 
     Inherited
-        json = status()                    # returns json payload
-        set_version(version)               # 3.1 [default] or 3.3
-        set_socketPersistent(False/True)   # False [default] or True
-        set_socketNODELAY(False/True)      # False or True [default]
-        set_socketRetryLimit(integer)      # retry count limit [default 5]
-        set_socketTimeout(timeout)         # set connection timeout in seconds [default 5]
-        set_dpsUsed(dps_to_request)        # add data points (DPS) to request
-        add_dps_to_request(index)          # add data point (DPS) index set to None
-        set_retry(retry=True)              # retry if response payload is truncated
-        set_status(on, switch=1, nowait)   # Set status of switch to 'on' or 'off' (bool)
-        set_value(index, value, nowait)    # Set int value of any index.
-        heartbeat(nowait)                  # Send heartbeat to device
-        updatedps(index=[1], nowait)       # Send updatedps command to device
-        turn_on(switch=1, nowait)          # Turn on device / switch #
-        turn_off(switch=1, nowait)         # Turn off
-        set_timer(num_secs, nowait)        # Set timer for num_secs
-        set_debug(toggle, color)           # Activate verbose debugging output
-        set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
-        detect_available_dps()             # Return list of DPS available from device
-        generate_payload(command, data)    # Generate TuyaMessage payload for command with data
-        send(payload)                      # Send payload to device (do not wait for response)
-        receive()                          # Receive payload from device
+        Every device function from core.py
 """
 
 import colorsys
 
-from .core import * # pylint: disable=W0401, W0614
+from .core import Device, log
+from .core import error_json, ERR_JSON, ERR_FUNCTION # ERR_RANGE, ERR_STATE, ERR_TIMEOUT
 
+# pylint: disable=R0904
 class BulbDevice(Device):
     """
     Represents a Tuya based Smart Light/Bulb.
-
-    This class supports two types of bulbs with different DPS mappings and functions:
-        Type A - Uses DPS index 1-5
-        Type B - Uses DPS index 20-27 (no index 1)
-        Type C - Same as Type A except that it is using DPS 2 for brightness, which ranges from 0-1000.  These are the Feit branded dimmers found at Costco.
     """
 
-    # Two types of Bulbs - TypeA uses DPS 1-5, TypeB uses DPS 20-24
-    DPS_INDEX_ON = {"A": "1", "B": "20", "C": "1"}
-    DPS_INDEX_MODE = {"A": "2", "B": "21", "C": "1"}
-    DPS_INDEX_BRIGHTNESS = {"A": "3", "B": "22", "C": "2"}
-    DPS_INDEX_COLOURTEMP = {"A": "4", "B": "23", "C": None}
-    DPS_INDEX_COLOUR = {"A": "5", "B": "24", "C": None}
-    DPS_INDEX_SCENE = {"A": "2", "B": "25", "C": None}
-    DPS_INDEX_TIMER = {"A": None, "B": "26", "C": None}
-    DPS_INDEX_MUSIC = {"A": None, "B": "27", "C": None}
-    DPS = "dps"
     DPS_MODE_WHITE = "white"
     DPS_MODE_COLOUR = "colour"
     DPS_MODE_SCENE = "scene"
@@ -86,104 +65,218 @@ class BulbDevice(Device):
     DPS_MODE_SCENE_3 = "scene_3"  # rave
     DPS_MODE_SCENE_4 = "scene_4"  # rainbow
 
-    DPS_2_STATE = {
-        "1": "is_on",
-        "2": "mode",
-        "3": "brightness",
-        "4": "colourtemp",
-        "5": "colour",
-        "20": "is_on",
-        "21": "mode",
-        "22": "brightness",
-        "23": "colourtemp",
-        "24": "colour",
+    BULB_FEATURE_MODE = 'mode'
+    BULB_FEATURE_BRIGHTNESS = 'brightness'
+    BULB_FEATURE_COLOURTEMP = 'colourtemp'
+    BULB_FEATURE_COLOUR = 'colour'
+    BULB_FEATURE_SCENE = 'scene'
+    BULB_FEATURE_TIMER = 'timer'
+    BULB_FEATURE_MUSIC = 'music'
+
+    MUSIC_TRANSITION_JUMP = 0
+    MUSIC_TRANSITION_FADE = 1
+
+    DEFAULT_DPSET = {}
+    DEFAULT_DPSET['A'] = {
+        'switch': 1,
+        'mode': 2,
+        'brightness': 3,
+        'colourtemp': 4,
+        'colour': 5,
+        'scene': 6,
+        'scene_idx': 2, # Type A sets mode to 'scene_N'
+        'timer': 7,
+        'music': 8,
+        'value_min': 25,
+        'value_max': 255,
+        'value_rgb': True,
+    }
+    DEFAULT_DPSET['B'] = {
+        'switch': 20,
+        'mode': 21,
+        'brightness': 22,
+        'colourtemp': 23,
+        'colour': 24,
+        'scene': 25,
+        'scene_idx': 25, # Type B prefixes scene with idx
+        'timer': 26,
+        'music': 27,
+        'value_min': 10,
+        'value_max': 1000,
+        'value_rgb': False,
+    }
+    DEFAULT_DPSET['C'] = {
+        'switch': 1,
+        'mode': None,
+        'brightness': 2,
+        'colourtemp': None,
+        'colour': None,
+        'scene': None,
+        'scene_idx': None,
+        'timer': None,
+        'music': None,
+        'value_min': 25,
+        'value_max': 255,
+        'value_rgb': True,
     }
 
-    # Set Default Bulb Types
-    bulb_type = "A"
-    has_brightness = False
-    has_colourtemp = False
-    has_colour = False
-
     def __init__(self, *args, **kwargs):
+        # Set Default Bulb Types
+        self.bulb_configured = False
+        self.bulb_type = None
+        self.has_brightness = None
+        self.has_colourtemp = None
+        self.has_colour = None
+        self.old_retry = None
+        self.old_sendwait = None
+        self.have_old_musicmode = False
+        self.musicmode_transition = 0
+        self.dpset = {
+            'switch': None,
+            'mode': None,
+            'brightness': None,
+            'colourtemp': None,
+            'colour': None,
+            'scene': None,
+            'scene_idx': None,
+            'timer': None,
+            'music': None,
+            'value_min': -1,
+            'value_max': -1,
+            'value_rgb': False,
+        }
+
         # set the default version to None so we do not immediately connect and call status()
         if 'version' not in kwargs or not kwargs['version']:
             kwargs['version'] = None
         super(BulbDevice, self).__init__(*args, **kwargs)
 
+    def status(self, nowait=False):
+        result = super(BulbDevice, self).status(nowait=nowait)
+        if result and (not self.bulb_configured) and ('dps' in result):
+            self.detect_bulb(result, nowait=nowait)
+        return result
+
     @staticmethod
-    def _rgb_to_hexvalue(r, g, b, bulb="A"):
+    def rgb_to_hexvalue(r, g, b, use_rgb=False):
         """
         Convert an RGB value to the hex representation expected by Tuya Bulb.
-
-        Index (DPS_INDEX_COLOUR) is assumed to be in the format:
-            (Type A) Index: 5 in hex format: rrggbb0hhhssvv
-            (Type B) Index: 24 in hex format: hhhhssssvvvv
 
         While r, g and b are just hexadecimal values of the corresponding
         Red, Green and Blue values, the h, s and v values (which are values
         between 0 and 1) are scaled:
-            Type A: 360 (h) and 255 (s and v)
-            Type B: 360 (h) and 1000 (s and v)
+            use_rgb=True: 360 (h) and 255 (s and v)
+            use_rgb=False: 360 (h) and 1000 (s and v)
 
         Args:
             r(int): Value for the colour red as int from 0-255.
             g(int): Value for the colour green as int from 0-255.
             b(int): Value for the colour blue as int from 0-255.
+            use_rgb(bool): Selects the return format
+                True: rrggbb0hhhssvv
+                False: hhhhssssvvvv
         """
-        rgb = [r, g, b]
-        hsv = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
+        err = ''
+        if not 0 <= r <= 255.0:
+            err += '/red'
+        if not 0 <= g <= 255.0:
+            err += '/green'
+        if not 0 <= b <= 255.0:
+            err += '/blue'
+        if err:
+            raise ValueError('rgb_to_hexvalue: The value for %s needs to be between 0 and 255.' % err[1:])
 
-        # Bulb Type A
-        if bulb == "A":
+        hsv = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+
+        if use_rgb:
+            # r:0-255,g:0-255,b:0-255|rgb|
+            hexvalue = '%02x%02x%02x' % (r, g, b)
             # h:0-360,s:0-255,v:0-255|hsv|
-            hexvalue = ""
-            for value in rgb:
-                temp = str(hex(int(value))).replace("0x", "")
-                if len(temp) == 1:
-                    temp = "0" + temp
-                hexvalue = hexvalue + temp
-
-            hsvarray = [int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255)]
-            hexvalue_hsv = ""
-            for value in hsvarray:
-                temp = str(hex(int(value))).replace("0x", "")
-                if len(temp) == 1:
-                    temp = "0" + temp
-                hexvalue_hsv = hexvalue_hsv + temp
-            if len(hexvalue_hsv) == 7:
-                hexvalue = hexvalue + "0" + hexvalue_hsv
-            else:
-                hexvalue = hexvalue + "00" + hexvalue_hsv
-
-        # Bulb Type B
-        if bulb == "B":
+            hexvalue += '%04x%02x%02x' % (int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255))
+        else:
             # h:0-360,s:0-1000,v:0-1000|hsv|
-            hexvalue = ""
-            hsvarray = [int(hsv[0] * 360), int(hsv[1] * 1000), int(hsv[2] * 1000)]
-            for value in hsvarray:
-                temp = str(hex(int(value))).replace("0x", "")
-                while len(temp) < 4:
-                    temp = "0" + temp
-                hexvalue = hexvalue + temp
+            hexvalue = '%04x%04x%04x' % (int(hsv[0] * 360), int(hsv[1] * 1000), int(hsv[2] * 1000))
 
         return hexvalue
 
+    # Depricated. Kept for backwards compatibility
     @staticmethod
-    def _hexvalue_to_rgb(hexvalue, bulb="A"):
+    def _rgb_to_hexvalue(r, g, b, bulb="A"):
+        if bulb == "A":
+            use_rgb = True
+        elif bulb == "B":
+            use_rgb = False
+        else:
+            # Unsupported bulb type
+            raise ValueError("Unsupported bulb type %r - unable to determine hexvalue." % bulb)
+
+        return BulbDevice.rgb_to_hexvalue(r, g, b, use_rgb)
+
+    @staticmethod
+    def hsv_to_hexvalue(h, s, v, use_rgb=False):
+        """
+        Convert an HSV value to the hex representation expected by Tuya Bulb.
+
+        Args:
+            h(float): colour Hue as float from 0-1
+            s(float): colour Saturation as float from 0-1
+            v(float): colour Value as float from 0-1
+            use_rgb(bool): Selects the return format
+                True: rrggbb0hhhssvv
+                False: hhhhssssvvvv
+        """
+        err = ''
+        if not 0 <= h <= 1.0:
+            err += '/Hue'
+        if not 0 <= s <= 1.0:
+            err += '/Saturation'
+        if not 0 <= v <= 1.0:
+            err += '/Value'
+
+        if err:
+            raise ValueError( 'hsv_to_hexvalue: The value for %s needs to be between 0 and 1.' % err[1:])
+
+        if use_rgb:
+            (r, g, b) = colorsys.hsv_to_rgb(h, s, v)
+            return BulbDevice.rgb_to_hexvalue( r * 255.0, g * 255.0, b * 255.0, use_rgb )
+        else:
+            # h:0-360,s:0-1000,v:0-1000|hsv|
+            hexvalue = '%04x%04x%04x' % (int(h * 360), int(s * 1000), int(v * 1000))
+            return hexvalue
+
+    @staticmethod
+    def hexvalue_to_rgb(hexvalue, use_rgb=None):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an RGB value.
 
         Args:
-            hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
+            hexvalue(string): The hex representation generated by BulbDevice.rgb_to_hexvalue()
+            use_rgb(bool or None):
+                True: The hex is in rrggbb0hhhssvv format
+                False: The hex is in hhhhssssvvvv format
+                None: Try to auto-detect the format
         """
-        if bulb == "A":
+        hexvalue_len = len(hexvalue)
+        if use_rgb is None:
+            if hexvalue_len == 6 or hexvalue_len == 14:
+                use_rgb = True
+            elif hexvalue_len == 12:
+                use_rgb = False
+            else:
+                # Unsupported bulb type
+                raise ValueError("Unable to determine value format. Value string must have 6, 12 or 14 hex digits.")
+
+        if use_rgb:
+            if hexvalue_len < 6:
+                raise ValueError("RGB value string must have 6 or 14 hex digits.")
             r = int(hexvalue[0:2], 16)
             g = int(hexvalue[2:4], 16)
             b = int(hexvalue[4:6], 16)
-        elif bulb == "B":
+        else:
             # hexvalue is in hsv
+            if hexvalue_len < 12:
+                raise ValueError("HSV value string must have 12 hex digits.")
             h = float(int(hexvalue[0:4], 16) / 360.0)
             s = float(int(hexvalue[4:8], 16) / 1000.0)
             v = float(int(hexvalue[8:12], 16) / 1000.0)
@@ -191,79 +284,115 @@ class BulbDevice(Device):
             r = int(rgb[0] * 255)
             g = int(rgb[1] * 255)
             b = int(rgb[2] * 255)
-        else:
-            # Unsupported bulb type
-            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine RGB values.")
 
         return (r, g, b)
 
+    # Depricated. Kept for backwards compatibility
     @staticmethod
-    def _hexvalue_to_hsv(hexvalue, bulb="A"):
+    def _hexvalue_to_rgb(hexvalue, bulb="A"):
+        if bulb == "A":
+            use_rgb = True
+        elif bulb == "B":
+            use_rgb = False
+        else:
+            # Unsupported bulb type
+            raise ValueError("Unsupported bulb type %r - unable to determine hexvalue format." % bulb)
+        return BulbDevice.hexvalue_to_rgb(hexvalue, use_rgb)
+
+    @staticmethod
+    def hexvalue_to_hsv(hexvalue, use_rgb=None):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an HSV value.
 
         Args:
             hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
+            use_rgb(bool or None):
+                True: The hex is in rrggbb0hhhssvv format
+                False: The hex is in hhhhssssvvvv format
+                None: Try to auto-detect the format
         """
-        if bulb == "A":
-            h = int(hexvalue[7:10], 16) / 360.0
-            s = int(hexvalue[10:12], 16) / 255.0
-            v = int(hexvalue[12:14], 16) / 255.0
-        elif bulb == "B":
+        hexvalue_len = len(hexvalue)
+        if use_rgb is None:
+            if hexvalue_len == 6 or hexvalue_len == 14:
+                use_rgb = True
+            elif hexvalue_len == 12:
+                use_rgb = False
+            else:
+                # Unsupported bulb type
+                raise ValueError("Unable to determine value format. Value string must have 6, 12 or 14 hex digits.")
+
+        if use_rgb:
+            if hexvalue_len < 6:
+                raise ValueError("RGB[HSV] value string must have 6 or 14 hex digits.")
+            if hexvalue_len < 14:
+                # hexvalue is in rgb
+                rgb = BulbDevice.hexvalue_to_rgb(hexvalue, use_rgb=True)
+                h, s, v = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
+            else:
+                # hexvalue is in rgb+hsv
+                h = int(hexvalue[7:10], 16) / 360.0
+                s = int(hexvalue[10:12], 16) / 255.0
+                v = int(hexvalue[12:14], 16) / 255.0
+        else:
             # hexvalue is in hsv
+            if hexvalue_len < 12:
+                raise ValueError("HSV value string must have 12 hex digits.")
             h = int(hexvalue[0:4], 16) / 360.0
             s = int(hexvalue[4:8], 16) / 1000.0
             v = int(hexvalue[8:12], 16) / 1000.0
-        else:
-            # Unsupported bulb type
-            raise ValueError(f"Unsupported bulb type {bulb} - unable to determine HSV values.")
-        
+
         return (h, s, v)
 
-    def set_version(self, version): # pylint: disable=W0621
-        """
-        Set the Tuya device version 3.1 or 3.3 for BulbDevice
-        Attempt to determine BulbDevice Type: A or B based on:
-            Type A has keys 1-5 (default)
-            Type B has keys 20-29
-            Type C is Feit type bulbs from costco
-        """
-        super(BulbDevice, self).set_version(version)
-
-        # Try to determine type of BulbDevice Type based on DPS indexes
-        status = self.status()
-        if status is not None:
-            if "dps" in status:
-                if "1" not in status["dps"]:
-                    self.bulb_type = "B"
-                if self.DPS_INDEX_BRIGHTNESS[self.bulb_type] in status["dps"]:
-                    self.has_brightness = True
-                if self.DPS_INDEX_COLOURTEMP[self.bulb_type] in status["dps"]:
-                    self.has_colourtemp = True
-                if self.DPS_INDEX_COLOUR[self.bulb_type] in status["dps"]:
-                    self.has_colour = True
-            else:
-                self.bulb_type = "B"
+    # Depricated. Kept for backwards compatibility
+    @staticmethod
+    def _hexvalue_to_hsv(hexvalue, bulb="A"):
+        if bulb == "A":
+            use_rgb = True
+        elif bulb == "B":
+            use_rgb = False
         else:
-            # response has no dps
-            self.bulb_type = "B"
-        log.debug("bulb type set to %s", self.bulb_type)
+            # Unsupported bulb type
+            raise ValueError("Unsupported bulb type %r - unable to determine RGB values." % bulb)
+        return BulbDevice.hexvalue_to_hsv(hexvalue, use_rgb)
+
+    def _set_values_check( self, check_values, nowait=False ):
+        dps_values = {}
+
+        # check to see which DPs need to be set
+        state = self.cached_status(nowait=nowait)
+        if state and 'dps' in state and state['dps']:
+            # last state is cached, so check to see if 'mode' needs to be set
+            for k in check_values:
+                dp = self.dpset[k]
+                if dp and ((dp not in state['dps']) or (state['dps'][dp] != check_values[k])):
+                    dps_values[dp] = check_values[k]
+
+        print('changed:', dps_values)
+        if not dps_values:
+            # last state not cached or everything already set, so send them all
+            for k in check_values:
+                if self.dpset[k]:
+                    dps_values[self.dpset[k]] = check_values[k]
+
+        print('sending:', dps_values)
+        return self.set_multiple_values( dps_values, nowait=nowait )
+
+    def turn_onoff(self, on, switch=0, nowait=False):
+        """Turn the device on or off"""
+        if switch == 0:
+            if not self.bulb_has_capability( 'switch', nowait=nowait ):
+                return error_json(ERR_FUNCTION, 'Could not detect bulb switch DP.')
+                #raise ValueError('Could not detect bulb switch DP.')
+        return self.set_status(on, self.dpset['switch'], nowait=nowait)
 
     def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
-        if switch == 0:
-            switch = self.DPS_INDEX_ON[self.bulb_type]
-        self.set_status(True, switch, nowait=nowait)
+        return self.turn_onoff( True, switch=switch, nowait=nowait )
 
     def turn_off(self, switch=0, nowait=False):
-        """Turn the device on"""
-        if switch == 0:
-            switch = self.DPS_INDEX_ON[self.bulb_type]
-        self.set_status(False, switch, nowait=nowait)
-
-    def set_bulb_type(self, type):
-        self.bulb_type = type
+        """Turn the device off"""
+        return self.turn_onoff( False, switch=switch, nowait=nowait )
 
     def set_mode(self, mode="white", nowait=False):
         """
@@ -273,80 +402,145 @@ class BulbDevice(Device):
             mode(string): white,colour,scene,music
             nowait(bool): True to send without waiting for response.
         """
-        payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_MODE[self.bulb_type]: mode}
-        )
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        if not self.bulb_has_capability( 'mode', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'Bulb does not support mode setting.')
+            #raise ValueError('Bulb does not support mode setting.')
 
-    def set_scene(self, scene, nowait=False):
+        check_values = {
+            'mode': mode,
+            'switch': True,
+        }
+
+        return self._set_values_check( check_values, nowait=nowait )
+
+    def set_scene(self, scene, scene_data=None, nowait=False):
         """
         Set to scene mode
 
         Args:
-            scene(int): Value for the scene as int from 1-4.
+            scene(int): Value for the scene as int from 1-4 (Type A bulbs) or 1-N (Type B bulbs).
             nowait(bool): True to send without waiting for response.
         """
-        if not 1 <= scene <= 4:
-            return error_json(
-                ERR_RANGE, "set_scene: The value for scene needs to be between 1 and 4."
-            )
+        if not self.bulb_has_capability( 'scene', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'set_scene: Bulb does not support scenes.')
+            #raise ValueError('set_scene: Bulb does not support scenes.')
 
-        if scene == 1:
-            s = self.DPS_MODE_SCENE_1
-        elif scene == 2:
-            s = self.DPS_MODE_SCENE_2
-        elif scene == 3:
-            s = self.DPS_MODE_SCENE_3
+        # Type A, scene idx is part of the mode
+        if self.dpset['scene_idx'] == self.dpset['mode']:
+            if (not 1 <= scene <= 4):
+                raise ValueError('set_scene: The value for scene needs to be between 1 and 4.')
+            dps_values = {
+                self.dpset['mode']: self.DPS_MODE_SCENE + '_' + str(scene)
+            }
         else:
-            s = self.DPS_MODE_SCENE_4
+            scene = '%02x' % int(scene)
+            if scene_data:
+                scene += scene_data
+            dps_values = {
+                self.dpset['scene']: '%02x' % int(scene),
+                self.dpset['mode']: self.DPS_MODE_SCENE,
+            }
 
-        payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_MODE[self.bulb_type]: s}
-        )
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        return self.set_multiple_values( dps_values, nowait=nowait )
+
+    def set_timer(self, num_secs, dps_id=0, nowait=False):
+        """
+        Set the timer
+
+        Args:
+            num_secs: data to send to bulb
+            dps_id: do not use, kept for compatibility with Device.set_timer()
+        """
+        if dps_id:
+            return self.set_value(dps_id, num_secs, nowait=nowait)
+
+        if not self.bulb_has_capability( 'timer', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'set_timer: Bulb does not support timer.')
+        return self.set_value(self.dpset['timer'], num_secs, nowait=nowait)
+
+    def set_musicmode(self, transition, modify_settings=True, nowait=False):
+        """
+        Put the bulb into music mode and, optionally, change some settings to make responses faster.
+
+        Args:
+            transition(int): default transition to use if one is not provided in set_music_colour()
+            modify_settings(bool): whether or not to change settings to make responses faster
+        """
+        if not self.bulb_has_capability( 'music', nowait=nowait ):
+            return error_json(ERR_FUNCTION, "set_musicmode: Device does not support music mode.")
+        ret = self.set_mode( self.DPS_MODE_MUSIC, nowait=nowait )
+        self.old_retry = self.retry
+        self.old_sendwait = self.sendWait
+        self.have_old_musicmode = True
+        self.musicmode_transition = int(transition)
+        if modify_settings:
+            self.retry = False
+            self.sendWait = None
+        return ret
+
+    def unset_musicmode( self ):
+        """
+        Reverts the changes made by set_musicmode()
+        """
+        if self.have_old_musicmode:
+            self.retry = self.old_retry
+            self.sendWait = self.old_sendwait
+
+    def set_music_colour( self, rh, gs, bv, brightness=None, colourtemp=None, transition=None, nowait=False ):
+        """
+        Set a colour while in music mode
+
+        Args:
+            rh(float): red value, 0.0 - 255.0
+            gs(float): green value, 0.0 - 255.0
+            bv(float): blue value, 0.0 - 255.0
+            brightness(float): optional white light brightness
+            colourtemp(float): optional white light colourtemp
+            transition(int): optional transition. will use transition provided in set_musicmode() if not provided
+        """
+        if not self.bulb_has_capability( 'music', nowait=nowait ):
+            return error_json(ERR_FUNCTION, "set_music_colour: Device does not support music mode.")
+        if transition is None:
+            transition = self.musicmode_transition
+
+        colour = '%x' % transition
+        colour += self.rgb_to_hexvalue( rh, gs, bv, self.dpset['value_rgb'] )
+
+        if (not brightness) or (brightness < 0):
+            brightness = 0
+        brightness = int(self.dpset['value_max'] * brightness // 100)
+
+        if (not colourtemp) or (colourtemp < 0):
+            colourtemp = 0
+        colourtemp = int(self.dpset['value_max'] * colourtemp // 100)
+
+        fmt = '%02x' if self.dpset['value_rgb'] else '%04x'
+        colour += fmt % brightness
+        colour += fmt % colourtemp
+
+        return self.set_value(self.dpset['music'], colour, nowait=nowait)
 
     def set_colour(self, r, g, b, nowait=False):
         """
         Set colour of an rgb bulb.
 
         Args:
-            r(int): Value for the colour Red as int from 0-255.
-            g(int): Value for the colour Green as int from 0-255.
-            b(int): Value for the colour Blue as int from 0-255.
+            r(float): Value for the colour Red from 0.0-255.0.
+            g(float): Value for the colour Green from 0.0-255.0.
+            b(float): Value for the colour Blue from 0.0-255.0.
             nowait(bool): True to send without waiting for response.
         """
-        if not self.has_colour:
-            log.debug("set_colour: Device does not appear to support color.")
-            # return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
-        if not 0 <= r <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_colour: The value for red needs to be between 0 and 255.",
-            )
-        if not 0 <= g <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_colour: The value for green needs to be between 0 and 255.",
-            )
-        if not 0 <= b <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_colour: The value for blue needs to be between 0 and 255.",
-            )
+        if not self.bulb_has_capability( 'colour', nowait=nowait ):
+            return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
+            #raise ValueError('set_colour: Device does not support color.')
 
-        hexvalue = BulbDevice._rgb_to_hexvalue(r, g, b, self.bulb_type)
+        check_values = {
+            'colour': self.rgb_to_hexvalue(r, g, b, self.dpset['value_rgb']),
+            'mode': self.DPS_MODE_COLOUR,
+            'switch': True
+        }
 
-        payload = self.generate_payload(
-            CONTROL,
-            {
-                self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
-                self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue,
-            },
-        )
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        return self._set_values_check( check_values, nowait=nowait )
 
     def set_hsv(self, h, s, v, nowait=False):
         """
@@ -358,38 +552,16 @@ class BulbDevice(Device):
             v(float): colour Value as float from 0-1
             nowait(bool): True to send without waiting for response.
         """
-        if not self.has_colour:
-            log.debug("set_hsv: Device does not appear to support color.")
-            # return error_json(ERR_FUNCTION, "set_hsv: Device does not support color.")
-        if not 0 <= h <= 1.0:
-            return error_json(
-                ERR_RANGE, "set_hsv: The value for Hue needs to be between 0 and 1."
-            )
-        if not 0 <= s <= 1.0:
-            return error_json(
-                ERR_RANGE,
-                "set_hsv: The value for Saturation needs to be between 0 and 1.",
-            )
-        if not 0 <= v <= 1.0:
-            return error_json(
-                ERR_RANGE,
-                "set_hsv: The value for Value needs to be between 0 and 1.",
-            )
+        if not self.bulb_has_capability( 'colour', nowait=nowait ):
+            return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
+            #raise ValueError('set_hsv: Device does not support color.')
 
-        (r, g, b) = colorsys.hsv_to_rgb(h, s, v)
-        hexvalue = BulbDevice._rgb_to_hexvalue(
-            r * 255.0, g * 255.0, b * 255.0, self.bulb_type
-        )
-
-        payload = self.generate_payload(
-            CONTROL,
-            {
-                self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_COLOUR,
-                self.DPS_INDEX_COLOUR[self.bulb_type]: hexvalue,
-            },
-        )
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        check_values = {
+            'colour': self.hsv_to_hexvalue( h, s, v, self.dpset['value_rgb'] ),
+            'mode': self.DPS_MODE_COLOUR,
+            'switch': True
+        }
+        return self._set_values_check( check_values, nowait=nowait )
 
     def set_white_percentage(self, brightness=100, colourtemp=0, nowait=False):
         """
@@ -400,32 +572,18 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature in percent (0-100)
             nowait(bool): True to send without waiting for response.
         """
-        # Brightness
+        err = ''
         if not 0 <= brightness <= 100:
-            return error_json(
-                ERR_RANGE,
-                "set_white_percentage: Brightness percentage needs to be between 0 and 100.",
-            )
-
-        b = int(25 + (255 - 25) * brightness / 100)
-
-        if self.bulb_type == "B":
-            b = int(10 + (1000 - 10) * brightness / 100)
-
-        # Colourtemp
+            err += '/Brightness'
         if not 0 <= colourtemp <= 100:
-            return error_json(
-                ERR_RANGE,
-                "set_white_percentage: Colourtemp percentage needs to be between 0 and 100.",
-            )
+            err += '/Colourtemp'
+        if err:
+            raise ValueError( 'set_white_percentage: %s percentage needs to be between 0 and 100.' % err[1:])
 
-        c = int(255 * colourtemp / 100)
+        b = int(self.dpset['value_max'] * brightness // 100)
+        c = int(self.dpset['value_max'] * colourtemp // 100)
 
-        if self.bulb_type == "B":
-            c = int(1000 * colourtemp / 100)
-
-        data = self.set_white(b, c, nowait=nowait)
-        return data
+        return self.set_white( b, c, nowait=nowait )
 
     def set_white(self, brightness=-1, colourtemp=-1, nowait=False):
         """
@@ -438,45 +596,38 @@ class BulbDevice(Device):
 
             Default: Max Brightness and Min Colourtemp
         """
+        if not self.bulb_has_capability( 'brightness', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'set_white: Device does not support brightness.')
+
         # Brightness (default Max)
+        brightness = int(brightness)
         if brightness < 0:
-            brightness = 255
-            if self.bulb_type == "B":
-                brightness = 1000
-        if self.bulb_type == "A" and not 25 <= brightness <= 255:
-            return error_json(
-                ERR_RANGE, "set_white: The brightness needs to be between 25 and 255."
-            )
-        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
-            return error_json(
-                ERR_RANGE, "set_white: The brightness needs to be between 10 and 1000."
-            )
+            brightness = self.dpset['value_max']
+        elif brightness > self.dpset['value_max']:
+            raise ValueError('set_white: The brightness needs to be between %d and %d.' % (self.dpset['value_min'], self.dpset['value_max']))
 
         # Colourtemp (default Min)
-        if colourtemp < 0:
-            colourtemp = 0
-        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_white: The colour temperature needs to be between 0 and 255.",
-            )
-        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
-            return error_json(
-                ERR_RANGE,
-                "set_white: The colour temperature needs to be between 0 and 1000.",
-            )
+        if colourtemp is not None:
+            colourtemp = int(colourtemp)
+            if colourtemp < 0:
+                colourtemp = 0
+            if colourtemp > self.dpset['value_max']:
+                raise ValueError('set_white: The colour temperature needs to be between 0 and %d.' % self.dpset['value_max'])
 
-        payload = self.generate_payload(
-            CONTROL,
-            {
-                self.DPS_INDEX_MODE[self.bulb_type]: self.DPS_MODE_WHITE,
-                self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness,
-                self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp,
-            },
-        )
+        # do this the hard was as brightness=0 means we should turn off, but if colourtemp is set then
+        #   turn_on() should turn it on at that colourtemp
+        check_values = {}
+        if brightness >= self.dpset['value_min']:
+            check_values['brightness'] = brightness
+        if colourtemp is not None:
+            check_values['colourtemp'] = colourtemp
+        if check_values:
+            # we're setting brightness and/or colourtemp
+            check_values['mode'] = self.DPS_MODE_WHITE
+        check_values['switch'] = bool(brightness >= self.dpset['value_min'])
 
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        # _set_values_check() will skip colourtemp if the bulb does not have it
+        return self._set_values_check( check_values, nowait=nowait )
 
     def set_brightness_percentage(self, brightness=100, nowait=False):
         """
@@ -487,16 +638,9 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not 0 <= brightness <= 100:
-            return error_json(
-                ERR_RANGE,
-                "set_brightness_percentage: Brightness percentage needs to be between 0 and 100.",
-            )
-        b = int(25 + (255 - 25) * brightness / 100)
-        if self.bulb_type == "B":
-            b = int(10 + (1000 - 10) * brightness / 100)
-
-        data = self.set_brightness(b, nowait=nowait)
-        return data
+            raise ValueError('set_brightness_percentage: The brightness needs to be between 0 and 100.')
+        b = int(self.dpset['value_max'] * brightness // 100)
+        return self.set_brightness(b, nowait=nowait)
 
     def set_brightness(self, brightness, nowait=False):
         """
@@ -506,45 +650,33 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness (25-255).
             nowait(bool): True to send without waiting for response.
         """
-        if self.bulb_type == "A" and not 25 <= brightness <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_brightness: The brightness needs to be between 25 and 255.",
-            )
-        if self.bulb_type == "B" and not 10 <= brightness <= 1000:
-            return error_json(
-                ERR_RANGE,
-                "set_brightness: The brightness needs to be between 10 and 1000.",
-            )
+        if not self.bulb_has_capability( 'brightness', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'set_brightness: Device does not support brightness.')
+
+        # Brightness (default Max)
+        if brightness < 0:
+            brightness = self.dpset['value_max']
+        elif brightness < self.dpset['value_min']:
+            return self.turn_off(0, nowait=nowait)
+        elif brightness > self.dpset['value_max']:
+            raise ValueError('set_brightness: The brightness needs to be between %d and %d.' % (self.dpset['value_min'], self.dpset['value_max']))
 
         # Determine which mode bulb is in and adjust accordingly
-        state = self.state()
-        data = None
+        state = self.state(nowait=nowait)
+        #print( 'set_brightness state:', state )
 
-        if "mode" in state:
-            if state["mode"] == "white":
-                # for white mode use DPS for brightness
-                if not self.has_brightness:
-                    log.debug("set_brightness: Device does not appear to support brightness.")
-                    # return error_json(ERR_FUNCTION, "set_brightness: Device does not support brightness.")
-                payload = self.generate_payload(
-                    CONTROL, {self.DPS_INDEX_BRIGHTNESS[self.bulb_type]: brightness}
-                )
-                data = self._send_receive(payload, getresponse=(not nowait))
+        if 'Error' in state:
+            return state
 
-            if state["mode"] == "colour":
-                # for colour mode use hsv to increase brightness
-                if self.bulb_type == "A":
-                    value = brightness / 255.0
-                else:
-                    value = brightness / 1000.0
-                (h, s, v) = self.colour_hsv()
-                data = self.set_hsv(h, s, value, nowait=nowait)
-
-        if data is not None or nowait is True:
-            return data
+        if state['mode'] != self.DPS_MODE_COLOUR:
+            # use white mode, changing to it if needed
+            return self.set_white(brightness=brightness, colourtemp=None, nowait=nowait)
         else:
-            return error_json(ERR_STATE, "set_brightness: Unknown bulb state.")
+            # for colour mode use hsv to increase brightness
+            value = brightness / float(self.dpset['value_max'])
+            (h, s, v) = self.colour_hsv(state=state, nowait=nowait)
+            print(h, s, v, value, brightness)
+            return self.set_hsv(h, s, value, nowait=nowait)
 
     def set_colourtemp_percentage(self, colourtemp=100, nowait=False):
         """
@@ -555,16 +687,9 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
         """
         if not 0 <= colourtemp <= 100:
-            return error_json(
-                ERR_RANGE,
-                "set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.",
-            )
-        c = int(255 * colourtemp / 100)
-        if self.bulb_type == "B":
-            c = int(1000 * colourtemp / 100)
-
-        data = self.set_colourtemp(c, nowait=nowait)
-        return data
+            raise ValueError( 'set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.')
+        c = int(self.dpset['value_max'] * colourtemp // 100)
+        return self.set_colourtemp( c, nowait=nowait )
 
     def set_colourtemp(self, colourtemp, nowait=False):
         """
@@ -574,59 +699,182 @@ class BulbDevice(Device):
             colourtemp(int): Value for the colour temperature (0-255).
             nowait(bool): True to send without waiting for response.
         """
-        if not self.has_colourtemp:
-            log.debug("set_colourtemp: Device does not appear to support colortemp.")
-            # return error_json(ERR_FUNCTION, "set_colourtemp: Device does not support colortemp.")
-        if self.bulb_type == "A" and not 0 <= colourtemp <= 255:
-            return error_json(
-                ERR_RANGE,
-                "set_colourtemp: The colour temperature needs to be between 0 and 255.",
-            )
-        if self.bulb_type == "B" and not 0 <= colourtemp <= 1000:
-            return error_json(
-                ERR_RANGE,
-                "set_colourtemp: The colour temperature needs to be between 0 and 1000.",
-            )
+        if not self.bulb_has_capability( 'colourtemp', nowait=nowait ):
+            return error_json(ERR_FUNCTION, 'set_colourtemp: Device does not support colourtemp.')
 
-        payload = self.generate_payload(
-            CONTROL, {self.DPS_INDEX_COLOURTEMP[self.bulb_type]: colourtemp}
-        )
-        data = self._send_receive(payload, getresponse=(not nowait))
-        return data
+        if not 0 <= colourtemp <= self.dpset['value_max']:
+            raise ValueError('set_colourtemp: The colour temperature needs to be between 0 and %d.' % self.dpset['value_max'])
 
-    def brightness(self):
+        check_values = {
+            'colourtemp': colourtemp,
+            'mode': self.DPS_MODE_WHITE,
+            'switch': True,
+        }
+
+        return self._set_values_check( check_values, nowait=nowait )
+
+    def get_value(self, feature, state=None, nowait=False):
+        if not state:
+            state = self.state(nowait=nowait)
+        if 'Error' in state:
+            return state
+        if feature not in state:
+            raise ValueError("Unknown parameter %r." % feature)
+        return state[feature]
+
+    def get_mode(self, state=None, nowait=False):
+        """Return current working mode"""
+        return self.get_value('mode', state=state, nowait=nowait)
+
+    def white_percentage(self, state=None, nowait=False):
+        return (self.brightness_percentage(state=state, nowait=nowait), self.colourtemp_percentage(state=state, nowait=nowait))
+
+    #def white(self, state=None, nowait=False):
+    #    pass
+
+    def get_brightness_percentage(self, state=None, nowait=False):
+        return self.brightness(state=state, nowait=nowait) / self.dpset['value_max'] * 100.0
+
+    def brightness(self, state=None, nowait=False):
         """Return brightness value"""
-        return self.status()[self.DPS][self.DPS_INDEX_BRIGHTNESS[self.bulb_type]]
+        return self.get_value('brightness', state=state, nowait=nowait)
 
-    def colourtemp(self):
+    def get_colourtemp_percentage(self, state=None, nowait=False):
+        return self.colourtemp(state=state, nowait=nowait) / self.dpset['value_max'] * 100.0
+
+    def colourtemp(self, state=None, nowait=False):
         """Return colour temperature"""
-        return self.status()[self.DPS][self.DPS_INDEX_COLOURTEMP[self.bulb_type]]
+        return self.get_value('colourtemp', state=state, nowait=nowait)
 
-    def colour_rgb(self):
+    def colour_rgb(self, state=None, nowait=False):
         """Return colour as RGB value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
-        return BulbDevice._hexvalue_to_rgb(hexvalue, self.bulb_type)
+        hexvalue = self.get_value('colour', state=state, nowait=nowait)
+        if isinstance( hexvalue, dict ):
+            return hexvalue # Error
+        return BulbDevice.hexvalue_to_rgb(hexvalue, self.dpset['value_rgb'])
 
-    def colour_hsv(self):
+    def colour_hsv(self, state=None, nowait=False):
         """Return colour as HSV value"""
-        hexvalue = self.status()[self.DPS][self.DPS_INDEX_COLOUR[self.bulb_type]]
-        return BulbDevice._hexvalue_to_hsv(hexvalue, self.bulb_type)
+        hexvalue = self.get_value('colour', state=state, nowait=nowait)
+        if isinstance( hexvalue, dict ):
+            return hexvalue # Error
+        return BulbDevice.hexvalue_to_hsv(hexvalue, self.dpset['value_rgb'])
 
-    def state(self):
+    def state(self, nowait=False):
         """Return state of Bulb"""
-        status = self.status()
+        if not self.bulb_configured:
+            self.detect_bulb(nowait=nowait)
+
+        status = self.cached_status(nowait=nowait)
         state = {}
         if not status:
             return error_json(ERR_JSON, "state: empty response")
 
-        if "Error" in status.keys():
+        if "Error" in status:
             return error_json(ERR_JSON, status["Error"])
 
-        if self.DPS not in status.keys():
+        if 'dps' not in status:
             return error_json(ERR_JSON, "state: no data points")
 
-        for key in status[self.DPS].keys():
-            if key in self.DPS_2_STATE:
-                state[self.DPS_2_STATE[key]] = status[self.DPS][key]
+        for key in self.dpset:
+            dp = self.dpset[key]
+            if '_' in key:
+                # skip scene_idx, value_min, value_max, etc
+                state[key] = None
+            elif dp in status['dps']:
+                state[key] = status['dps'][dp]
+            else:
+                state[key] = None
 
+        if 'switch' in state:
+            state['is_on'] = state['switch']
+
+        #print( 'state:', state )
         return state
+
+    def bulb_has_capability( self, feature, nowait=False ):
+        if not self.bulb_configured:
+            self.detect_bulb( nowait=nowait )
+        return bool( self.dpset[feature] )
+
+    def detect_bulb(self, response=None, nowait=False):
+        """
+        Attempt to determine BulbDevice Type A, B or C based on:
+            Type A has keys 1-9
+            Type B has keys 20-28
+            Type C is basic (non-CCT) and only has 1-2 (i.e Feit type bulbs from Costco)
+        """
+        if not response:
+            response = self.cached_status(historic=True, nowait=nowait)
+            if (not response) or ('dps' not in response):
+                if nowait:
+                    log.debug('No cached status, but nowait set! detect_bulb() exiting without detecting bulb!')
+                else:
+                    response = self.status()
+                    # return here as self.status() will call us again
+                    return
+        if response and 'dps' in response and isinstance(response['dps'], dict):
+            # Try to determine type of BulbDevice Type based on DPS indexes
+            # 1+2 or 20+21 are required per https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp155s4th6b
+            #   The rest are optional
+            if '20' in response['dps'] and '21' in response['dps']:
+                self.bulb_configured = True
+                self.bulb_type = 'B'
+            elif '1' in response['dps'] and '2' in response['dps']:
+                self.bulb_configured = True
+                #if( ('3' in response['dps']) or ('4' in response['dps']) or isinstance(response['dps']['2'], str) ):
+                if isinstance(response['dps']['2'], str):
+                    self.bulb_type = 'A'
+                else:
+                    self.bulb_type = 'C'
+
+            if self.bulb_type and self.bulb_type in self.DEFAULT_DPSET:
+                # The 'music' DP is not returned in status(), so use the default value
+                self.dpset['music'] = self.DEFAULT_DPSET[self.bulb_type]['music']
+
+                self.dpset['value_min'] = self.DEFAULT_DPSET[self.bulb_type]['value_min']
+                self.dpset['value_max'] = self.DEFAULT_DPSET[self.bulb_type]['value_max']
+                self.dpset['value_rgb'] = self.DEFAULT_DPSET[self.bulb_type]['value_rgb']
+
+                for k in self.DEFAULT_DPSET[self.bulb_type]:
+                    if k[:6] == 'value_':
+                        continue
+                    if not self.DEFAULT_DPSET[self.bulb_type][k]:
+                        continue
+                    dp = str( self.DEFAULT_DPSET[self.bulb_type][k] )
+                    if dp in response['dps']:
+                        self.dpset[k] = dp
+
+            # set has_* attributes for backwards compatibility
+            for k in ('brightness', 'colourtemp', 'colour'):
+                setattr( self, 'has_'+k, bool(self.dpset[k]) )
+
+            log.debug("Bulb type set to %r. has brightness: %r, has colourtemp: %r, has colour: %r",
+                      self.bulb_type, self.dpset['brightness'], self.dpset['colourtemp'], self.dpset['colour']
+                      )
+        elif not self.bulb_configured:
+            # response has no dps
+            log.debug("No DPs in response, cannot detect bulb type!")
+            #self.bulb_type = default
+            #self.assume_bulb_attribs()
+
+    def set_bulb_type(self, bulb_type=None, **kwargs):
+        self.bulb_type = bulb_type
+        self.set_bulb_capabilities(**kwargs)
+
+    def set_bulb_capabilities(self, **kwargs):
+        if self.bulb_type in self.DEFAULT_DPSET:
+            default_dpset = self.DEFAULT_DPSET[self.bulb_type]
+        else:
+            #raise ValueError("Unsupported bulb type %r - unable to determine DPS set." % self.bulb_type)
+            default_dpset = {}
+
+        for k in self.dpset:
+            if k in kwargs:
+                self.dpset[k] = kwargs[k]
+            elif self.dpset[k] is None:
+                dp = getattr(default_dpset, k, None)
+                self.dpset[k] = str(dp) if (dp and k[:6] != 'value_') else dp
+        #print('dpset:', self.dpset)
+        if self.dpset['switch'] and self.dpset['brightness']:
+            self.bulb_configured = True
