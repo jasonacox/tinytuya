@@ -873,7 +873,7 @@ class BulbDevice(Device):
             if k in kwargs:
                 self.dpset[k] = kwargs[k]
             elif self.dpset[k] is None:
-                dp = getattr(default_dpset, k, None)
+                dp = default_dpset.get(k, None)
                 self.dpset[k] = str(dp) if (dp and k[:6] != 'value_') else dp
         #print('dpset:', self.dpset)
         if self.dpset['switch'] and self.dpset['brightness']:
