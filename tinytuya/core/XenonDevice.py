@@ -810,9 +810,9 @@ class XenonDevice(object):
         if (not self.socketPersistent) or (not self.socket):
             return
 
-        print( 'caching:', response )
+        log.debug('caching: %s', response)
         merge_dps_results(self._last_status, response)
-        print( 'merged:', self._last_status )
+        log.debug('merged: %s', self._last_status)
 
     def _process_response(self, response): # pylint: disable=R0201
         """
