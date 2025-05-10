@@ -177,5 +177,3 @@ def has_suffix(payload):
         return False
     log.debug("buffer %r = %r", payload[-4:], H.SUFFIX_BIN)
     return payload[-4:] == H.SUFFIX_BIN
-
-
