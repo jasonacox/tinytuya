@@ -368,14 +368,14 @@ class BulbDevice(Device):
                 if dp and ((dp not in state['dps']) or (state['dps'][dp] != check_values[k])):
                     dps_values[dp] = check_values[k]
 
-        print('changed:', dps_values)
+        log.debug('changed: %r', dps_values)
         if not dps_values:
             # last state not cached or everything already set, so send them all
             for k in check_values:
                 if self.dpset[k]:
                     dps_values[self.dpset[k]] = check_values[k]
 
-        print('sending:', dps_values)
+        log.debug('sending: %r', dps_values)
         return self.set_multiple_values( dps_values, nowait=nowait )
 
     def turn_onoff(self, on, switch=0, nowait=False):
