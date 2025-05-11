@@ -70,6 +70,7 @@ class BulbDevice(Device):
     BULB_FEATURE_COLOURTEMP = 'colourtemp'
     BULB_FEATURE_COLOUR = 'colour'
     BULB_FEATURE_SCENE = 'scene'
+    BULB_FEATURE_SCENE_DATA = 'scene_data'
     BULB_FEATURE_TIMER = 'timer'
     BULB_FEATURE_MUSIC = 'music'
 
@@ -96,7 +97,7 @@ class BulbDevice(Device):
         'colourtemp': 4,
         'colour': 5,
         'scene': 6,
-        'scene_idx': 2, # Type A sets mode to 'scene_N'
+        'scene_data': None, # Type A sets mode to 'scene_N'
         'timer': 7,
         'music': 8,
         'value_min': 25,
@@ -110,7 +111,7 @@ class BulbDevice(Device):
         'colourtemp': 23,
         'colour': 24,
         'scene': 25,
-        'scene_idx': 25, # Type B prefixes scene with idx
+        'scene_data': 25, # Type B prefixes scene data with idx
         'timer': 26,
         'music': 28,
         'value_min': 10,
@@ -124,7 +125,7 @@ class BulbDevice(Device):
         'colourtemp': None,
         'colour': None,
         'scene': None,
-        'scene_idx': None,
+        'scene_data': None,
         'timer': None,
         'music': None,
         'value_min': 25,
@@ -141,6 +142,7 @@ class BulbDevice(Device):
         self.has_colour = None
         self.old_retry = None
         self.old_sendwait = None
+        self.old_persist = None
         self.have_old_musicmode = False
         self.musicmode_transition = 0
         self.dpset = {
@@ -150,7 +152,7 @@ class BulbDevice(Device):
             'colourtemp': None,
             'colour': None,
             'scene': None,
-            'scene_idx': None,
+            'scene_data': None,
             'timer': None,
             'music': None,
             'value_min': -1,
@@ -453,7 +455,7 @@ class BulbDevice(Device):
             #raise ValueError('set_scene: Bulb does not support scenes.')
 
         # Type A, scene idx is part of the mode
-        if self.dpset['scene_idx'] == self.dpset['mode']:
+        if (not self.dpset['scene_data']) or (self.dpset['scene_data'] == self.dpset['mode']):
             if (not 1 <= scene <= 4):
                 raise ValueError('set_scene: The value for scene needs to be between 1 and 4.')
             dps_values = {
@@ -461,14 +463,18 @@ class BulbDevice(Device):
             }
         else:
             scene = '%02x' % int(scene)
-            if scene_data:
-                scene += scene_data
             dps_values = {
-                self.dpset['scene']: '%02x' % int(scene),
-                self.dpset['mode']: self.DPS_MODE_SCENE,
+                'scene': scene,
+                'mode': self.DPS_MODE_SCENE,
             }
 
-        return self.set_multiple_values( dps_values, nowait=nowait )
+            if scene_data:
+                if (self.dpset['scene_data'] is True) or (self.dpset['scene_data'] == self.dpset['scene']):
+                    dps_values['scene'] += scene_data
+                else:
+                    dps_values['scene_data'] = scene_data
+
+        return self._set_values_check( dps_values, nowait=nowait )
 
     def set_timer(self, num_secs, dps_id=0, nowait=False):
         """
@@ -498,11 +504,13 @@ class BulbDevice(Device):
         ret = self.set_mode( self.DPS_MODE_MUSIC, nowait=nowait )
         self.old_retry = self.retry
         self.old_sendwait = self.sendWait
+        self.old_persist = self.socketPersistent
         self.have_old_musicmode = True
         self.musicmode_transition = int(transition)
         if modify_settings:
             self.retry = False
             self.sendWait = None
+            self.socketPersistent = True
         return ret
 
     def unset_musicmode( self ):
@@ -512,6 +520,7 @@ class BulbDevice(Device):
         if self.have_old_musicmode:
             self.retry = self.old_retry
             self.sendWait = self.old_sendwait
+            self.set_socketPersistent(self.old_persist)
 
     def set_music_colour( self, rh, gs, bv, brightness=None, colourtemp=None, transition=None, nowait=False ):
         """
@@ -814,7 +823,7 @@ class BulbDevice(Device):
         for key in self.dpset:
             dp = self.dpset[key]
             if '_' in key:
-                # skip scene_idx, value_min, value_max, etc
+                # skip scene_data, value_min, value_max, etc
                 state[key] = None
             elif dp in status['dps']:
                 state[key] = status['dps'][dp]

@@ -116,7 +116,7 @@ class TestXenonDevice(unittest.TestCase):
         d = build_mock_bulb('A')
 
         # act
-        d.set_colour(255,255,255)
+        d.set_colour(255,127,63)
 
         # gather results
         result_cmd, result_payload = get_results_from_mock(d)
@@ -126,7 +126,7 @@ class TestXenonDevice(unittest.TestCase):
         # expectations
         expected_cmd = tinytuya.CONTROL
         # expected_payload = {"dps":{"2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
-        expected_payload = {"dps":{"1": True, "2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{"1": True, "2":"colour", "5":"ff7f3f0014c0ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
 
         # assert
         self.assertEqual(result_cmd, expected_cmd)
@@ -137,7 +137,7 @@ class TestXenonDevice(unittest.TestCase):
         d = build_mock_bulb('B')
 
         # act
-        d.set_colour(255,255,255)
+        d.set_colour(255,127,63)
 
         # gather results
         result_cmd, result_payload = get_results_from_mock(d)
@@ -147,7 +147,7 @@ class TestXenonDevice(unittest.TestCase):
         # expectations
         expected_cmd = tinytuya.CONTROL
         # expected_payload = {"dps":{"2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
-        expected_payload = {"dps":{"20": True, "21":"colour", "24":"0000000003e8"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{"20": True, "21":"colour", "24":"001402f003e8"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
 
         # assert
         self.assertEqual(result_cmd, expected_cmd)

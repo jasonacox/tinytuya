@@ -12,10 +12,12 @@ import time
 import os
 import random
 
+#tinytuya.set_debug()
+
 DEVICEID = "01234567891234567890"
-DEVICEIP = "10.0.1.99"
-DEVICEKEY = "0123456789abcdef"
-DEVICEVERS = "3.3"
+DEVICEIP = "Auto" # Will try to discover the bulb on the network
+DEVICEKEY = ""    # Leave blank to read from devices.json
+DEVICEVERS = 3.3  # Must be set correctly unless IP=Auto
 
 # Check for environmental variables and always use those if available
 DEVICEID = os.getenv("DEVICEID", DEVICEID)
@@ -28,10 +30,11 @@ print('TESTING: Device %s at %s with key %s version %s' %
       (DEVICEID, DEVICEIP, DEVICEKEY, DEVICEVERS))
 
 # Connect to Tuya BulbDevice
-d = tinytuya.BulbDevice(DEVICEID, DEVICEIP, DEVICEKEY)
-d.set_version(float(DEVICEVERS)) # IMPORTANT to always set version 
-# Keep socket connection open between commands
-d.set_socketPersistent(True)  
+d = tinytuya.BulbDevice(DEVICEID, address=DEVICEIP, local_key=DEVICEKEY, version=DEVICEVERS, persist=True)
+
+if (not DEVICEIP) or (DEVICEIP == 'Auto') or (not DEVICEKEY) or (not DEVICEVERS):
+    print('Device %s found at %s with key %r version %s' %
+          (d.id, d.address, d.local_key, d.version))
 
 # Show status of device
 data = d.status()
@@ -39,7 +42,7 @@ print('\nCurrent Status of Bulb: %r' % data)
 
 # Set to full brightness warm white
 print('\nWarm White Test')
-d.set_white()
+d.set_white_percentage(100.0, 0.0) # 100% brightness, 0% colour temperature
 time.sleep(2)
 
 # Power Control Test
@@ -54,8 +57,10 @@ time.sleep(2)
 # Dimmer Test
 print('\nDimmer Control Test')
 for level in range(11):
-    print('    Level: %d%%' % (level*10))
-    d.set_brightness_percentage(level*10)
+    level *= 10
+    if not level: level = 1
+    print('    Level: %d%%' % level)
+    d.set_brightness_percentage(level)
     time.sleep(1)
 
 # Colortemp Test
@@ -112,4 +117,4 @@ time.sleep(2)
 
 # Done
 print('\nDone')
-d.set_white()
+d.turn_off()

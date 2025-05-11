@@ -350,6 +350,13 @@ class XenonDevice(object):
                     log.debug("No address for device!")
                     return ERR_OFFLINE
 
+                if (self.version > 3.1) and ((not self.local_key) or (len(self.local_key) != 16)):
+                    if not self.local_key:
+                        log.debug("No local key for device!")
+                    else:
+                        log.debug("Bad local key length for device!")
+                    return ERR_KEY_OR_VER
+
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 if self.socketNODELAY:
                     self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
