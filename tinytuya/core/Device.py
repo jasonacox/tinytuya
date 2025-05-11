@@ -140,10 +140,9 @@ class Device(XenonDevice):
 
         if result and 'Err' in result and len(out) > 1:
             # sending failed! device might only be able to handle 1 DP at a time
-            for k in out:
-                res = self.set_value(k, out[k], nowait=nowait)
-                del out[k]
-                break
+            first_dp = next(iter( out ))
+            res = self.set_value(first_dp, out[first_dp], nowait=nowait)
+            del out[first_dp]
             if res and 'Err' not in res:
                 # single DP succeeded! set limit to 1
                 self.max_simultaneous_dps = 1

@@ -12,10 +12,10 @@
 
  Functions
     BulbDevice Class methods
-        rgb_to_hexvalue(r, g, b, use_rgb=False):
-        hsv_to_hexvalue(h, s, v, use_rgb=False):
-        hexvalue_to_rgb(hexvalue, use_rgb=None):
-        hexvalue_to_hsv(hexvalue, use_rgb=None):
+        rgb_to_hexvalue(r, g, b, hex_format):
+        hsv_to_hexvalue(h, s, v, hex_format):
+        hexvalue_to_rgb(hexvalue, hex_format=None):
+        hexvalue_to_hsv(hexvalue, hex_format=None):
 
     BulbDevice
         set_mode(self, mode="white", nowait=False):
@@ -89,7 +89,7 @@ class BulbDevice(Device):
         'music': 8,
         'value_min': 25,
         'value_max': 255,
-        'value_rgb': True,
+        'value_hexformat': 'rgb8',
     }
     DEFAULT_DPSET['B'] = {
         'switch': 20,
@@ -103,7 +103,7 @@ class BulbDevice(Device):
         'music': 28,
         'value_min': 10,
         'value_max': 1000,
-        'value_rgb': False,
+        'value_hexformat': 'hsv16',
     }
     DEFAULT_DPSET['C'] = {
         'switch': 1,
@@ -117,7 +117,7 @@ class BulbDevice(Device):
         'music': None,
         'value_min': 25,
         'value_max': 255,
-        'value_rgb': True,
+        'value_hexformat': 'rgb8',
     }
 
     def __init__(self, *args, **kwargs):
@@ -143,7 +143,7 @@ class BulbDevice(Device):
             'music': None,
             'value_min': -1,
             'value_max': -1,
-            'value_rgb': False,
+            'value_hexformat': 'hsv16',
         }
 
         # set the default version to None so we do not immediately connect and call status()
@@ -158,23 +158,23 @@ class BulbDevice(Device):
         return result
 
     @staticmethod
-    def rgb_to_hexvalue(r, g, b, use_rgb=False):
+    def rgb_to_hexvalue(r, g, b, hexformat):
         """
         Convert an RGB value to the hex representation expected by Tuya Bulb.
 
         While r, g and b are just hexadecimal values of the corresponding
         Red, Green and Blue values, the h, s and v values (which are values
         between 0 and 1) are scaled:
-            use_rgb=True: 360 (h) and 255 (s and v)
-            use_rgb=False: 360 (h) and 1000 (s and v)
+            hexformat="rgb8": 360 (h) and 255 (s and v)
+            hexformat="hsv16": 360 (h) and 1000 (s and v)
 
         Args:
             r(int): Value for the colour red as int from 0-255.
             g(int): Value for the colour green as int from 0-255.
             b(int): Value for the colour blue as int from 0-255.
-            use_rgb(bool): Selects the return format
-                True: rrggbb0hhhssvv
-                False: hhhhssssvvvv
+            hexformat(str): Selects the return format
+                "rgb8": rrggbb0hhhssvv
+                "hsv16": hhhhssssvvvv
         """
         err = ''
         if not 0 <= r <= 255.0:
@@ -188,14 +188,16 @@ class BulbDevice(Device):
 
         hsv = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
 
-        if use_rgb:
+        if hexformat == 'rgb8':
             # r:0-255,g:0-255,b:0-255|rgb|
             hexvalue = '%02x%02x%02x' % (r, g, b)
             # h:0-360,s:0-255,v:0-255|hsv|
             hexvalue += '%04x%02x%02x' % (int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255))
-        else:
+        elif hexformat == 'hsv16':
             # h:0-360,s:0-1000,v:0-1000|hsv|
             hexvalue = '%04x%04x%04x' % (int(hsv[0] * 360), int(hsv[1] * 1000), int(hsv[2] * 1000))
+        else:
+            raise ValueError('rgb_to_hexvalue: hexformat must be either "rgb8" or "hsv16"')
 
         return hexvalue
 
@@ -203,17 +205,17 @@ class BulbDevice(Device):
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):
         if bulb == "A":
-            use_rgb = True
+            hexformat = 'rgb8'
         elif bulb == "B":
-            use_rgb = False
+            hexformat = 'hsv16'
         else:
             # Unsupported bulb type
             raise ValueError("Unsupported bulb type %r - unable to determine hexvalue." % bulb)
 
-        return BulbDevice.rgb_to_hexvalue(r, g, b, use_rgb)
+        return BulbDevice.rgb_to_hexvalue(r, g, b, hexformat)
 
     @staticmethod
-    def hsv_to_hexvalue(h, s, v, use_rgb=False):
+    def hsv_to_hexvalue(h, s, v, hexformat):
         """
         Convert an HSV value to the hex representation expected by Tuya Bulb.
 
@@ -221,9 +223,9 @@ class BulbDevice(Device):
             h(float): colour Hue as float from 0-1
             s(float): colour Saturation as float from 0-1
             v(float): colour Value as float from 0-1
-            use_rgb(bool): Selects the return format
-                True: rrggbb0hhhssvv
-                False: hhhhssssvvvv
+            hexformat(str): Selects the return format
+                "rgb8": rrggbb0hhhssvv
+                "hsv16": hhhhssssvvvv
         """
         err = ''
         if not 0 <= h <= 1.0:
@@ -236,44 +238,46 @@ class BulbDevice(Device):
         if err:
             raise ValueError( 'hsv_to_hexvalue: The value for %s needs to be between 0 and 1.' % err[1:])
 
-        if use_rgb:
+        if hexformat == 'rgb8':
             (r, g, b) = colorsys.hsv_to_rgb(h, s, v)
-            return BulbDevice.rgb_to_hexvalue( r * 255.0, g * 255.0, b * 255.0, use_rgb )
-        else:
+            return BulbDevice.rgb_to_hexvalue( r * 255.0, g * 255.0, b * 255.0, hexformat )
+        elif hexformat == 'hsv16':
             # h:0-360,s:0-1000,v:0-1000|hsv|
             hexvalue = '%04x%04x%04x' % (int(h * 360), int(s * 1000), int(v * 1000))
             return hexvalue
+        else:
+            raise ValueError('hsv_to_hexvalue: hexformat must be either "rgb8" or "hsv16"')
 
     @staticmethod
-    def hexvalue_to_rgb(hexvalue, use_rgb=None):
+    def hexvalue_to_rgb(hexvalue, hexformat=None):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an RGB value.
 
         Args:
             hexvalue(string): The hex representation generated by BulbDevice.rgb_to_hexvalue()
-            use_rgb(bool or None):
-                True: The hex is in rrggbb0hhhssvv format
-                False: The hex is in hhhhssssvvvv format
+            hexformat(str or None):
+                "rgb8": The hex is in rrggbb0hhhssvv format
+                "hsv16": The hex is in hhhhssssvvvv format
                 None: Try to auto-detect the format
         """
         hexvalue_len = len(hexvalue)
-        if use_rgb is None:
+        if not hexformat:
             if hexvalue_len == 6 or hexvalue_len == 14:
-                use_rgb = True
+                hexformat = 'rgb8'
             elif hexvalue_len == 12:
-                use_rgb = False
+                hexformat = 'hsv16'
             else:
                 # Unsupported bulb type
-                raise ValueError("Unable to determine value format. Value string must have 6, 12 or 14 hex digits.")
+                raise ValueError("Unable to detect hexvalue format. Value string must have 6, 12 or 14 hex digits.")
 
-        if use_rgb:
+        if hexformat == 'rgb8':
             if hexvalue_len < 6:
                 raise ValueError("RGB value string must have 6 or 14 hex digits.")
             r = int(hexvalue[0:2], 16)
             g = int(hexvalue[2:4], 16)
             b = int(hexvalue[4:6], 16)
-        else:
+        elif hexformat == 'hsv16':
             # hexvalue is in hsv
             if hexvalue_len < 12:
                 raise ValueError("HSV value string must have 12 hex digits.")
@@ -284,6 +288,8 @@ class BulbDevice(Device):
             r = int(rgb[0] * 255)
             g = int(rgb[1] * 255)
             b = int(rgb[2] * 255)
+        else:
+            raise ValueError('hexvalue_to_rgb: hexformat must be None, "rgb8" or "hsv16"')
 
         return (r, g, b)
 
@@ -291,56 +297,59 @@ class BulbDevice(Device):
     @staticmethod
     def _hexvalue_to_rgb(hexvalue, bulb="A"):
         if bulb == "A":
-            use_rgb = True
+            hexformat = 'rgb8'
         elif bulb == "B":
-            use_rgb = False
+            hexformat = 'hsv16'
         else:
             # Unsupported bulb type
-            raise ValueError("Unsupported bulb type %r - unable to determine hexvalue format." % bulb)
-        return BulbDevice.hexvalue_to_rgb(hexvalue, use_rgb)
+            #raise ValueError("Unsupported bulb type %r - unable to determine hexvalue format." % bulb)
+            hexformat = None
+        return BulbDevice.hexvalue_to_rgb(hexvalue, hexformat)
 
     @staticmethod
-    def hexvalue_to_hsv(hexvalue, use_rgb=None):
+    def hexvalue_to_hsv(hexvalue, hexformat=None):
         """
         Converts the hexvalue used by Tuya for colour representation into
         an HSV value.
 
         Args:
-            hexvalue(string): The hex representation generated by BulbDevice._rgb_to_hexvalue()
-            use_rgb(bool or None):
-                True: The hex is in rrggbb0hhhssvv format
-                False: The hex is in hhhhssssvvvv format
+            hexvalue(string): The hex representation generated by BulbDevice.rgb_to_hexvalue()
+            hexformat(str or None):
+                "rgb8": The hex is in rrggbb0hhhssvv format
+                "hsv16": The hex is in hhhhssssvvvv format
                 None: Try to auto-detect the format
         """
         hexvalue_len = len(hexvalue)
-        if use_rgb is None:
+        if not hexformat:
             if hexvalue_len == 6 or hexvalue_len == 14:
-                use_rgb = True
+                hexformat = 'rgb8'
             elif hexvalue_len == 12:
-                use_rgb = False
+                hexformat = 'hsv16'
             else:
                 # Unsupported bulb type
-                raise ValueError("Unable to determine value format. Value string must have 6, 12 or 14 hex digits.")
+                raise ValueError("Unable to detetect hexvalue format. Value string must have 6, 12 or 14 hex digits.")
 
-        if use_rgb:
+        if hexformat == 'rgb8':
             if hexvalue_len < 6:
                 raise ValueError("RGB[HSV] value string must have 6 or 14 hex digits.")
             if hexvalue_len < 14:
                 # hexvalue is in rgb
-                rgb = BulbDevice.hexvalue_to_rgb(hexvalue, use_rgb=True)
+                rgb = BulbDevice.hexvalue_to_rgb(hexvalue, 'rgb8')
                 h, s, v = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
             else:
                 # hexvalue is in rgb+hsv
                 h = int(hexvalue[7:10], 16) / 360.0
                 s = int(hexvalue[10:12], 16) / 255.0
                 v = int(hexvalue[12:14], 16) / 255.0
-        else:
+        elif hexformat == 'hsv16':
             # hexvalue is in hsv
             if hexvalue_len < 12:
                 raise ValueError("HSV value string must have 12 hex digits.")
             h = int(hexvalue[0:4], 16) / 360.0
             s = int(hexvalue[4:8], 16) / 1000.0
             v = int(hexvalue[8:12], 16) / 1000.0
+        else:
+            raise ValueError('hexvalue_to_hsv: hexformat must be None, "rgb8" or "hsv16"')
 
         return (h, s, v)
 
@@ -348,13 +357,14 @@ class BulbDevice(Device):
     @staticmethod
     def _hexvalue_to_hsv(hexvalue, bulb="A"):
         if bulb == "A":
-            use_rgb = True
+            hexformat = 'rgb8'
         elif bulb == "B":
-            use_rgb = False
+            hexformat = 'hsv16'
         else:
             # Unsupported bulb type
-            raise ValueError("Unsupported bulb type %r - unable to determine RGB values." % bulb)
-        return BulbDevice.hexvalue_to_hsv(hexvalue, use_rgb)
+            #raise ValueError("Unsupported bulb type %r - unable to determine RGB values." % bulb)
+            hexformat = None
+        return BulbDevice.hexvalue_to_hsv(hexvalue, hexformat)
 
     def _set_values_check( self, check_values, nowait=False ):
         dps_values = {}
@@ -367,15 +377,20 @@ class BulbDevice(Device):
                 dp = self.dpset[k]
                 if dp and ((dp not in state['dps']) or (state['dps'][dp] != check_values[k])):
                     dps_values[dp] = check_values[k]
+                elif not dp:
+                    log.debug('Device does not support capability, skipping: %r:%r', k, check_values[k])
 
-        log.debug('changed: %r', dps_values)
-        if not dps_values:
+        if dps_values:
+            log.debug('Only sending changed DPs: %r', dps_values)
+        else:
             # last state not cached or everything already set, so send them all
             for k in check_values:
                 if self.dpset[k]:
                     dps_values[self.dpset[k]] = check_values[k]
+                else:
+                    log.debug('Device does not support capability, skipping: %r:%r', k, check_values[k])
+            log.debug('No DPs have changed, sending full update to refresh: %r', dps_values)
 
-        log.debug('sending: %r', dps_values)
         return self.set_multiple_values( dps_values, nowait=nowait )
 
     def turn_onoff(self, on, switch=0, nowait=False):
@@ -504,7 +519,7 @@ class BulbDevice(Device):
             transition = self.musicmode_transition
 
         colour = '%x' % transition
-        colour += self.rgb_to_hexvalue( rh, gs, bv, self.dpset['value_rgb'] )
+        colour += self.rgb_to_hexvalue( rh, gs, bv, self.dpset['value_hexformat'] )
 
         if (not brightness) or (brightness < 0):
             brightness = 0
@@ -514,7 +529,7 @@ class BulbDevice(Device):
             colourtemp = 0
         colourtemp = int(self.dpset['value_max'] * colourtemp // 100)
 
-        fmt = '%02x' if self.dpset['value_rgb'] else '%04x'
+        fmt = '%02x' if self.dpset['value_hexformat'] == 'rgb8' else '%04x'
         colour += fmt % brightness
         colour += fmt % colourtemp
 
@@ -535,7 +550,7 @@ class BulbDevice(Device):
             #raise ValueError('set_colour: Device does not support color.')
 
         check_values = {
-            'colour': self.rgb_to_hexvalue(r, g, b, self.dpset['value_rgb']),
+            'colour': self.rgb_to_hexvalue(r, g, b, self.dpset['value_hexformat']),
             'mode': self.DPS_MODE_COLOUR,
             'switch': True
         }
@@ -557,7 +572,7 @@ class BulbDevice(Device):
             #raise ValueError('set_hsv: Device does not support color.')
 
         check_values = {
-            'colour': self.hsv_to_hexvalue( h, s, v, self.dpset['value_rgb'] ),
+            'colour': self.hsv_to_hexvalue( h, s, v, self.dpset['value_hexformat'] ),
             'mode': self.DPS_MODE_COLOUR,
             'switch': True
         }
@@ -717,7 +732,7 @@ class BulbDevice(Device):
         if not state:
             state = self.state(nowait=nowait)
         if 'Error' in state:
-            return state
+            raise RuntimeError('Error getting device current state.')
         if feature not in state:
             raise ValueError("Unknown parameter %r." % feature)
         return state[feature]
@@ -727,12 +742,16 @@ class BulbDevice(Device):
         return self.get_value('mode', state=state, nowait=nowait)
 
     def white_percentage(self, state=None, nowait=False):
+        if not state:
+            state = self.state(nowait=nowait)
         return (self.brightness_percentage(state=state, nowait=nowait), self.colourtemp_percentage(state=state, nowait=nowait))
 
     #def white(self, state=None, nowait=False):
     #    pass
 
     def get_brightness_percentage(self, state=None, nowait=False):
+        if (not self.dpset['value_max']) or (self.dpset['value_max'] < 1):
+            raise RuntimeError("Bulb capabilitiy 'value_max' not set, unable to calculate percentage.")
         return self.brightness(state=state, nowait=nowait) / self.dpset['value_max'] * 100.0
 
     def brightness(self, state=None, nowait=False):
@@ -740,6 +759,8 @@ class BulbDevice(Device):
         return self.get_value('brightness', state=state, nowait=nowait)
 
     def get_colourtemp_percentage(self, state=None, nowait=False):
+        if (not self.dpset['value_max']) or (self.dpset['value_max'] < 1):
+            raise RuntimeError("Bulb capabilitiy 'value_max' not set, unable to calculate percentage.")
         return self.colourtemp(state=state, nowait=nowait) / self.dpset['value_max'] * 100.0
 
     def colourtemp(self, state=None, nowait=False):
@@ -751,19 +772,21 @@ class BulbDevice(Device):
         hexvalue = self.get_value('colour', state=state, nowait=nowait)
         if isinstance( hexvalue, dict ):
             return hexvalue # Error
-        return BulbDevice.hexvalue_to_rgb(hexvalue, self.dpset['value_rgb'])
+        return BulbDevice.hexvalue_to_rgb(hexvalue, self.dpset['value_hexformat'])
 
     def colour_hsv(self, state=None, nowait=False):
         """Return colour as HSV value"""
         hexvalue = self.get_value('colour', state=state, nowait=nowait)
         if isinstance( hexvalue, dict ):
             return hexvalue # Error
-        return BulbDevice.hexvalue_to_hsv(hexvalue, self.dpset['value_rgb'])
+        return BulbDevice.hexvalue_to_hsv(hexvalue, self.dpset['value_hexformat'])
 
     def state(self, nowait=False):
         """Return state of Bulb"""
         if not self.bulb_configured:
             self.detect_bulb(nowait=nowait)
+            if not self.bulb_configured:
+                raise RuntimeError('Bulb not configured, cannot get device current state.')
 
         status = self.cached_status(nowait=nowait)
         state = {}
@@ -795,6 +818,8 @@ class BulbDevice(Device):
     def bulb_has_capability( self, feature, nowait=False ):
         if not self.bulb_configured:
             self.detect_bulb( nowait=nowait )
+            if not self.bulb_configured:
+                raise RuntimeError('Bulb not configured, cannot get device current state.')
         return bool( self.dpset[feature] )
 
     def detect_bulb(self, response=None, nowait=False):
@@ -834,7 +859,7 @@ class BulbDevice(Device):
 
                 self.dpset['value_min'] = self.DEFAULT_DPSET[self.bulb_type]['value_min']
                 self.dpset['value_max'] = self.DEFAULT_DPSET[self.bulb_type]['value_max']
-                self.dpset['value_rgb'] = self.DEFAULT_DPSET[self.bulb_type]['value_rgb']
+                self.dpset['value_hexformat'] = self.DEFAULT_DPSET[self.bulb_type]['value_hexformat']
 
                 for k in self.DEFAULT_DPSET[self.bulb_type]:
                     if k[:6] == 'value_':
