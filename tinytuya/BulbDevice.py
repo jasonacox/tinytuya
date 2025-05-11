@@ -12,10 +12,10 @@
 
  Functions
     BulbDevice Class methods
-        rgb_to_hexvalue(r, g, b, hex_format):
-        hsv_to_hexvalue(h, s, v, hex_format):
-        hexvalue_to_rgb(hexvalue, hex_format=None):
-        hexvalue_to_hsv(hexvalue, hex_format=None):
+        rgb_to_hexvalue(r, g, b, hexformat):
+        hsv_to_hexvalue(h, s, v, hexformat):
+        hexvalue_to_rgb(hexvalue, hexformat=None):
+        hexvalue_to_hsv(hexvalue, hexformat=None):
 
     BulbDevice
         set_mode(self, mode="white", nowait=False):
@@ -75,6 +75,18 @@ class BulbDevice(Device):
 
     MUSIC_TRANSITION_JUMP = 0
     MUSIC_TRANSITION_FADE = 1
+
+    # These attributes are obsolete and only kept for backwards compatibility
+    DPS_INDEX_SETS = [20, 1] # starts at either DP 20 (Type B) or 1 (all others)
+    DPS_INDEX_ON = {"A": "1", "B": "20", "C": "1"}
+    DPS_INDEX_MODE = {"A": "2", "B": "21", "C": "1"}
+    DPS_INDEX_BRIGHTNESS = {"A": "3", "B": "22", "C": "2"}
+    DPS_INDEX_COLOURTEMP = {"A": "4", "B": "23", "C": None}
+    DPS_INDEX_COLOUR = {"A": "5", "B": "24", "C": None}
+    DPS_INDEX_SCENE = {"A": "2", "B": "25", "C": None}
+    DPS_INDEX_TIMER = {"A": None, "B": "26", "C": None}
+    DPS_INDEX_MUSIC = {"A": None, "B": "27", "C": None}
+    DPS = "dps"
 
     DEFAULT_DPSET = {}
     DEFAULT_DPSET['A'] = {
@@ -819,7 +831,7 @@ class BulbDevice(Device):
         if not self.bulb_configured:
             self.detect_bulb( nowait=nowait )
             if not self.bulb_configured:
-                raise RuntimeError('Bulb not configured, cannot get device current state.')
+                raise RuntimeError('Bulb not configured, cannot get device capabilities.')
         return bool( self.dpset[feature] )
 
     def detect_bulb(self, response=None, nowait=False):
