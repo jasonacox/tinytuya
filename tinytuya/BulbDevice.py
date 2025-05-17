@@ -144,7 +144,6 @@ class BulbDevice(Device):
         self.old_sendwait = None
         self.old_persist = None
         self.have_old_musicmode = False
-        self.musicmode_transition = 0
         self.dpset = {
             'switch': None,
             'mode': None,
@@ -215,7 +214,7 @@ class BulbDevice(Device):
 
         return hexvalue
 
-    # Depricated. Kept for backwards compatibility
+    # Deprecated. Kept for backwards compatibility
     @staticmethod
     def _rgb_to_hexvalue(r, g, b, bulb="A"):
         if bulb == "A":
@@ -307,7 +306,7 @@ class BulbDevice(Device):
 
         return (r, g, b)
 
-    # Depricated. Kept for backwards compatibility
+    # Deprecated. Kept for backwards compatibility
     @staticmethod
     def _hexvalue_to_rgb(hexvalue, bulb="A"):
         if bulb == "A":
@@ -315,8 +314,7 @@ class BulbDevice(Device):
         elif bulb == "B":
             hexformat = 'hsv16'
         else:
-            # Unsupported bulb type
-            #raise ValueError("Unsupported bulb type %r - unable to determine hexvalue format." % bulb)
+            # Unsupported bulb type, attempt to auto-detect format
             hexformat = None
         return BulbDevice.hexvalue_to_rgb(hexvalue, hexformat)
 
@@ -367,7 +365,7 @@ class BulbDevice(Device):
 
         return (h, s, v)
 
-    # Depricated. Kept for backwards compatibility
+    # Deprecated. Kept for backwards compatibility
     @staticmethod
     def _hexvalue_to_hsv(hexvalue, bulb="A"):
         if bulb == "A":
@@ -375,8 +373,7 @@ class BulbDevice(Device):
         elif bulb == "B":
             hexformat = 'hsv16'
         else:
-            # Unsupported bulb type
-            #raise ValueError("Unsupported bulb type %r - unable to determine RGB values." % bulb)
+            # Unsupported bulb type, attempt to auto-detect format
             hexformat = None
         return BulbDevice.hexvalue_to_hsv(hexvalue, hexformat)
 
@@ -412,7 +409,6 @@ class BulbDevice(Device):
         if switch == 0:
             if not self.bulb_has_capability( 'switch', nowait=nowait ):
                 return error_json(ERR_FUNCTION, 'Could not detect bulb switch DP.')
-                #raise ValueError('Could not detect bulb switch DP.')
         return self.set_status(on, self.dpset['switch'], nowait=nowait)
 
     def turn_on(self, switch=0, nowait=False):
@@ -433,7 +429,6 @@ class BulbDevice(Device):
         """
         if not self.bulb_has_capability( 'mode', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'Bulb does not support mode setting.')
-            #raise ValueError('Bulb does not support mode setting.')
 
         check_values = {
             'mode': mode,
@@ -452,7 +447,6 @@ class BulbDevice(Device):
         """
         if not self.bulb_has_capability( 'scene', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_scene: Bulb does not support scenes.')
-            #raise ValueError('set_scene: Bulb does not support scenes.')
 
         # Type A, scene idx is part of the mode
         if (not self.dpset['scene_data']) or (self.dpset['scene_data'] == self.dpset['mode']):
@@ -491,38 +485,7 @@ class BulbDevice(Device):
             return error_json(ERR_FUNCTION, 'set_timer: Bulb does not support timer.')
         return self.set_value(self.dpset['timer'], num_secs, nowait=nowait)
 
-    def set_musicmode(self, transition, modify_settings=True, nowait=False):
-        """
-        Put the bulb into music mode and, optionally, change some settings to make responses faster.
-
-        Args:
-            transition(int): default transition to use if one is not provided in set_music_colour()
-            modify_settings(bool): whether or not to change settings to make responses faster
-        """
-        if not self.bulb_has_capability( 'music', nowait=nowait ):
-            return error_json(ERR_FUNCTION, "set_musicmode: Device does not support music mode.")
-        ret = self.set_mode( self.DPS_MODE_MUSIC, nowait=nowait )
-        self.old_retry = self.retry
-        self.old_sendwait = self.sendWait
-        self.old_persist = self.socketPersistent
-        self.have_old_musicmode = True
-        self.musicmode_transition = int(transition)
-        if modify_settings:
-            self.retry = False
-            self.sendWait = None
-            self.socketPersistent = True
-        return ret
-
-    def unset_musicmode( self ):
-        """
-        Reverts the changes made by set_musicmode()
-        """
-        if self.have_old_musicmode:
-            self.retry = self.old_retry
-            self.sendWait = self.old_sendwait
-            self.set_socketPersistent(self.old_persist)
-
-    def set_music_colour( self, rh, gs, bv, brightness=None, colourtemp=None, transition=None, nowait=False ):
+    def set_music_colour( self, transition, rh, gs, bv, brightness=None, colourtemp=None, nowait=False ):
         """
         Set a colour while in music mode
 
@@ -536,8 +499,6 @@ class BulbDevice(Device):
         """
         if not self.bulb_has_capability( 'music', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_music_colour: Device does not support music mode.")
-        if transition is None:
-            transition = self.musicmode_transition
 
         colour = '%x' % transition
         colour += self.rgb_to_hexvalue( rh, gs, bv, self.dpset['value_hexformat'] )
@@ -568,7 +529,6 @@ class BulbDevice(Device):
         """
         if not self.bulb_has_capability( 'colour', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
-            #raise ValueError('set_colour: Device does not support color.')
 
         check_values = {
             'colour': self.rgb_to_hexvalue(r, g, b, self.dpset['value_hexformat']),
@@ -590,7 +550,6 @@ class BulbDevice(Device):
         """
         if not self.bulb_has_capability( 'colour', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
-            #raise ValueError('set_hsv: Device does not support color.')
 
         check_values = {
             'colour': self.hsv_to_hexvalue( h, s, v, self.dpset['value_hexformat'] ),
@@ -621,8 +580,11 @@ class BulbDevice(Device):
 
         return self.set_white( b, c, nowait=nowait )
 
+    # Deprecated.  Please use set_white_percentage() instead.
     def set_white(self, brightness=-1, colourtemp=-1, nowait=False):
         """
+        DEPRECATED
+
         Set white coloured theme of an rgb bulb.
 
         Args:
@@ -678,8 +640,11 @@ class BulbDevice(Device):
         b = int(self.dpset['value_max'] * brightness // 100)
         return self.set_brightness(b, nowait=nowait)
 
+    # Deprecated.  Please use set_brightness_percentage() instead.
     def set_brightness(self, brightness, nowait=False):
         """
+        DEPRECATED
+
         Set the brightness value of an rgb bulb.
 
         Args:
@@ -699,9 +664,8 @@ class BulbDevice(Device):
 
         # Determine which mode bulb is in and adjust accordingly
         state = self.state(nowait=nowait)
-        #print( 'set_brightness state:', state )
 
-        if 'Error' in state:
+        if ('Error' in state) or ('mode' not in state):
             return state
 
         if state['mode'] != self.DPS_MODE_COLOUR:
@@ -711,7 +675,6 @@ class BulbDevice(Device):
             # for colour mode use hsv to increase brightness
             value = brightness / float(self.dpset['value_max'])
             (h, s, v) = self.colour_hsv(state=state, nowait=nowait)
-            print(h, s, v, value, brightness)
             return self.set_hsv(h, s, value, nowait=nowait)
 
     def set_colourtemp_percentage(self, colourtemp=100, nowait=False):
@@ -727,8 +690,11 @@ class BulbDevice(Device):
         c = int(self.dpset['value_max'] * colourtemp // 100)
         return self.set_colourtemp( c, nowait=nowait )
 
+    # Deprecated.  Please use set_white_percentage() instead.
     def set_colourtemp(self, colourtemp, nowait=False):
         """
+        DEPRECATED
+
         Set the colour temperature of an rgb bulb.
 
         Args:
@@ -912,7 +878,6 @@ class BulbDevice(Device):
         if self.bulb_type in self.DEFAULT_DPSET:
             default_dpset = self.DEFAULT_DPSET[self.bulb_type]
         else:
-            #raise ValueError("Unsupported bulb type %r - unable to determine DPS set." % self.bulb_type)
             default_dpset = {}
 
         for k in self.dpset:
@@ -921,6 +886,6 @@ class BulbDevice(Device):
             elif self.dpset[k] is None:
                 dp = default_dpset.get(k, None)
                 self.dpset[k] = str(dp) if (dp and k[:6] != 'value_') else dp
-        #print('dpset:', self.dpset)
+
         if self.dpset['switch'] and self.dpset['brightness']:
             self.bulb_configured = True

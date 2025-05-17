@@ -45,13 +45,13 @@ print('Setting to Music')
 d.set_mode('music')
 data = d.status()
 
-# Disable waiting and receive retrying to speed up responses
 d.set_socketPersistent( True )
+
+# Devices respond with a command ACK, but do not send DP updates.
+# Setting the 2 options below causes it to wait for a response but
+#   return immediately after an ACK.
 d.set_sendWait( None )
 d.set_retry( False )
-
-# Set default transition (can be ovcerridden later)
-d.musicmode_transition = d.MUSIC_TRANSITION_JUMP
 
 for x in range(100):
     # Value is 0 1111 2222 3333 4444 5555
@@ -62,11 +62,11 @@ for x in range(100):
 
     if (x % 6 == 0):
         # extend every 6 beat
-        d.set_music_colour( red, green, blue, transition=d.MUSIC_TRANSITION_FADE )
+        d.set_music_colour( d.MUSIC_TRANSITION_FADE, red, green, blue )
         time.sleep(2)
     else:
         # Jump!
-        d.set_music_colour( red, green, blue )
+        d.set_music_colour( d.MUSIC_TRANSITION_JUMP, red, green, blue )
         time.sleep(0.1) # the bulbs seem to get upset if updates are faster than 0.1s (100ms)
 
 # Done
