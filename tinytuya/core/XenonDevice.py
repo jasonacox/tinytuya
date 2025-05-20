@@ -267,6 +267,8 @@ class XenonDevice(object):
         self._last_status = {}
         self._have_status = False
         self.max_simultaneous_dps = max_simultaneous_dps if max_simultaneous_dps else 0
+        self.raw_sent = None
+        self.raw_recv = []
 
         if not local_key:
             local_key = ""
@@ -474,6 +476,7 @@ class XenonDevice(object):
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
         log.debug("sending payload quick")
+        self.raw_recv = []
         if self._get_socket(False) is not True:
             return None
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
@@ -487,6 +490,7 @@ class XenonDevice(object):
         while recv_retries:
             try:
                 msg = self._receive()
+                self.raw_recv.append(msg)
             except:
                 msg = None
             if msg and len(msg.payload) != 0:
@@ -533,6 +537,7 @@ class XenonDevice(object):
         dev_type = self.dev_type
         do_send = True
         msg = None
+        self.raw_recv = []
         while not success:
             # open up socket if device is available
             sock_result = self._get_socket(False)
@@ -557,6 +562,7 @@ class XenonDevice(object):
                         payload = None
                         partial_success = True
                         msg = rmsg
+                        self.raw_recv.append(rmsg)
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -921,9 +927,9 @@ class XenonDevice(object):
             if self.version >= 3.5:
                 iv = True
                 # seqno cmd retcode payload crc crc_good, prefix, iv
-                msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
+                self.raw_sent = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
-                data = pack_message(msg,hmac_key=self.local_key)
+                data = pack_message(self.raw_sent,hmac_key=self.local_key)
                 log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
                 return data
 
@@ -956,9 +962,9 @@ class XenonDevice(object):
             )
 
         self.cipher = None
-        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
+        self.raw_sent = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
-        buffer = pack_message(msg,hmac_key=hmac_key)
+        buffer = pack_message(self.raw_sent,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
 
