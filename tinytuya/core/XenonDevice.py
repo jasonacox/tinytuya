@@ -269,6 +269,7 @@ class XenonDevice(object):
         self.max_simultaneous_dps = max_simultaneous_dps if max_simultaneous_dps else 0
         self.raw_sent = None
         self.raw_recv = []
+        self.cmd_retcode = None
 
         if not local_key:
             local_key = ""
@@ -476,7 +477,9 @@ class XenonDevice(object):
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
         log.debug("sending payload quick")
+        self.raw_sent = None
         self.raw_recv = []
+        self.cmd_retcode = None
         if self._get_socket(False) is not True:
             return None
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
@@ -485,6 +488,10 @@ class XenonDevice(object):
         except:
             self._check_socket_close(True)
             return None
+        try:
+            self.raw_sent = parse_header(enc_payload)
+        except:
+            self.raw_sent = None
         if not recv_retries:
             return True
         while recv_retries:
@@ -493,8 +500,10 @@ class XenonDevice(object):
                 self.raw_recv.append(msg)
             except:
                 msg = None
-            if msg and len(msg.payload) != 0:
-                return msg
+            if msg:
+                self._get_retcode(self.raw_sent, msg) # set self.cmd_retcode
+                if len(msg.payload) != 0:
+                    return msg
             recv_retries -= 1
             if recv_retries == 0:
                 log.debug("received null payload (%r) but out of recv retries, giving up", msg)
@@ -538,6 +547,7 @@ class XenonDevice(object):
         do_send = True
         msg = None
         self.raw_recv = []
+        self.cmd_retcode = None
         while not success:
             # open up socket if device is available
             sock_result = self._get_socket(False)
@@ -551,6 +561,10 @@ class XenonDevice(object):
                     log.debug("sending payload")
                     enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
                     self.socket.sendall(enc_payload)
+                    try:
+                        self.raw_sent = parse_header(enc_payload)
+                    except:
+                        self.raw_sent = None
                     if self.sendWait is not None:
                         time.sleep(self.sendWait)  # give device time to respond
                 if getresponse:
@@ -563,6 +577,7 @@ class XenonDevice(object):
                         partial_success = True
                         msg = rmsg
                         self.raw_recv.append(rmsg)
+                        self._get_retcode(self.raw_sent, rmsg) # set self.cmd_retcode
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -927,9 +942,9 @@ class XenonDevice(object):
             if self.version >= 3.5:
                 iv = True
                 # seqno cmd retcode payload crc crc_good, prefix, iv
-                self.raw_sent = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
+                msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
-                data = pack_message(self.raw_sent,hmac_key=self.local_key)
+                data = pack_message(msg,hmac_key=self.local_key)
                 log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
                 return data
 
@@ -962,11 +977,23 @@ class XenonDevice(object):
             )
 
         self.cipher = None
-        self.raw_sent = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
+        msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
-        buffer = pack_message(self.raw_sent,hmac_key=hmac_key)
+        buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
+
+    def _get_retcode(self, sent, msg):
+        """Try to get the retcode for the last sent message"""
+        if (not sent) or (not msg):
+            return
+        if sent.cmd != msg.cmd:
+            return
+        if self.version < 3.5:
+            # v3.5 devices respond with a global incrementing seqno, not the sent seqno
+            if sent.seqno != msg.seqno:
+                return
+        self.cmd_retcode = msg.retcode
 
     def _register_child(self, child):
         if child.id in self.children and child != self.children[child.id]:
