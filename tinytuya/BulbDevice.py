@@ -23,7 +23,7 @@
         set_timer(self, num_secs, nowait=False):
         set_musicmode(self, transition, modify_settings=True, nowait=False):
         unset_musicmode( self ):
-        set_music_colour( self, rh, gs, bv, brightness=None, colourtemp=None, transition=None, nowait=False ):
+        set_music_colour( self, red, green, blue, brightness=None, colourtemp=None, transition=None, nowait=False ):
         set_colour(r, g, b, nowait):
         set_hsv(h, s, v, nowait):
         set_white_percentage(brightness=100, colourtemp=0, nowait):
@@ -38,8 +38,8 @@
         result = state():
         bool = bulb_has_capability( self, feature, nowait=False ):
         detect_bulb(self, response=None, nowait=False):
-        set_bulb_type(self, bulb_type=None, **kwargs):
-        set_bulb_capabilities(self, **kwargs):
+        set_bulb_type(self, bulb_type=None, mapping=None):
+        set_bulb_capabilities(self, mapping):
 
     Inherited
         Every device function from core.py
@@ -77,18 +77,6 @@ class BulbDevice(Device):
     MUSIC_TRANSITION_JUMP = 0
     MUSIC_TRANSITION_FADE = 1
 
-    # These attributes are obsolete and only kept for backwards compatibility
-    DPS_INDEX_SETS = [20, 1] # starts at either DP 20 (Type B) or 1 (all others)
-    DPS_INDEX_ON = {"A": "1", "B": "20", "C": "1"}
-    DPS_INDEX_MODE = {"A": "2", "B": "21", "C": "1"}
-    DPS_INDEX_BRIGHTNESS = {"A": "3", "B": "22", "C": "2"}
-    DPS_INDEX_COLOURTEMP = {"A": "4", "B": "23", "C": None}
-    DPS_INDEX_COLOUR = {"A": "5", "B": "24", "C": None}
-    DPS_INDEX_SCENE = {"A": "2", "B": "25", "C": None}
-    DPS_INDEX_TIMER = {"A": None, "B": "26", "C": None}
-    DPS_INDEX_MUSIC = {"A": None, "B": "27", "C": None}
-    DPS = "dps"
-
     DEFAULT_DPSET = {}
     DEFAULT_DPSET['A'] = {
         'switch': 1,
@@ -122,7 +110,7 @@ class BulbDevice(Device):
         'switch': 1,
         'mode': None,
         'brightness': 2,
-        'colourtemp': None,
+        'colourtemp': 3,
         'colour': None,
         'scene': None,
         'scene_data': None,
@@ -132,6 +120,18 @@ class BulbDevice(Device):
         'value_max': 255,
         'value_hexformat': 'rgb8',
     }
+
+    # These attributes are obsolete and only kept for backwards compatibility
+    DPS_INDEX_SETS = [20, 1] # starts at either DP 20 (Type B) or 1 (all others)
+    DPS_INDEX_ON = {"A": "1", "B": "20", "C": "1"}
+    DPS_INDEX_MODE = {"A": "2", "B": "21", "C": "1"}
+    DPS_INDEX_BRIGHTNESS = {"A": "3", "B": "22", "C": "2"}
+    DPS_INDEX_COLOURTEMP = {"A": "4", "B": "23", "C": None}
+    DPS_INDEX_COLOUR = {"A": "5", "B": "24", "C": None}
+    DPS_INDEX_SCENE = {"A": "2", "B": "25", "C": None}
+    DPS_INDEX_TIMER = {"A": None, "B": "26", "C": None}
+    DPS_INDEX_MUSIC = {"A": None, "B": "27", "C": None}
+    DPS = "dps"
 
     def __init__(self, *args, **kwargs):
         # Set Default Bulb Types
@@ -485,14 +485,14 @@ class BulbDevice(Device):
             return error_json(ERR_FUNCTION, 'set_timer: Bulb does not support timer.')
         return self.set_value(self.dpset['timer'], num_secs, nowait=nowait)
 
-    def set_music_colour( self, transition, rh, gs, bv, brightness=None, colourtemp=None, nowait=False ):
+    def set_music_colour( self, transition, red, green, blue, brightness=None, colourtemp=None, nowait=False ):
         """
         Set a colour while in music mode
 
         Args:
-            rh(float): red value, 0.0 - 255.0
-            gs(float): green value, 0.0 - 255.0
-            bv(float): blue value, 0.0 - 255.0
+            red(float): red value, 0.0 - 255.0
+            green(float): green value, 0.0 - 255.0
+            blue(float): blue value, 0.0 - 255.0
             brightness(float): optional white light brightness
             colourtemp(float): optional white light colourtemp
             transition(int): optional transition. will use transition provided in set_musicmode() if not provided
@@ -501,7 +501,7 @@ class BulbDevice(Device):
             return error_json(ERR_FUNCTION, "set_music_colour: Device does not support music mode.")
 
         colour = '%x' % transition
-        colour += self.rgb_to_hexvalue( rh, gs, bv, self.dpset['value_hexformat'] )
+        colour += self.rgb_to_hexvalue( red, green, blue, self.dpset['value_hexformat'] )
 
         if (not brightness) or (brightness < 0):
             brightness = 0
@@ -566,6 +566,8 @@ class BulbDevice(Device):
             brightness(int): Value for the brightness in percent (0-100)
             colourtemp(int): Value for the colour temperature in percent (0-100)
             nowait(bool): True to send without waiting for response.
+
+        Note: unlike set_colourtemp(), the colour temp will be silently ignored if the bulb does not support it
         """
         err = ''
         if not 0 <= brightness <= 100:
@@ -583,9 +585,7 @@ class BulbDevice(Device):
     # Deprecated.  Please use set_white_percentage() instead.
     def set_white(self, brightness=-1, colourtemp=-1, nowait=False):
         """
-        DEPRECATED
-
-        Set white coloured theme of an rgb bulb.
+        DEPRECATED Set white coloured theme of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness (A:25-255 or B:10-1000)
@@ -593,18 +593,21 @@ class BulbDevice(Device):
             nowait(bool): True to send without waiting for response.
 
             Default: Max Brightness and Min Colourtemp
+
+        Note: unlike set_colourtemp(), the colour temp will be silently ignored if the bulb does not support it
         """
         if not self.bulb_has_capability( 'brightness', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_white: Device does not support brightness.')
 
-        # Brightness (default Max)
+        # Brightness (default: Max)
         brightness = int(brightness)
         if brightness < 0:
             brightness = self.dpset['value_max']
         elif brightness > self.dpset['value_max']:
             raise ValueError('set_white: The brightness needs to be between %d and %d.' % (self.dpset['value_min'], self.dpset['value_max']))
 
-        # Colourtemp (default Min)
+        # Colourtemp (default: Min)
+        # It will be silently ignored if the bulb does not support it
         if colourtemp is not None:
             colourtemp = int(colourtemp)
             if colourtemp < 0:
@@ -612,7 +615,7 @@ class BulbDevice(Device):
             if colourtemp > self.dpset['value_max']:
                 raise ValueError('set_white: The colour temperature needs to be between 0 and %d.' % self.dpset['value_max'])
 
-        # do this the hard was as brightness=0 means we should turn off, but if colourtemp is set then
+        # do this the hard way as brightness=0 means we should turn off, but if colourtemp is set then
         #   turn_on() should turn it on at that colourtemp
         check_values = {}
         if brightness >= self.dpset['value_min']:
@@ -643,9 +646,7 @@ class BulbDevice(Device):
     # Deprecated.  Please use set_brightness_percentage() instead.
     def set_brightness(self, brightness, nowait=False):
         """
-        DEPRECATED
-
-        Set the brightness value of an rgb bulb.
+        DEPRECATED Set the brightness value of an rgb bulb.
 
         Args:
             brightness(int): Value for the brightness (25-255).
@@ -693,15 +694,13 @@ class BulbDevice(Device):
     # Deprecated.  Please use set_white_percentage() instead.
     def set_colourtemp(self, colourtemp, nowait=False):
         """
-        DEPRECATED
-
-        Set the colour temperature of an rgb bulb.
+        DEPRECATED Set the colour temperature of an rgb bulb.
 
         Args:
             colourtemp(int): Value for the colour temperature (0-255).
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'colourtemp', nowait=nowait ):
+        if not self.bulb_has_capability( self.BULB_FEATURE_COLOURTEMP, nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_colourtemp: Device does not support colourtemp.')
 
         if not 0 <= colourtemp <= self.dpset['value_max']:
@@ -815,6 +814,26 @@ class BulbDevice(Device):
             Type A has keys 1-9
             Type B has keys 20-28
             Type C is basic (non-CCT) and only has 1-2 (i.e Feit type bulbs from Costco)
+
+        Example status data:
+          Sylvania BR30 [v3.3, RGB+CCT]:
+            {'20': True, '21': 'colour', '22': 750, '23': 278, '24': '00f003e803e8', '25': '000e0d0000000000000000c803e8', '26': 0}
+
+          Geeni BW229 Smart Filament Bulb [v3.3, CCT only]:
+            {'1': True, '2': 25, '3': 0}
+            1: switch, 2: brightness, 3: colour temperature
+
+          No-name RGB+CCT (LED BULB W5K) [v3.5, RGB+CCT]:
+            {'20': True, '21': 'white', '22': 10, '23': 0, '24': '000003e803e8', '25': '000e0d0000000000000000c80000', '26': 0, '34': False}
+
+          Feit soft white Filament [v3.5, 2700K only]:
+            {'20': True, '21': 'white', '22': 60, '25': '000e0d0000000000000000c803e8', '26': 0, '34': False, '41': True}
+            (No CCT (23) or colour (24), but does support scenes (25) and music mode (28))
+
+          Feit dimmer switch [v3.3, not a bulb]:
+            {'1': True, '2': 10, '3': 10, '4': 'incandescent'}
+            Note: after a power cycle, only DP 2 is returned!  The rest are not returned until after they are set
+            1: switch, 2: brightness, 3: minimum dim %, 4: installed bulb type (LED/incandescent)
         """
         if not response:
             response = self.cached_status(historic=True, nowait=nowait)
@@ -834,11 +853,9 @@ class BulbDevice(Device):
                 self.bulb_type = 'B'
             elif '1' in response['dps'] and '2' in response['dps']:
                 self.bulb_configured = True
-                #if( ('3' in response['dps']) or ('4' in response['dps']) or isinstance(response['dps']['2'], str) ):
-                if isinstance(response['dps']['2'], str):
-                    self.bulb_type = 'A'
-                else:
-                    self.bulb_type = 'C'
+
+                # if DP 2 is a string, it is the mode (Type A).  If it is an int, it is the brightness (Type C)
+                self.bulb_type = 'A' if isinstance(response['dps']['2'], str) else 'C'
 
             if self.bulb_type and self.bulb_type in self.DEFAULT_DPSET:
                 # The 'music' DP is not returned in status(), so use the default value
@@ -870,19 +887,19 @@ class BulbDevice(Device):
             #self.bulb_type = default
             #self.assume_bulb_attribs()
 
-    def set_bulb_type(self, bulb_type=None, **kwargs):
+    def set_bulb_type(self, bulb_type=None, mapping=None):
         self.bulb_type = bulb_type
-        self.set_bulb_capabilities(**kwargs)
+        self.set_bulb_capabilities(mapping)
 
-    def set_bulb_capabilities(self, **kwargs):
+    def set_bulb_capabilities(self, mapping):
         if self.bulb_type in self.DEFAULT_DPSET:
             default_dpset = self.DEFAULT_DPSET[self.bulb_type]
         else:
             default_dpset = {}
 
         for k in self.dpset:
-            if k in kwargs:
-                self.dpset[k] = kwargs[k]
+            if k in mapping:
+                self.dpset[k] = mapping[k]
             elif self.dpset[k] is None:
                 dp = default_dpset.get(k, None)
                 self.dpset[k] = str(dp) if (dp and k[:6] != 'value_') else dp
