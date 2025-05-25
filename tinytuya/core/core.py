@@ -93,7 +93,7 @@ except NameError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 16, 3)  # Major, Minor, Patch
+version_tuple = (1, 17, 0)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 

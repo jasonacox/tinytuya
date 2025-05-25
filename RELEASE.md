@@ -1,5 +1,57 @@
 # RELEASE NOTES
 
+## v1.17.0 - BulbDevice Rewrite
+
+* Rewrite BulbDevice and rework set_multiple_values() @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/617
+* Tool updates: pcap parse fix, new broadcast relay by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/612
+* Fix initialization bug with python2 (embedded devices) by @Ircama in https://github.com/jasonacox/tinytuya/pull/615
+
+BulbDevice Example Usage
+
+```python
+import time
+import random
+import tinytuya
+
+d = tinytuya.BulbDevice(DEVICEID, address=DEVICEIP, local_key=DEVICEKEY, version=DEVICEVERS, persist=True)
+
+# BASIC FUNCTIONS
+print('Basic Tests')
+d.set_colour(255,127,63)           # Set to orange
+d.set_white_percentage(100.0, 0.0) # 100% brightness, 0% colour temperature
+d.set_brightness_percentage(100)   # 100% brightness
+
+# MUSIC MODE
+print("Music Mode")
+d.set_mode('music')
+d.set_socketPersistent( True )
+# Devices respond with a command ACK, but do not send DP updates.
+# Setting the 2 options below causes it to wait for a response but
+#   return immediately after an ACK.
+d.set_sendWait( None )
+d.set_retry( False )
+for x in range(100):
+    red = random.randint(0,255)
+    green = random.randint(0,255)
+    blue = random.randint(0,255)
+    if (x % 6 == 0):
+        # extend every 6 beat
+        d.set_music_colour( d.MUSIC_TRANSITION_FADE, red, green, blue )
+        time.sleep(2)
+    else:
+        # Jump!
+        d.set_music_colour( d.MUSIC_TRANSITION_JUMP, red, green, blue )
+        time.sleep(0.1) # the bulbs seem to get upset if updates are faster than 0.1s (100ms)
+
+# SCENE MODE
+if d.bulb_has_capability(d.BULB_FEATURE_SCENE_DATA):
+    d.set_mode('scene')
+    print('String based scenes compatible smartbulb detected.')
+    # Example: Color rotation 
+    print('Switch to Scene 7 - Color Rotation')
+    d.set_scene( 7, '464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+```
+
 ## v1.16.3 - Cloud Error Handling
 
 * Add error handling in Cloud getdevices() function for edge case where old devices.json has corrupt or malformed device entries.
