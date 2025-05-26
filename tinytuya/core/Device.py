@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import time
 
-from .XenonDevice import XenonDevice
+from .XenonDevice import XenonDevice, merge_dps_results
 from . import command_types as CT
 
 
@@ -103,11 +104,53 @@ class Device(XenonDevice):
             data(dict): array of index/value pairs to set
             nowait(bool): True to send without waiting for response.
         """
+        # if nowait is set we can't detect failure
+        if nowait:
+            if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
+                # too many DPs, break it up into smaller chunks
+                ret = None
+                for k in data:
+                    ret = self.set_value(k, data[k], nowait=nowait)
+                return ret
+            else:
+                # send them all. since nowait is set we can't detect failure
+                out = {}
+                for k in data:
+                    out[str(k)] = data[k]
+                payload = self.generate_payload(CT.CONTROL, out)
+                return self._send_receive(payload, getresponse=(not nowait))
+
+        if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
+            # too many DPs, break it up into smaller chunks
+            ret = {}
+            for k in data:
+                if (not nowait) and bool(ret):
+                    time.sleep(1)
+                result = self.set_value(k, data[k], nowait=nowait)
+                merge_dps_results(ret, result)
+            return ret
+
+        # send them all, but try to detect devices which cannot handle multiple
         out = {}
-        for i in data:
-            out[str(i)] = data[i]
+        for k in data:
+            out[str(k)] = data[k]
+
         payload = self.generate_payload(CT.CONTROL, out)
-        return self._send_receive(payload, getresponse=(not nowait))
+        result = self._send_receive(payload, getresponse=(not nowait))
+
+        if result and 'Err' in result and len(out) > 1:
+            # sending failed! device might only be able to handle 1 DP at a time
+            first_dp = next(iter( out ))
+            res = self.set_value(first_dp, out[first_dp], nowait=nowait)
+            del out[first_dp]
+            if res and 'Err' not in res:
+                # single DP succeeded! set limit to 1
+                self.max_simultaneous_dps = 1
+                result = res
+                for k in out:
+                    res = self.set_value(k, out[k], nowait=nowait)
+                    merge_dps_results(result, res)
+        return result
 
     def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""

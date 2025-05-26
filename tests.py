@@ -31,6 +31,23 @@ def get_results_from_mock(d):
 
     return result_cmd, result_payload
 
+def build_mock_bulb(bulb):
+    d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+    if bulb == 'A':
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1": False, "2":"none", "3": -1, "4": -1, "5":"00000000000000"}} # tell it which commands to support and which DPs need updating
+    elif bulb == 'B':
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"20": False, "21":"none", "22": -1, "23": -1, "24":"000000000000"}} # tell it which commands to support and DPs need updating
+    elif bulb == 'C':
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1": False, "2": -1}} # tell it which commands to support and which DPs need updating
+    else:
+        raise ValueError("Unknown bulb type %r" % bulb)
+
+    #d.set_bulb_type(bulb) # tell it which commands to support
+    d.detect_bulb(d.status()) # tell it which commands to support
+
+    d.set_version(3.1)
+    d._send_receive = MagicMock(return_value={})
+    return d
 
 class TestXenonDevice(unittest.TestCase):
     def test_set_timer(self):
@@ -94,37 +111,75 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
-    def test_set_colour(self):
+    def test_set_colour_A(self):
         # arrange
-        d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
-        d.status = MagicMock(return_value={}) # set_version calls this to figure out which commands it supports
-        d.set_version(3.1)
-        d._send_receive = MagicMock(return_value={"devId":"DEVICE_ID","dps":{"2":"colour", "5":"ffffff000000ff"}})
+        d = build_mock_bulb('A')
 
         # act
-        d.set_colour(255,255,255)
+        d.set_colour(255,127,63)
 
         # gather results
         result_cmd, result_payload = get_results_from_mock(d)
 
+        print(result_cmd, result_payload)
+
         # expectations
         expected_cmd = tinytuya.CONTROL
         # expected_payload = {"dps":{"2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
-        expected_payload = {"dps":{"21":"colour", "24":"0000000003e8"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{"1": True, "2":"colour", "5":"ff7f3f0014c0ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
 
         # assert
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
-    def test_set_white(self):
+    def test_set_colour_B(self):
         # arrange
-        d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
-        d.status = MagicMock(return_value={}) # set_version calls this to figure out which commands it supports
-        d.set_version(3.1)
-        d._send_receive = MagicMock(return_value={"devId":"DEVICE_ID","dps":{"1":False,"2":0}})
+        d = build_mock_bulb('B')
 
         # act
-        d.set_white(255, 255)
+        d.set_colour(255,127,63)
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        print(result_cmd, result_payload)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        # expected_payload = {"dps":{"2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{"20": True, "21":"colour", "24":"001402f003e8"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
+    def test_set_white_A(self):
+        # arrange
+        d = build_mock_bulb('A')
+
+        # act
+        d.set_white_percentage(100,100)
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        print(result_cmd, result_payload)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        # expected_payload = {"dps":{"2":"colour", "5":"ffffff000000ff"}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{'1': True, '2': 'white', '3': 255, '4': 255}, "devId":"DEVICE_ID_HERE","uid":"DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
+    def test_set_white_B(self):
+        # arrange
+        d = build_mock_bulb('B')
+
+        # act
+        d.set_white_percentage(100,100)
 
         # gather results
         result_cmd, result_payload = get_results_from_mock(d)
@@ -132,7 +187,26 @@ class TestXenonDevice(unittest.TestCase):
         # expectations
         expected_cmd = tinytuya.CONTROL
         # expected_payload = {"dps":{"2":"white", "3": 255, "4": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
-        expected_payload = {"dps":{"21":"white", "22": 255, "23": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{'20': True, "21":"white", "22": 1000, "23": 1000}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
+    def test_set_brightness_C(self):
+        # arrange
+        d = build_mock_bulb('C')
+
+        # act
+        d.set_brightness_percentage(100)
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        # expected_payload = {"dps":{"2":"white", "3": 255, "4": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+        expected_payload = {"dps":{'1': True, "2": 255}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
 
         # assert
         self.assertEqual(result_cmd, expected_cmd)

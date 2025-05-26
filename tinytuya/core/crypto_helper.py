@@ -101,7 +101,7 @@ class _AESCipher_pyca(_AESCipher_Base):
             if use_base64:
                 enc = base64.b64decode(enc)
             if len(enc) % 16 != 0:
-                raise ValueError("invalid length")
+                raise ValueError("invalid length: %d" % len(enc))
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
             if tag is None:
@@ -138,7 +138,7 @@ class _AESCipher_PyCrypto(_AESCipher_Base):
             if use_base64:
                 enc = base64.b64decode(enc)
             if len(enc) % 16 != 0:
-                raise ValueError("invalid length")
+                raise ValueError("invalid length: %d" % len(enc))
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
             cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
@@ -178,7 +178,7 @@ class _AESCipher_pyaes(_AESCipher_Base):
             enc = base64.b64decode(enc)
 
         if len(enc) % 16 != 0:
-            raise ValueError("invalid length")
+            raise ValueError("invalid length: %d" % len(enc))
 
         cipher = pyaes.blockfeeder.Decrypter(
             pyaes.AESModeOfOperationECB(self.key),

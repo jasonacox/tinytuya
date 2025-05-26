@@ -13,7 +13,7 @@
   * XenonDevice(...) - Base Tuya Objects and Functions
         XenonDevice(dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, 
             version="3.1", persist=False, cid/node_id=None, parent=None, connection_retry_limit=5, 
-            connection_retry_delay=5)
+            connection_retry_delay=5, max_simultaneous_dps=0)
   * Device(XenonDevice) - Tuya Class for Devices
 
  Module Functions
@@ -26,9 +26,18 @@
     device_info(dev_id)                         # Searches DEVICEFILE (usually devices.json) for devices with ID = dev_id and returns just that device
     assign_dp_mappings(tuyadevices, mappings)   # Adds mappings to all the devices in the tuyadevices list
     decrypt_udp(msg)                            # Decrypts a UDP network broadcast packet
+    merge_dps_results(dest, src)                # Merge multiple receive() responses into a single dict
+                                                #   `src` will be combined with and merged into `dest`
 
  Device Functions
     json = status()                    # returns json payload
+    json = cached_status(historic=False, nowait=False)
+                                       # When a persistent connection is open, this will return a cached version of the device status
+                                       #   if historic=True, all seen DPs are returned even if their values might be out of date
+                                       #   if historic=False, only DPs which are current are returned
+                                       #   if nowait=False (the default), a status() call will be made if no cached status is available.
+                                       #   if nowait=True, `None` will be returned immediately if no cached status is available.
+    cache_clear()                      # Clears the cache, causing cached_status() to either call status() or return None
     subdev_query(nowait)               # query sub-device status (only for gateway devices)
     set_version(version)               # 3.1 [default], 3.2, 3.3 or 3.4
     set_socketPersistent(False/True)   # False [default] or True
@@ -84,7 +93,7 @@ except NameError:
 # Colorama terminal color capability for all platforms
 init()
 
-version_tuple = (1, 16, 3)  # Major, Minor, Patch
+version_tuple = (1, 17, 0)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -125,7 +134,7 @@ def set_debug(toggle=True, color=True):
         log.setLevel(logging.DEBUG)
         log.debug("TinyTuya [%s]\n", __version__)
         log.debug("Python %s on %s", sys.version, sys.platform)
-        if AESCipher.CRYPTOLIB_HAS_GCM == False:
+        if not AESCipher.CRYPTOLIB_HAS_GCM:
             log.debug("Using %s %s for crypto", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
             log.debug("Warning: Crypto library does not support AES-GCM, v3.5 devices will not work!")
         else:
@@ -148,7 +157,7 @@ def assign_dp_mappings( tuyadevices, mappings ):
         raise ValueError( '\'mappings\' must be a dict' )
 
     if (not mappings) or (not tuyadevices):
-        return None
+        return
 
     for dev in tuyadevices:
         try:

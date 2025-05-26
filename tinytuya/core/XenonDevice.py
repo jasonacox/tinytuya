@@ -87,6 +87,27 @@ def device_info( dev_id ):
 
     return devinfo
 
+def merge_dps_results(dest, src):
+    """Merge multiple receive() responses into a single dict
+
+    `src` will be combined with and merged into `dest`
+    """
+    if src and isinstance(src, dict) and 'Error' not in src and 'Err' not in src:
+        for k in src:
+            if k == 'dps' and src[k] and isinstance(src[k], dict):
+                if 'dps' not in dest or not isinstance(dest['dps'], dict):
+                    dest['dps'] = {}
+                for dkey in src[k]:
+                    dest['dps'][dkey] = src[k][dkey]
+            elif k == 'data' and src[k] and isinstance(src[k], dict) and 'dps' in src[k] and isinstance(src[k]['dps'], dict):
+                if k not in dest or not isinstance(dest[k], dict):
+                    dest[k] = {'dps': {}}
+                if 'dps' not in dest[k] or not isinstance(dest[k]['dps'], dict):
+                    dest[k]['dps'] = {}
+                for dkey in src[k]['dps']:
+                    dest[k]['dps'][dkey] = src[k]['dps'][dkey]
+            else:
+                dest[k] = src[k]
 
 # Tuya Device Dictionary - Command and Payload Overrides
 #
@@ -191,7 +212,11 @@ payload_dict = {
 
 class XenonDevice(object):
     def __init__(
-            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT # pylint: disable=W0621
+            self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
+            version=3.1, # pylint: disable=W0621
+            persist=False, cid=None, node_id=None, parent=None,
+            connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT,
+            max_simultaneous_dps=0
     ):
         """
         Represents a Tuya device.
@@ -238,6 +263,13 @@ class XenonDevice(object):
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
         self.payload_dict = None
+        self._historic_status = {}
+        self._last_status = {}
+        self._have_status = False
+        self.max_simultaneous_dps = max_simultaneous_dps if max_simultaneous_dps else 0
+        self.raw_sent = None
+        self.raw_recv = []
+        self.cmd_retcode = None
 
         if not local_key:
             local_key = ""
@@ -268,7 +300,7 @@ class XenonDevice(object):
             bcast_data = find_device(dev_id)
             if bcast_data['ip'] is None:
                 log.debug("Unable to find device on network (specify IP address)")
-                raise Exception("Unable to find device on network (specify IP address)")
+                raise RuntimeError("Unable to find device on network (specify IP address)")
             self.address = bcast_data['ip']
             self.set_version(float(bcast_data['version']))
             time.sleep(0.1)
@@ -280,14 +312,7 @@ class XenonDevice(object):
             XenonDevice.set_version(self, 3.1)
 
     def __del__(self):
-        # In case we have a lingering socket connection, close it
-        try:
-            if self.socket:
-                # self.socket.shutdown(socket.SHUT_RDWR)
-                self.socket.close()
-                self.socket = None
-        except:
-            pass
+        self.close()
 
     def __repr__(self):
         # FIXME can do better than this
@@ -327,6 +352,13 @@ class XenonDevice(object):
                 if not self.address:
                     log.debug("No address for device!")
                     return ERR_OFFLINE
+
+                if (self.version > 3.1) and ((not self.local_key) or (len(self.local_key) != 16)):
+                    if not self.local_key:
+                        log.debug("No local key for device!")
+                    else:
+                        log.debug("Bad local key length for device!")
+                    return ERR_KEY_OR_VER
 
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 if self.socketNODELAY:
@@ -376,6 +408,7 @@ class XenonDevice(object):
         if (force or not self.socketPersistent) and self.socket:
             self.socket.close()
             self.socket = None
+            self.cache_clear()
 
     def _recv_all(self, length):
         tries = 2
@@ -444,6 +477,9 @@ class XenonDevice(object):
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
         log.debug("sending payload quick")
+        self.raw_sent = None
+        self.raw_recv = []
+        self.cmd_retcode = None
         if self._get_socket(False) is not True:
             return None
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
@@ -452,15 +488,22 @@ class XenonDevice(object):
         except:
             self._check_socket_close(True)
             return None
+        try:
+            self.raw_sent = parse_header(enc_payload)
+        except:
+            self.raw_sent = None
         if not recv_retries:
             return True
         while recv_retries:
             try:
                 msg = self._receive()
+                self.raw_recv.append(msg)
             except:
                 msg = None
-            if msg and len(msg.payload) != 0:
-                return msg
+            if msg:
+                self._get_retcode(self.raw_sent, msg) # set self.cmd_retcode
+                if len(msg.payload) != 0:
+                    return msg
             recv_retries -= 1
             if recv_retries == 0:
                 log.debug("received null payload (%r) but out of recv retries, giving up", msg)
@@ -503,6 +546,8 @@ class XenonDevice(object):
         dev_type = self.dev_type
         do_send = True
         msg = None
+        self.raw_recv = []
+        self.cmd_retcode = None
         while not success:
             # open up socket if device is available
             sock_result = self._get_socket(False)
@@ -516,6 +561,10 @@ class XenonDevice(object):
                     log.debug("sending payload")
                     enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
                     self.socket.sendall(enc_payload)
+                    try:
+                        self.raw_sent = parse_header(enc_payload)
+                    except:
+                        self.raw_sent = None
                     if self.sendWait is not None:
                         time.sleep(self.sendWait)  # give device time to respond
                 if getresponse:
@@ -527,6 +576,8 @@ class XenonDevice(object):
                         payload = None
                         partial_success = True
                         msg = rmsg
+                        self.raw_recv.append(rmsg)
+                        self._get_retcode(self.raw_sent, rmsg) # set self.cmd_retcode
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -663,8 +714,10 @@ class XenonDevice(object):
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
                     if found_child:
+                        found_child._cache_response(result)
                         result = found_child._process_response(result)
                     else:
+                        self._cache_response(result)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
@@ -674,8 +727,10 @@ class XenonDevice(object):
         self._check_socket_close()
 
         if found_child:
+            found_child._cache_response(result)
             return found_child._process_response(result)
 
+        self._cache_response(result)
         return self._process_response(result)
 
     def _decode_payload(self, payload):
@@ -725,7 +780,7 @@ class XenonDevice(object):
             if isinstance(payload, str):
                 payload = payload.encode('utf-8')
 
-            if not self.disabledetect and b"data unvalid" in payload:
+            if not self.disabledetect and b"data unvalid" in payload and self.version in (3.3, 3.4):
                 self.dev_type = "device22"
                 # set at least one DPS
                 self.dps_to_request = {"1": None}
@@ -773,6 +828,19 @@ class XenonDevice(object):
             json_payload['dps'] = json_payload['data']['dps']
 
         return json_payload
+
+    def _cache_response(self, response):
+        """
+        Save (cache) the last value of every DP
+        """
+        merge_dps_results(self._historic_status, response)
+
+        if (not self.socketPersistent) or (not self.socket):
+            return
+
+        log.debug('caching: %s', response)
+        merge_dps_results(self._last_status, response)
+        log.debug('merged: %s', self._last_status)
 
     def _process_response(self, response): # pylint: disable=R0201
         """
@@ -877,7 +945,7 @@ class XenonDevice(object):
                 msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
                 data = pack_message(msg,hmac_key=self.local_key)
-                log.debug("payload encrypted=%r",binascii.hexlify(data))
+                log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
                 return data
 
             payload = self.cipher.encrypt(payload, False)
@@ -914,6 +982,18 @@ class XenonDevice(object):
         buffer = pack_message(msg,hmac_key=hmac_key)
         log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
+
+    def _get_retcode(self, sent, msg):
+        """Try to get the retcode for the last sent message"""
+        if (not sent) or (not msg):
+            return
+        if sent.cmd != msg.cmd:
+            return
+        if self.version < 3.5:
+            # v3.5 devices respond with a global incrementing seqno, not the sent seqno
+            if sent.seqno != msg.seqno:
+                return
+        self.cmd_retcode = msg.retcode
 
     def _register_child(self, child):
         if child.id in self.children and child != self.children[child.id]:
@@ -957,6 +1037,34 @@ class XenonDevice(object):
                 log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
 
         return data
+
+    def cached_status(self, historic=False, nowait=False):
+        """
+        Return device last status if a persistent connection is open.
+
+        Args:
+            nowait(bool): If cached status is is not available, either call status() (when nowait=False) or immediately return None (when nowait=True)
+
+        Response:
+            json if cache is available, else
+                json from status() if nowait=False, or
+                None if nowait=True
+        """
+        if historic:
+            return self._historic_status
+        if (not self._have_status) or (not self.socketPersistent) or (not self.socket) or (not self._last_status):
+            if not nowait:
+                log.debug("Last status caching not available, requesting status from device")
+                return self.status()
+            log.debug("Last status caching not available, returning None")
+            return None
+
+        #log.debug("Have status cache, returning it")
+        return self._last_status
+
+    def cache_clear(self):
+        self._last_status = {}
+        self._have_status = False
 
     def subdev_query( self, nowait=False ):
         """Query for a list of sub-devices and their status"""
@@ -1018,6 +1126,7 @@ class XenonDevice(object):
         if self.socket and not persist:
             self.socket.close()
             self.socket = None
+            self.cache_clear()
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
@@ -1048,7 +1157,15 @@ class XenonDevice(object):
         self.sendWait = s
 
     def close(self):
-        self.__del__()
+        # In case we have a lingering socket connection, close it
+        try:
+            if self.socket:
+                # self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+        except:
+            pass
+
+        self.socket = None
 
     @staticmethod
     def find(did):
@@ -1138,6 +1255,10 @@ class XenonDevice(object):
 
         if command_override is None:
             command_override = command
+
+        if command == CT.DP_QUERY or command == CT.DP_QUERY_NEW:
+            self._have_status = True
+
         if json_data is None:
             # I have yet to see a device complain about included but unneeded attribs, but they *will*
             # complain about missing attribs, so just include them all unless otherwise specified
