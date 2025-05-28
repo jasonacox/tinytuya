@@ -140,10 +140,7 @@ class BulbDevice(Device):
         self.has_brightness = None
         self.has_colourtemp = None
         self.has_colour = None
-        self.old_retry = None
-        self.old_sendwait = None
-        self.old_persist = None
-        self.have_old_musicmode = False
+        self.tried_status = False
         self.dpset = {
             'switch': None,
             'mode': None,
@@ -166,6 +163,7 @@ class BulbDevice(Device):
 
     def status(self, nowait=False):
         result = super(BulbDevice, self).status(nowait=nowait)
+        self.tried_status = True
         if result and (not self.bulb_configured) and ('dps' in result):
             self.detect_bulb(result, nowait=nowait)
         return result
@@ -406,10 +404,13 @@ class BulbDevice(Device):
 
     def turn_onoff(self, on, switch=0, nowait=False):
         """Turn the device on or off"""
-        if switch == 0:
-            if not self.bulb_has_capability( 'switch', nowait=nowait ):
-                return error_json(ERR_FUNCTION, 'Could not detect bulb switch DP.')
-        return self.set_status(on, self.dpset['switch'], nowait=nowait)
+        if not switch:
+            if not self.tried_status:
+                self.detect_bulb( nowait=nowait )
+            # some people may use BulbDevice as the default even for non-bulb
+            #   devices, so default to '1' if we can't detect it
+            switch = self.dpset['switch'] if self.dpset['switch'] else 1
+        return self.set_status(on, switch, nowait=nowait)
 
     def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
@@ -842,8 +843,8 @@ class BulbDevice(Device):
                     log.debug('No cached status, but nowait set! detect_bulb() exiting without detecting bulb!')
                 else:
                     response = self.status()
-                    # return here as self.status() will call us again
-                    return
+                # return here as self.status() will call us again
+                return
         if response and 'dps' in response and isinstance(response['dps'], dict):
             # Try to determine type of BulbDevice Type based on DPS indexes
             # 1+2 or 20+21 are required per https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp155s4th6b
@@ -884,8 +885,6 @@ class BulbDevice(Device):
         elif not self.bulb_configured:
             # response has no dps
             log.debug("No DPs in response, cannot detect bulb type!")
-            #self.bulb_type = default
-            #self.assume_bulb_attribs()
 
     def set_bulb_type(self, bulb_type=None, mapping=None):
         self.bulb_type = bulb_type
