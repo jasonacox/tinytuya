@@ -212,6 +212,48 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_set_bulb_type(self):
+        d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1": False, "2": 90}} # tell it which commands to support and which DPs need updating
+        d.set_bulb_type('C') # tell it which commands to support
+        d.set_version(3.1)
+        d._send_receive = MagicMock(return_value={})
+
+        # act
+        d.turn_on()
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        expected_payload = {"dps":{'1': True}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
+    def test_not_a_bulb(self):
+        d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1": False}} # tell it which commands to support and which DPs need updating
+        #d.set_bulb_type('C') # tell it which commands to support
+        d.set_version(3.1)
+        d._send_receive = MagicMock(return_value={})
+
+        # act
+        d.turn_on()
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # expectations
+        expected_cmd = tinytuya.CONTROL
+        expected_payload = {"dps":{'1': True}, "devId": "DEVICE_ID_HERE","uid": "DEVICE_ID_HERE", "t": ""}
+
+        # assert
+        self.assertEqual(result_cmd, expected_cmd)
+        self.assertDictEqual(result_payload, expected_payload)
+
 
 if __name__ == '__main__':
     unittest.main()
