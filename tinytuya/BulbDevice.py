@@ -896,6 +896,9 @@ class BulbDevice(Device):
         else:
             default_dpset = {}
 
+        if not isinstance( mapping, dict ):
+            mapping = {}
+
         for k in self.dpset:
             if k in mapping:
                 self.dpset[k] = mapping[k]
