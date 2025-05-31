@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.17.1 - Fix BulbDevice
+
+* Fix BulbDevice for non-bulb devices. This will allow BulbDevice to be used even for non-bulb devices, e.g. turn_on() & turn_off(), by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/620.
+
 ## v1.17.0 - BulbDevice Rewrite
 
 * Rewrite BulbDevice and rework set_multiple_values() @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/617
