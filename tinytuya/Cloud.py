@@ -122,16 +122,18 @@ class Cloud(object):
             apiRegion = self.apiRegion
         self.apiRegion = apiRegion.lower()
         self.urlhost = "openapi.tuyacn.com"          # China Data Center
-        if self.apiRegion == "us":
+        if self.apiRegion == "us" or self.apiRegion == "az":
             self.urlhost = "openapi.tuyaus.com"      # Western America Data Center
-        if self.apiRegion == "us-e":
+        elif self.apiRegion == "us-e" or self.apiRegion == "ue":
             self.urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-        if self.apiRegion == "eu":
+        elif self.apiRegion == "eu":
             self.urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-        if self.apiRegion == "eu-w":
+        elif self.apiRegion == "eu-w" or self.apiRegion == "we":
             self.urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-        if self.apiRegion == "in":
+        elif self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
+        elif self.apiRegion == "sg":
+            self.urlhost = "openapi.tuyain.com"      # Singapore Data Center
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type=None):
         """

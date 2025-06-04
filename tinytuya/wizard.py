@@ -145,14 +145,15 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
                                       " currently registered in Tuya App (used to pull full list) or 'scan' to scan for one: " + normal)
         # TO DO - Determine apiRegion based on Device - for now, ask
         print("\n      " + subbold + "Region List" + dim +
-              "\n        cn\tChina Data Center" +
-              "\n        us\tUS - Western America Data Center" +
-              "\n        us-e\tUS - Eastern America Data Center" +
+              "\n        cn\tChina Data Center (alias: AY)" +
+              "\n        us\tUS - Western America Data Center (alias: AZ)" +
+              "\n        us-e\tUS - Eastern America Data Center (alias: UE)" +
               "\n        eu\tCentral Europe Data Center" +
-              "\n        eu-w\tWestern Europe Data Center" +
-              "\n        in\tIndia Data Center\n")
+              "\n        eu-w\tWestern Europe Data Center (alias: WE)" +
+              "\n        in\tIndia Data Center\n" +
+              "\n        sg\tSingapore Data Center")
         config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
-                                    " (Options: cn, us, us-e, eu, eu-w, or in): " + normal)
+                                    " (Options: cn, us, us-e, eu, eu-w, in, or sg): " + normal)
         # Write Config
         json_object = json.dumps(config, indent=4)
         with open(config_file, "w") as outfile:
