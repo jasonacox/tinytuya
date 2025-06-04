@@ -133,7 +133,7 @@ class Cloud(object):
         elif self.apiRegion == "in":
             self.urlhost = "openapi.tuyain.com"      # India Datacenter
         elif self.apiRegion == "sg":
-            self.urlhost = "openapi.tuyain.com"      # Singapore Data Center
+            self.urlhost = "openapi-sg.iotbing.com"  # Singapore Data Center
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type=None):
         """
