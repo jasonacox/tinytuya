@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.17.2 - BulbDevice Fix
+
+* Add Singapore datacenter, update BulbDevice for non-bulb devices again by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/625
+
 ## v1.17.1 - Fix BulbDevice
 
 * Fix BulbDevice for non-bulb devices. This will allow BulbDevice to be used even for non-bulb devices, e.g. turn_on() & turn_off(), by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/620.
