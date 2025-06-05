@@ -120,6 +120,21 @@ class BulbDevice(Device):
         'value_max': 255,
         'value_hexformat': 'rgb8',
     }
+    DEFAULT_DPSET['None'] = {
+        'switch': 1,
+        'mode': None,
+        'brightness': None,
+        'colourtemp': None,
+        'colour': None,
+        'scene': None,
+        'scene_data': None,
+        'timer': None,
+        'music': None,
+        'value_min': 0,
+        'value_max': 255,
+        'value_hexformat': 'rgb8',
+    }
+
 
     # These attributes are obsolete and only kept for backwards compatibility
     DPS_INDEX_SETS = [20, 1] # starts at either DP 20 (Type B) or 1 (all others)
@@ -849,7 +864,11 @@ class BulbDevice(Device):
             # Try to determine type of BulbDevice Type based on DPS indexes
             # 1+2 or 20+21 are required per https://developer.tuya.com/en/docs/iot/product-function-definition?id=K9tp155s4th6b
             #   The rest are optional
-            if '20' in response['dps'] and '21' in response['dps']:
+            if '20' in response['dps'] and '1' in response['dps']:
+                # both 1 and 20 in response, this probably isn't a bulb
+                self.bulb_configured = True
+                self.bulb_type = 'None'
+            elif '20' in response['dps'] and '21' in response['dps']:
                 self.bulb_configured = True
                 self.bulb_type = 'B'
             elif '1' in response['dps'] and '2' in response['dps']:
