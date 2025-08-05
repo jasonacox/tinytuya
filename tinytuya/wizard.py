@@ -24,9 +24,14 @@ Credits
 # Modules
 from __future__ import print_function
 import json
-from colorama import init
 from datetime import datetime
 import tinytuya
+
+try:
+    from colorama import init
+    HAVE_COLORAMA = True
+except ImportError:
+    HAVE_COLORAMA = False
 
 # Backward compatibility for python2
 try:
@@ -35,7 +40,8 @@ except NameError:
     pass
 
 # Colorama terminal color capability for all platforms
-init()
+if HAVE_COLORAMA:
+    init()
 
 # Configuration Files
 DEVICEFILE = tinytuya.DEVICEFILE
@@ -114,6 +120,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
     except:
         old_devices = {}
 
+    color = color and HAVE_COLORAMA
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
