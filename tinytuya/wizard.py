@@ -150,8 +150,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
               "\n        us-e\tUS - Eastern America Data Center (alias: UE)" +
               "\n        eu\tCentral Europe Data Center" +
               "\n        eu-w\tWestern Europe Data Center (alias: WE)" +
-              "\n        in\tIndia Data Center\n" +
-              "\n        sg\tSingapore Data Center")
+              "\n        in\tIndia Data Center" +
+              "\n        sg\tSingapore Data Center\n")
         config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
                                     " (Options: cn, us, us-e, eu, eu-w, in, or sg): " + normal)
         # Write Config
