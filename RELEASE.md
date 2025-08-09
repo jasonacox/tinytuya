@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.17.3 - Colorama Optional
+
+* This update makes the colorama dependency optional for the tinytuya library, allowing it to function without colorama while gracefully disabling color output. This will help with memory lor dependency limited platforms. Update by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/637. 
+
 ## v1.17.1 - Fix BulbDevice
 
 * Fix BulbDevice for non-bulb devices. This will allow BulbDevice to be used even for non-bulb devices, e.g. turn_on() & turn_off(), by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/620.
