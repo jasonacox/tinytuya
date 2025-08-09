@@ -25,8 +25,15 @@ import time
 import errno
 import base64
 import traceback
-from colorama import init
 import tinytuya
+
+try:
+    from colorama import init
+    HAVE_COLORAMA = True
+except ImportError:
+    HAVE_COLORAMA = False
+
+HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 # Optional libraries required for forced scanning
 #try:
@@ -54,7 +61,8 @@ except ImportError:
     PSULIBS = False
 
 # Colorama terminal color capability for all platforms
-init()
+if HAVE_COLORAMA:
+    init()
 
 # Configuration Files
 DEVICEFILE = tinytuya.DEVICEFILE
@@ -204,6 +212,10 @@ def get_ip_to_broadcast():
 
 def send_discovery_request( iface_list=None ):
     close_sockets = False
+
+    if not tinytuya.AESCipher.CRYPTOLIB_HAS_GCM:
+        # GCM is required for discovery requests
+        return False
 
     if not iface_list:
         close_sockets = True
@@ -1146,6 +1158,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     """
     # Terminal formatting
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = termcolors
     term = TermColors( *termcolors )
@@ -1920,6 +1933,7 @@ def snapshot(color=True, assume_yes=False, skip_poll=None):
         skip_poll = True or False, auto-answer 'no' to "Poll local devices?" (overrides assume_yes)
     """
     # Terminal formatting
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 
@@ -1992,6 +2006,7 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
         color = True or False, print output in color [Default: True]
     """
     # Terminal formatting
+    color = color and HAVE_COLOR
     #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
@@ -2031,6 +2046,7 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
     return
 
 def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False, discover=True ): # pylint: disable=W0621
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 

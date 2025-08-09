@@ -79,7 +79,14 @@
 from __future__ import print_function  # python 2.7 support
 import logging
 import sys
-from colorama import init
+
+try:
+    from colorama import init
+    HAVE_COLORAMA = True
+except ImportError:
+    HAVE_COLORAMA = False
+
+HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 from .crypto_helper import AESCipher
 
@@ -91,9 +98,10 @@ except NameError:
 
 
 # Colorama terminal color capability for all platforms
-init()
+if HAVE_COLORAMA:
+    init()
 
-version_tuple = (1, 17, 2)  # Major, Minor, Patch
+version_tuple = (1, 17, 3)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
@@ -124,6 +132,7 @@ def hex2bin(x):
 
 def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""
+    color = color and HAVE_COLOR
     if toggle:
         if color:
             logging.basicConfig(
@@ -197,6 +206,7 @@ def appenddevice(newdevice, devices):
 
 # Terminal color helper
 def termcolor(color=True):
+    color = color and HAVE_COLOR
     if color is False:
         # Disable Terminal Color Formatting
         bold = subbold = normal = dim = alert = alertdim = cyan = red = yellow = ""

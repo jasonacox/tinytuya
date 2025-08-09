@@ -42,6 +42,22 @@ pipx install tinytuya
 
 Pip will attempt to install `cryptography`, `requests` and `colorama` if not already installed.
 
+### Alternate Install on Space- or Dependency-Limited Systems
+
+On systems with limited space (such as an OpenWRT router), or if you would like to use a different cryptography library, you can install TinyTuya without automatic dependencies and manually install them yourself.
+
+First, install a cryptography library.  TinyTuya supports:
+* *cryptography* - Newest, requires OpenSSL - `python -m pip install cryptography`
+* *PyCryptodome* - Another good alternative, does not require OpenSSL, still actively developed - `python -m pip install pycryptodome` or `python -m pip install pycryptodomex`
+* *pyaes* - Pure Python, but is abandoned and does not support v3.5+ devices - `python -m pip install pyaes`
+* *PyCrypto* - Predecessor to PyCryptodome, is also abandoned and does not support v3.5+ devices - `python -m pip install pycrypto`
+
+Optional: install `colorama` for terminal color support: `python -m pip install colorama`
+
+Required for Wizard or Cloud functionality, Optional otherwise: install `requests` for Cloud functions to work: `python -m pip install requests`
+
+Finally, install TinyTuya without dependencies: `python -m pip install --no-deps tinytuya`
+
 ## Tuya Device Preparation
 
 Controlling and monitoring Tuya devices on your network requires the following:
