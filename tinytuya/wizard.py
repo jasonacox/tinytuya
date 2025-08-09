@@ -26,12 +26,15 @@ from __future__ import print_function
 import json
 from datetime import datetime
 import tinytuya
+import sys
 
 try:
     from colorama import init
     HAVE_COLORAMA = True
 except ImportError:
     HAVE_COLORAMA = False
+
+HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 # Backward compatibility for python2
 try:
@@ -120,7 +123,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
     except:
         old_devices = {}
 
-    color = color and HAVE_COLORAMA
+    color = color and HAVE_COLOR
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)

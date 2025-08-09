@@ -33,6 +33,7 @@ try:
 except ImportError:
     HAVE_COLORAMA = False
 
+HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 # Optional libraries required for forced scanning
 #try:
@@ -1153,7 +1154,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
     """
     # Terminal formatting
-    color = color and HAVE_COLORAMA
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = termcolors
     term = TermColors( *termcolors )
@@ -1928,7 +1929,7 @@ def snapshot(color=True, assume_yes=False, skip_poll=None):
         skip_poll = True or False, auto-answer 'no' to "Poll local devices?" (overrides assume_yes)
     """
     # Terminal formatting
-    color = color and HAVE_COLORAMA
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 
@@ -2001,7 +2002,7 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
         color = True or False, print output in color [Default: True]
     """
     # Terminal formatting
-    color = color and HAVE_COLORAMA
+    color = color and HAVE_COLOR
     #(bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
@@ -2041,7 +2042,7 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
     return
 
 def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, forcescan=False, discover=True ): # pylint: disable=W0621
-    color = color and HAVE_COLORAMA
+    color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 
