@@ -42,6 +42,22 @@ pipx install tinytuya
 
 Pip will attempt to install `cryptography`, `requests` and `colorama` if not already installed.
 
+### Alternate Install on Space- or Dependency-Limited Systems
+
+On systems with limited space (such as an OpenWRT router), or if you would like to use a different cryptography library, you can install TinyTuya without automatic dependencies and manually install them yourself.
+
+First, install a cryptography library.  TinyTuya supports:
+* *cryptography* - Newest, requires OpenSSL - `python -m pip install cryptography`
+* *PyCryptodome* - Another good alternative, does not require OpenSSL, still actively developed - `python -m pip install pycryptodome` or `python -m pip install pycryptodomex`
+* *pyaes* - Pure Python, but is abandoned and does not support v3.5+ devices - `python -m pip install pyaes`
+* *PyCrypto* - Predecessor to PyCryptodome, is also abandoned and does not support v3.5+ devices - `python -m pip install pycrypto`
+
+Optional: install `colorama` for terminal color support: `python -m pip install colorama`
+
+Required for Wizard or Cloud functionality, Optional otherwise: install `requests` for Cloud functions to work: `python -m pip install requests`
+
+Finally, install TinyTuya without dependencies: `python -m pip install --no-deps tinytuya`
+
 ## Tuya Device Preparation
 
 Controlling and monitoring Tuya devices on your network requires the following:
@@ -90,7 +106,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
       ```
-    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (cn, us, us-e, eu, eu-w, or in) from your Tuya IoT project as set in Step 3 above.
+    * The **Wizard** will prompt you for the *API ID* key, API *Secret*, API *Region* (cn, us, us-e, eu, eu-w, sg, or in) from your Tuya IoT project as set in Step 3 above.
         * To find those again, go to [iot.tuya.com](https://iot.tuya.com/), choose your project and click `Overview`
             * API Key: Access ID/Client ID
             * API Secret: Access Secret/Client Secret
@@ -459,7 +475,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
   Wizard
       tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
                 [-device-file FILE] [-raw-response-file FILE] [-snapshot-file FILE] [-credentials-file FILE]
-                [-key KEY] [-secret SECRET] [-region {cn,eu,eu-w,in,us,us-e}] [-device DEVICE [DEVICE ...]]
+                [-key KEY] [-secret SECRET] [-region {cn,eu,eu-w,in,sg,us,us-e}] [-device DEVICE [DEVICE ...]]
                 [-dry-run] [max_time]
 
         Common Options
@@ -482,7 +498,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
         -credentials-file    JSON file to load/save Cloud credentials from/to [Default: tinytuya.json]
         -key KEY             Cloud API Key to use
         -secret SECRET       Cloud API Secret to use
-        -region              Cloud API Region to use {cn,eu,eu-w,in,us,us-e}
+        -region              Cloud API Region to use {cn,eu,eu-w,in,sg,us,us-e}
         -device DEVICE(S)    One or more Device ID(s) to use
 
   Scan

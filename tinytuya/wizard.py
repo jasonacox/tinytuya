@@ -24,9 +24,17 @@ Credits
 # Modules
 from __future__ import print_function
 import json
-from colorama import init
 from datetime import datetime
 import tinytuya
+import sys
+
+try:
+    from colorama import init
+    HAVE_COLORAMA = True
+except ImportError:
+    HAVE_COLORAMA = False
+
+HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 # Backward compatibility for python2
 try:
@@ -35,7 +43,8 @@ except NameError:
     pass
 
 # Colorama terminal color capability for all platforms
-init()
+if HAVE_COLORAMA:
+    init()
 
 # Configuration Files
 DEVICEFILE = tinytuya.DEVICEFILE
@@ -114,6 +123,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
     except:
         old_devices = {}
 
+    color = color and HAVE_COLOR
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
 
     print(bold + 'TinyTuya Setup Wizard' + dim + ' [%s]' % (tinytuya.version) + normal)
@@ -150,8 +160,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
               "\n        us-e\tUS - Eastern America Data Center (alias: UE)" +
               "\n        eu\tCentral Europe Data Center" +
               "\n        eu-w\tWestern Europe Data Center (alias: WE)" +
-              "\n        in\tIndia Data Center\n" +
-              "\n        sg\tSingapore Data Center")
+              "\n        in\tIndia Data Center" +
+              "\n        sg\tSingapore Data Center\n")
         config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
                                     " (Options: cn, us, us-e, eu, eu-w, in, or sg): " + normal)
         # Write Config

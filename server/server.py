@@ -7,6 +7,9 @@ Author: Jason A. Cox
 Date: June 11, 2023
 For more information see https://github.com/jasonacox/tinytuya
 
+Requirements:
+    pip install psutil tinytuya colorama requests
+
 Description
     Server continually listens for Tuya UDP discovery packets and updates the database of devices
     and uses devices.json to determine metadata about devices.
@@ -43,7 +46,14 @@ except ImportError as impErr:
     print("WARN: Unable to import requests library, Cloud functions will not work.")
     print("WARN: Check dependencies. See https://github.com/jasonacox/tinytuya/issues/377")
     print("WARN: Error: {}.".format(impErr.args[0]))
-import resource
+
+# Memory usage reporting uses the 'psutil' library, which is cross-platform.
+# If 'psutil' is not available, memory stats will be set to None.
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 import signal
 import sys
 import os
@@ -62,7 +72,7 @@ except:
 import tinytuya
 from tinytuya import scanner
 
-BUILD = "p14"
+BUILD = "p15"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
@@ -426,7 +436,12 @@ class handler(BaseHTTPRequestHandler):
         elif self.path == '/stats':
             # Give Internal Stats
             serverstats['ts'] = int(time.time())
-            serverstats['mem'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # Report memory usage using psutil if available (cross-platform)
+            if HAS_PSUTIL:
+                process = psutil.Process(os.getpid())
+                serverstats['mem'] = process.memory_info().rss // 1024  # Resident Set Size in KB
+            else:
+                serverstats['mem'] = None  # psutil not available
             serverstats['cloudcreds'] = cloudcreds
             serverstats['cloudsync'] = cloudsync
             serverstats['cloudsyncdone'] = cloudsyncdone

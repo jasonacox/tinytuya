@@ -113,6 +113,12 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### p15 - Cross-Platform Memory Stats
+
+* Switched to using the `psutil` library for memory usage stats, making server.py fully cross-platform (Windows, macOS, Linux). Fixes issue #634.
+* Memory usage is now reported on all platforms if `psutil` is installed; if not, the field is set to None.
+* Added requirements to documentation and header: `pip install psutil tinytuya colorama requests`.
+
 ### p14 - Recovery Logic
 
 * Add main loop logic to try to recover when exception occurs.
