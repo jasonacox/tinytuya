@@ -213,6 +213,10 @@ def get_ip_to_broadcast():
 def send_discovery_request( iface_list=None ):
     close_sockets = False
 
+    if not tinytuya.AESCipher.CRYPTOLIB_HAS_GCM:
+        # GCM is required for discovery requests
+        return False
+
     if not iface_list:
         close_sockets = True
         iface_list = {}
