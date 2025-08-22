@@ -47,7 +47,7 @@ from .core import * # pylint: disable=W0401, W0614
 ########################################################
 
 class Cloud(object):
-    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None, **extrakw):
+    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, configFile='tinytuya.json', new_sign_algorithm=True, initial_token=None, **extrakw):
         """
         Tuya Cloud IoT Platform Access
 
@@ -77,7 +77,7 @@ class Cloud(object):
             * https://iot.tuya.com/cloud/products/detail
         """
         # Class Variables
-        self.CONFIGFILE = 'tinytuya.json'
+        self.CONFIGFILE = configFile
         self.apiRegion = apiRegion
         self.apiKey = apiKey
         self.apiSecret = apiSecret
@@ -894,3 +894,4 @@ class Cloud(object):
                 self.getmapping( productid, devid )
 
         return self.mappings
+
