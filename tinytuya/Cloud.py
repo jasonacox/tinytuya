@@ -52,7 +52,16 @@ class Cloud(object):
         Tuya Cloud IoT Platform Access
 
         Args:
-            initial_token: The auth token from a previous run.  It will be refreshed if it has expired
+            apiRegion (str, optional): Tuya API region code (e.g., 'us', 'eu', 'cn', 'in').
+            apiKey (str, optional): Tuya Cloud API key.
+            apiSecret (str, optional): Tuya Cloud API secret.
+            apiDeviceID (str, optional): Device ID for initial API calls.
+            new_sign_algorithm (bool, optional): Use new sign algorithm for API requests. Default: True.
+            initial_token (str, optional): The auth token from a previous run. It will be refreshed if expired.
+            configFile (str, optional): Path to the config file to use for credentials. Default: 'tinytuya.json'.
+            **extrakw: Additional keyword arguments for future compatibility.
+
+        If apiKey or apiSecret are not provided, credentials will be loaded from the config file.
 
         Playload Construction - Header Data:
             Parameter 	  Type    Required	Description

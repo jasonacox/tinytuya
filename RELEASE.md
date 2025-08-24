@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## 1.17.4
+
+- Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
+
 ## v1.17.3 - Colorama Optional
 
 * This update makes the colorama dependency optional for the tinytuya library, allowing it to function without colorama while gracefully disabling color output. This will help with memory lor dependency limited platforms. Update by @uzlonewolf in https://github.com/jasonacox/tinytuya/pull/637. 
