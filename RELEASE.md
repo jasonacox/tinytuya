@@ -1,6 +1,6 @@
 # RELEASE NOTES
 
-## 1.17.4
+## 1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
 
