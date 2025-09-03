@@ -8,8 +8,10 @@ from .exceptions import *
 from .error_helper import *
 from .const import *
 from .XenonDevice import *
+from .XenonDeviceAsync import *
 from .udp_helper import *
 from .Device import *
+from .DeviceAsync import *
 from .command_types import *
 from .header import *
 
