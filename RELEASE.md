@@ -1,6 +1,58 @@
 # RELEASE NOTES
 
-## 1.17.4 - Cloud Config
+## v2.0.0 - Async API
+
+* **VERSION 2 UPDATE**: TinyTuya now includes full async support (Python 3.5+) for concurrent device communication and improved performance when managing multiple devices by @3735943886 in https://github.com/jasonacox/tinytuya/pull/643
+* Add `XenonDeviceAsync` - Base async device class with full asyncio integration and context manager support
+* Add `DeviceAsync` - Async device class with all standard device methods (status, set, heartbeat, etc.)
+* Add async context manager support: `async with tinytuya.DeviceAsync(...) as device:`
+* Add async factory method: `device = await tinytuya.DeviceAsync.create(...)`
+* Add support for concurrent device operations using `asyncio.gather()`
+* Add `monitor_async.py` example demonstrating async usage patterns and concurrent device management
+* Backward compatibility maintained - all existing synchronous code continues to work unchanged
+* Conditional imports ensure Python 3.4 and below continue to work without async dependencies
+* All async methods use proper `await` syntax and integrate seamlessly with asyncio event loops
+
+### Async API Features
+
+* **Context Manager Support**: Automatic connection management and cleanup
+* **Factory Methods**: Async device creation with proper initialization
+* **Concurrent Operations**: Handle multiple devices simultaneously with asyncio
+* **All Device Methods**: Full async equivalents of all synchronous methods
+* **Resource Management**: Proper cleanup of connections and resources
+* **Error Handling**: Async-aware error handling and timeouts
+
+### Example Async Usage
+
+```python
+import asyncio
+import tinytuya
+
+# Context Manager Approach
+async with tinytuya.DeviceAsync('ID', 'IP', 'KEY', version=3.3) as device:
+    status = await device.status()
+    await device.set_status(True)
+
+# Factory Method Approach  
+device = await tinytuya.DeviceAsync.create('ID', 'IP', 'KEY', version=3.3)
+status = await device.status()
+await device.close()
+
+# Concurrent Device Management
+devices = [
+    {'dev_id': 'DEV1', 'address': 'IP1', 'local_key': 'KEY1', 'version': 3.3},
+    {'dev_id': 'DEV2', 'address': 'IP2', 'local_key': 'KEY2', 'version': 3.3},
+]
+
+async def get_device_status(device_config):
+    async with tinytuya.DeviceAsync(**device_config) as device:
+        return await device.status()
+
+# Get status from all devices concurrently
+results = await asyncio.gather(*[get_device_status(cfg) for cfg in devices])
+```
+
+## v1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
 

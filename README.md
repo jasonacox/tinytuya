@@ -17,6 +17,8 @@ This python module controls and reads state of [Tuya](https://en.tuya.com/) comp
 
 TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
+**NEW**: TinyTuya now includes **Async Support** (Python 3.5+) for concurrent device communication and improved performance when managing multiple devices.
+
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
 ```python
@@ -121,7 +123,9 @@ Notes:
 
 ## Programming with TinyTuya
 
-After importing tinytuya, you create a device handle for the device you want to read or control.  Here is an example for a Tuya smart switch or plug:
+After importing tinytuya, you create a device handle for the device you want to read or control. TinyTuya supports both synchronous and asynchronous programming patterns.
+
+**Synchronous Example** (Traditional):
 
 ```python
 import tinytuya
@@ -144,6 +148,24 @@ d.turn_on()
 d.turn_off()
 ```
 
+**Asynchronous Example** (Python 3.5+, recommended for managing multiple devices):
+
+```python
+import asyncio
+import tinytuya
+
+async def main():
+    # Using async context manager
+    async with tinytuya.DeviceAsync('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3) as device:
+        data = await device.status()
+        print('Device status: %r' % data)
+        
+        await device.turn_on()
+        await device.turn_off()
+
+asyncio.run(main())
+```
+
 ### TinyTuya Module Classes and Functions 
 ```
 Classes
@@ -154,6 +176,10 @@ Classes
       OutletDevice(args...)
       CoverDevice(args...)
       BulbDevice(args...)
+      
+  XenonDeviceAsync(args...) - Async Base Class (Python 3.5+)
+    DeviceAsync(args...) - Async Tuya Class for Devices
+      
         Where args:
           dev_id (str): Device ID e.g. 01234567891234567890
           address (str): Device Network IP Address e.g. 10.0.1.99 or "Auto" to auto-find
@@ -188,11 +214,15 @@ TinyTuya Base Functions
     device_info(dev_id)                           # Searches DEVICEFILE (usually devices.json) for device with ID
     assign_dp_mappings(tuyadevices, mappings)     # Adds mappings to all the devices in the tuyadevices list
     decrypt_udp(msg)                              # Decrypts a UDP network broadcast packet
+    
+    # Async Helper Functions (Python 3.5+)
+    find_device_async(dev_id, address)            # Async version of find_device()
+    device_info_async(dev_id)                     # Async version of device_info()
 
  Device Functions (All Devices)
     json = status()                               # returns json payload
     subdev_query(nowait)                          # query sub-device status (only for gateway devices)
-    set_version(version)                          # 3.1 [default], 3.2, 3.3 or 3.4
+    set_version(version)                          # 3.1 [default], 3.2, 3.3, 3.4 or 3.5
     set_socketPersistent(False/True)              # False [default] or True
     set_socketNODELAY(False/True)                 # False or True [default]
     set_socketRetryLimit(integer)                 # retry count limit [default 5]
@@ -214,6 +244,25 @@ TinyTuya Base Functions
     generate_payload(command, data,...            # Generate TuyaMessage payload for command with data
     send(payload)                                 # Send payload to device (do not wait for response)
     receive()                                     # Receive payload from device
+
+ Async Device Functions (DeviceAsync - Python 3.5+)
+    # All async methods must be called with 'await'
+    device = await DeviceAsync.create(...)        # Factory method to create and initialize device
+    async with DeviceAsync(...) as device:       # Async context manager (recommended)
+    await device.close()                          # Close connection and cleanup resources
+    json = await status()                         # returns json payload (async)
+    await subdev_query(nowait)                    # query sub-device status (async)
+    await set_status(on, switch=1, nowait)       # Set status of switch (async)
+    await set_value(index, value, nowait)         # Set int value of any index (async)
+    await heartbeat(nowait)                       # Send heartbeat to device (async)
+    await turn_on(switch=1, nowait)               # Turn on device / switch # (async)
+    await turn_off(switch=1, nowait)              # Turn off (async)
+    await set_timer(num_secs, nowait)             # Set timer for num_secs (async)
+    await detect_available_dps()                  # Return list of DPS available from device (async)
+    await send(payload)                           # Send payload to device (async)
+    await receive()                               # Receive payload from device (async)
+    json = await cached_status(historic, nowait)  # Get cached status without device query (async)
+    # NOTE: All synchronous methods are also available in async classes
 
 OutletDevice Additional Functions
     set_dimmer(percentage):
@@ -284,7 +333,7 @@ The "Err" number will be one of these:
 
 ### Example Usage
 
-See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts.
+See the sample python script [test.py](test.py) for an OutletDevice example or look in the [examples](examples) directory for other scripts, including async examples like [monitor_async.py](examples/monitor_async.py).
 
 ```python
 import tinytuya
@@ -348,6 +397,50 @@ d.set_mode('scene')
 
 # Scene Example: Set Color Rotation Scene
 d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+
+"""
+ASYNC Device Example (Python 3.5+)
+"""
+import asyncio
+import tinytuya
+
+async def main():
+    # Using async context manager (recommended)
+    async with tinytuya.DeviceAsync('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3) as device:
+        # Get device status
+        data = await device.status()
+        print('Device status: %r' % data)
+        
+        # Control device
+        await device.turn_on()
+        await asyncio.sleep(2)
+        await device.turn_off()
+    
+    # Alternative: Using factory method
+    device = await tinytuya.DeviceAsync.create('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
+    try:
+        data = await device.status()
+        print('Device status: %r' % data)
+    finally:
+        await device.close()
+    
+    # Managing multiple devices concurrently
+    async def handle_device(dev_info):
+        async with tinytuya.DeviceAsync(**dev_info) as device:
+            return await device.status()
+    
+    device_list = [
+        {'dev_id': 'DEVICE1_ID', 'address': 'IP1', 'local_key': 'KEY1', 'version': 3.3},
+        {'dev_id': 'DEVICE2_ID', 'address': 'IP2', 'local_key': 'KEY2', 'version': 3.3},
+    ]
+    
+    # Handle multiple devices concurrently
+    results = await asyncio.gather(*[handle_device(dev) for dev in device_list])
+    for i, result in enumerate(results):
+        print(f'Device {i+1} status: {result}')
+
+# Run the async example
+asyncio.run(main())
 
 ```
 ### Example Device Monitor
