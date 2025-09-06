@@ -11,6 +11,7 @@ python_functions = ["test_*"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    "ignore::RuntimeWarning:coroutine.*was never awaited",
 ]
 
 [tool.coverage.run]

@@ -25,7 +25,10 @@ jobs:
           python -VV
           python -m site
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install --upgrade cryptography requests colorama
+          python -m pip install --upgrade cryptography requests colorama pytest
 
-      - name: "Run test suite on ${{ matrix.python-version }}"
+      - name: "Run basic test suite on ${{ matrix.python-version }}"
         run: "python run_tests.py"
+
+      - name: "Run comprehensive pytest suite on ${{ matrix.python-version }}"
+        run: "python -W ignore -m pytest tests/ -v --tb=short"
