@@ -45,11 +45,11 @@
         receive()
 """
 
-from .core.async_runner import AsyncRunner
+from .core.XenonDevice import XenonDevice
 from .OutletDeviceAsync import OutletDeviceAsync
 
 
-class OutletDevice(object):
+class OutletDevice(XenonDevice):
     """
     Synchronous wrapper for OutletDeviceAsync.
     
@@ -59,11 +59,10 @@ class OutletDevice(object):
 
     def __init__(self, *args, **kwargs):
         """Initialize OutletDevice wrapper"""
-        # Create the async implementation
+        # Initialize with OutletDeviceAsync instead of XenonDeviceAsync
+        super().__init__(*args, **kwargs)
+        # Replace the base async implementation with outlet-specific one
         self._async_impl = OutletDeviceAsync(*args, **kwargs)
-        
-        # Create the async runner for delegation
-        self._runner = AsyncRunner()
         
         # Expose key attributes for backward compatibility
         self.id = self._async_impl.id
@@ -131,9 +130,9 @@ class OutletDevice(object):
         """Send payload to device and receive response"""
         return self._runner.run(self._async_impl._send_receive(payload, minresponse, getresponse, decode_response))
 
-    def generate_payload(self, command, data=None):
+    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
         """Generate message payload"""
-        return self._async_impl.generate_payload(command, data)
+        return self._async_impl.generate_payload(command, data, gwId, devId, uid, rawData, reqType)
 
     def _encode_message(self, msg):
         """Encode message for transmission"""

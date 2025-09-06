@@ -824,6 +824,28 @@ class XenonDeviceAsync(object):
         # create Tuya message packet
         return MessagePayload(command_override, payload)
 
+    async def receive(self):
+        """
+        Poll device to read any payload in the buffer. Timeout results in None returned.
+        
+        Returns:
+            dict: Decoded response data or None if timeout
+        """
+        return await self._send_receive(None)
+
+    async def send(self, payload):
+        """
+        Send single buffer `payload`.
+
+        Args:
+            payload(bytes): Data to send.
+            
+        Returns:
+            bool: True if send successful
+        """
+        result = await self._send_receive(payload, 0, getresponse=False)
+        return result is not None
+
     # ---- Async Helper Methods ----
     
     async def _get_socket_async(self, renew):

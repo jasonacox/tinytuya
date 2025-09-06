@@ -11,10 +11,10 @@
 """
 
 from .BulbDeviceAsync import BulbDeviceAsync
-from .core import AsyncRunner
+from .core.XenonDevice import XenonDevice
 
 
-class BulbDevice(object):
+class BulbDevice(XenonDevice):
     """
     Synchronous wrapper for BulbDeviceAsync.
     
@@ -23,8 +23,10 @@ class BulbDevice(object):
     """
 
     def __init__(self, *args, **kwargs):
+        # Initialize with BulbDeviceAsync instead of XenonDeviceAsync
+        super().__init__(*args, **kwargs)
+        # Replace the base async implementation with bulb-specific one
         self._async_impl = BulbDeviceAsync(*args, **kwargs)
-        self._runner = AsyncRunner()
 
     def __getattr__(self, name):
         """Forward attribute access to the async device."""

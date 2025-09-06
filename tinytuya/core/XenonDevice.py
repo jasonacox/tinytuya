@@ -220,6 +220,10 @@ class XenonDevice(object):
         """Receive data from device"""
         return self._runner.run(self._async_impl.receive())
 
+    def send(self, payload):
+        """Send payload to device"""
+        return self._runner.run(self._async_impl.send(payload))
+
     def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True):
         """Send payload to device and receive response"""
         return self._runner.run(self._async_impl._send_receive(payload, minresponse, getresponse, decode_response))

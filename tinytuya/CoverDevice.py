@@ -45,10 +45,10 @@
 """
 
 from .CoverDeviceAsync import CoverDeviceAsync
-from .core import AsyncRunner
+from .core.XenonDevice import XenonDevice
 
 
-class CoverDevice(object):
+class CoverDevice(XenonDevice):
     """
     Synchronous wrapper for CoverDeviceAsync.
     
@@ -57,8 +57,10 @@ class CoverDevice(object):
     """
 
     def __init__(self, *args, **kwargs):
+        # Initialize with CoverDeviceAsync instead of XenonDeviceAsync
+        super().__init__(*args, **kwargs)
+        # Replace the base async implementation with cover-specific one
         self._async_impl = CoverDeviceAsync(*args, **kwargs)
-        self._runner = AsyncRunner()
 
     def __getattr__(self, name):
         """Forward attribute access to the async device."""
