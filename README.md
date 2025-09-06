@@ -17,7 +17,7 @@ This python module controls and reads state of [Tuya](https://en.tuya.com/) comp
 
 TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to Tuya devices.
 
-**NEW**: TinyTuya now includes **Async Support** (Python 3.5+) for concurrent device communication and improved performance when managing multiple devices.
+**🚀 NEW in v2.0.0**: TinyTuya now features an **Async-First Architecture** that eliminates code duplication, reduces maintenance overhead, and provides superior performance while maintaining 100% backward compatibility. All device implementation now lives in async classes with sync classes as thin wrappers - giving you the best of both worlds!
 
 ![TinyTuya Diagram](https://raw.githubusercontent.com/jasonacox/tinytuya/master/docs/TinyTuya-diagram.svg)
 
@@ -25,9 +25,20 @@ TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to
 # Example Usage of TinyTuya
 import tinytuya
 
+# Traditional Method
 d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
 data = d.status() 
 print('Device status: %r' % data)
+
+# Async Method: Powerful async support for concurrent operations
+import asyncio
+
+async def async_example():
+    async with tinytuya.DeviceAsync('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3) as device:
+        data = await device.status()
+        print('Device status: %r' % data)
+
+asyncio.run(async_example())
 ```
 
 NOTE: Devices need to be **activated** by Smart Life App.
@@ -123,9 +134,17 @@ Notes:
 
 ## Programming with TinyTuya
 
-After importing tinytuya, you create a device handle for the device you want to read or control. TinyTuya supports both synchronous and asynchronous programming patterns.
+After importing tinytuya, you create a device handle for the device you want to read or control. TinyTuya features an async-first architecture - all device implementation lives in async classes, with sync classes as lightweight wrappers that provide seamless backward compatibility.
 
-**Synchronous Example** (Traditional):
+**🎯 Key Benefits of the Async-First Architecture:**
+- **Zero Code Duplication**: Single implementation, automatically available in both sync and async
+- **Superior Performance**: True async benefits for concurrent device management
+- **100% Backward Compatible**: All existing sync code continues to work unchanged
+- **Easy Migration**: Gradually adopt async features at your own pace
+
+### Synchronous API (Existing Code - Still Works!)
+
+Your existing synchronous code continues to work exactly as before:
 
 ```python
 import tinytuya
@@ -148,22 +167,57 @@ d.turn_on()
 d.turn_off()
 ```
 
-**Asynchronous Example** (Python 3.5+, recommended for managing multiple devices):
+### Asynchronous API (Python 3.5+ - Recommended for Multiple Devices)
+
+For maximum performance, especially when managing multiple devices:
 
 ```python
 import asyncio
 import tinytuya
 
 async def main():
-    # Using async context manager
-    async with tinytuya.DeviceAsync('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3) as device:
+    # Using async context manager (recommended - automatic cleanup)
+    async with tinytuya.OutletDeviceAsync('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3) as device:
         data = await device.status()
         print('Device status: %r' % data)
         
         await device.turn_on()
+        await asyncio.sleep(2)  # Wait 2 seconds
         await device.turn_off()
 
 asyncio.run(main())
+```
+
+### Concurrent Device Management
+
+The async-first architecture shines when managing multiple devices:
+
+```python
+import asyncio
+import tinytuya
+
+async def control_multiple_devices():
+    devices = [
+        ('DEVICE1_ID', 'IP1', 'KEY1'),
+        ('DEVICE2_ID', 'IP2', 'KEY2'),
+        ('DEVICE3_ID', 'IP3', 'KEY3'),
+    ]
+    
+    async def handle_device(dev_id, ip, key):
+        async with tinytuya.OutletDeviceAsync(dev_id, ip, key, version=3.3) as device:
+            status = await device.status()
+            await device.turn_on()
+            return status
+    
+    # Handle all devices concurrently
+    results = await asyncio.gather(*[
+        handle_device(dev_id, ip, key) for dev_id, ip, key in devices
+    ])
+    
+    for i, result in enumerate(results, 1):
+        print(f'Device {i} status: {result}')
+
+asyncio.run(control_multiple_devices())
 ```
 
 ### TinyTuya Module Classes and Functions 
@@ -171,14 +225,16 @@ asyncio.run(main())
 Classes
 
   AESCipher - Cryptography Helpers
-  XenonDevice(args...) - Base Class
-    Device(args...) - Tuya Class for Devices
-      OutletDevice(args...)
-      CoverDevice(args...)
-      BulbDevice(args...)
-      
-  XenonDeviceAsync(args...) - Async Base Class (Python 3.5+)
-    DeviceAsync(args...) - Async Tuya Class for Devices
+  
+  AsyncRunner - Sync/Async Bridge Utility for cross-platform compatibility
+  
+  XenonDeviceAsync(args...) - Async Base Class (Core Implementation)
+  XenonDevice(args...) - Sync Base Class (Wrapper for XenonDeviceAsync)
+    DeviceAsync(args...) - Async Tuya Class for Devices (Core Implementation)
+    Device(args...) - Sync Tuya Class for Devices (Wrapper for DeviceAsync)
+      OutletDeviceAsync(args...) / OutletDevice(args...)
+      CoverDeviceAsync(args...) / CoverDevice(args...)
+      BulbDeviceAsync(args...) / BulbDevice(args...)
       
         Where args:
           dev_id (str): Device ID e.g. 01234567891234567890
@@ -219,7 +275,7 @@ TinyTuya Base Functions
     find_device_async(dev_id, address)            # Async version of find_device()
     device_info_async(dev_id)                     # Async version of device_info()
 
- Device Functions (All Devices)
+ Device Functions (All Devices - Sync API)
     json = status()                               # returns json payload
     subdev_query(nowait)                          # query sub-device status (only for gateway devices)
     set_version(version)                          # 3.1 [default], 3.2, 3.3, 3.4 or 3.5
@@ -245,15 +301,16 @@ TinyTuya Base Functions
     send(payload)                                 # Send payload to device (do not wait for response)
     receive()                                     # Receive payload from device
 
- Async Device Functions (DeviceAsync - Python 3.5+)
+ Async Device Functions (DeviceAsync - Python 3.5+ Core Implementation)
     # All async methods must be called with 'await'
     device = await DeviceAsync.create(...)        # Factory method to create and initialize device
     async with DeviceAsync(...) as device:       # Async context manager (recommended)
     await device.close()                          # Close connection and cleanup resources
-    json = await status()                         # returns json payload (async)
+    json = await status(nowait)                   # returns json payload (async)
     await subdev_query(nowait)                    # query sub-device status (async)
     await set_status(on, switch=1, nowait)       # Set status of switch (async)
     await set_value(index, value, nowait)         # Set int value of any index (async)
+    await set_multiple_values(index_value_dict, nowait) # Set multiple values (async)
     await heartbeat(nowait)                       # Send heartbeat to device (async)
     await turn_on(switch=1, nowait)               # Turn on device / switch # (async)
     await turn_off(switch=1, nowait)              # Turn off (async)
@@ -262,12 +319,12 @@ TinyTuya Base Functions
     await send(payload)                           # Send payload to device (async)
     await receive()                               # Receive payload from device (async)
     json = await cached_status(historic, nowait)  # Get cached status without device query (async)
-    # NOTE: All synchronous methods are also available in async classes
+    # NOTE: All synchronous methods are also available in async classes for compatibility
 
-OutletDevice Additional Functions
+OutletDevice / OutletDeviceAsync Additional Functions
     set_dimmer(percentage):
 
-BulbDevice Additional Functions
+BulbDevice / BulbDeviceAsync Additional Functions
     set_colour(r, g, b, nowait):
     set_hsv(h, s, v, nowait):
     set_white(brightness, colourtemp, nowait):
@@ -284,7 +341,7 @@ BulbDevice Additional Functions
     (h,s,v) = colour_hsv()
     result = state():
 
-CoverDevice Additional Functions
+CoverDevice / CoverDeviceAsync Additional Functions
     open_cover(switch=1):
     close_cover(switch=1):
     stop_cover(switch=1):
