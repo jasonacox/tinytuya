@@ -192,8 +192,8 @@ def generate_comparison_report(local_results: Dict[str, Any], pip_results: Dict[
         'avg_response_time': {
             'local': local_perf['avg_response_time'],
             'pip': pip_perf['avg_response_time'],
-            'improvement': local_perf['avg_response_time'] - pip_perf['avg_response_time'],  # local - pip (negative = local slower)
-            'improvement_pct': ((local_perf['avg_response_time'] - pip_perf['avg_response_time']) / pip_perf['avg_response_time']) * 100 if pip_perf['avg_response_time'] > 0 else 0
+            'improvement': pip_perf['avg_response_time'] - local_perf['avg_response_time'],  # pip - local (positive = local faster)
+            'improvement_pct': ((pip_perf['avg_response_time'] - local_perf['avg_response_time']) / pip_perf['avg_response_time']) * 100 if pip_perf['avg_response_time'] > 0 else 0
         }
     }
     
@@ -526,18 +526,18 @@ def print_comparison_summary(comparison: Dict[str, Any]):
     diff_symbol = "📈" if success['success_rate_diff'] > 0 else "📉" if success['success_rate_diff'] < 0 else "➡️"
     print(f"   Difference:          {diff_symbol} {success['success_rate_diff']:+.1f}%")
     
-    # Performance comparison
+    # Performance comparison  
     perf = comparison['performance_comparison']['avg_response_time']
     print("\n⚡ PERFORMANCE COMPARISON:")
-    print(f"   Local Avg Response:  {perf['local']:.3f}s")
-    print(f"   Pip Avg Response:    {perf['pip']:.3f}s")
+    print(f"   Pip Avg Response:    {perf['pip']:.3f}s (baseline)")
+    print(f"   Local Avg Response:  {perf['local']:.3f}s (new)")
     
-    if perf['improvement'] < 0:
-        # Negative improvement means local is slower than pip (bad)
-        print(f"   Performance:         � {abs(perf['improvement']):.3f}s SLOWER ({abs(perf['improvement_pct']):.1f}% regression)")
-    elif perf['improvement'] > 0:
+    if perf['improvement'] > 0:
         # Positive improvement means local is faster than pip (good)
-        print(f"   Performance:         � {perf['improvement']:.3f}s FASTER ({perf['improvement_pct']:.1f}% improvement)")
+        print(f"   Performance:         ⚡ {perf['improvement']:.3f}s FASTER ({perf['improvement_pct']:.1f}% improvement)")
+    elif perf['improvement'] < 0:
+        # Negative improvement means local is slower than pip (bad)  
+        print(f"   Performance:         🐌 {abs(perf['improvement']):.3f}s SLOWER ({abs(perf['improvement_pct']):.1f}% regression)")
     else:
         print("   Performance:         ➡️  Same performance")
     
