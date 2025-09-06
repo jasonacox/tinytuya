@@ -6,7 +6,10 @@ Tests basic functionality of the CoverDevice sync wrapper.
 """
 
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
+
+# Python 3.7 compatibility
+from .test_compat import AsyncMock
 
 from tinytuya import CoverDevice
 from tinytuya.CoverDeviceAsync import CoverDeviceAsync

@@ -13,7 +13,10 @@ import unittest
 import asyncio
 import sys
 import time
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
+
+# Python 3.7 compatibility  
+from .test_compat import AsyncMock
 
 # Add the parent directory to the path so we can import tinytuya
 sys.path.insert(0, '.')
