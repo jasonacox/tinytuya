@@ -1,10 +1,13 @@
 # TinyTuya Cover Device
 # -*- coding: utf-8 -*-
 """
- Python module to interface with Tuya WiFi smart devices
+ TinyTuya - Cover Device Wrapper
 
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
+
+ This is a thin wrapper that provides the original synchronous interface
+ while delegating all work to the async implementation using AsyncRunner.
 
  Local Control Classes
     CoverDevice(...)
@@ -41,29 +44,49 @@
         receive()
 """
 
-from .core import Device
+from .CoverDeviceAsync import CoverDeviceAsync
+from .core import AsyncRunner
 
-class CoverDevice(Device):
+
+class CoverDevice(object):
     """
-    Represents a Tuya based Smart Window Cover.
+    Synchronous wrapper for CoverDeviceAsync.
+    
+    This class provides the same interface as the original CoverDevice class
+    but delegates all operations to CoverDeviceAsync using AsyncRunner.
     """
 
-    DPS_INDEX_MOVE = "1"
-    DPS_INDEX_BL = "101"
+    def __init__(self, *args, **kwargs):
+        self._async_impl = CoverDeviceAsync(*args, **kwargs)
+        self._runner = AsyncRunner()
 
-    DPS_2_STATE = {
-        "1": "movement",
-        "101": "backlight",
-    }
+    def __getattr__(self, name):
+        """Forward attribute access to the async device."""
+        attr = getattr(self._async_impl, name)
+        return attr
 
+    def __setattr__(self, name, value):
+        if name in ['_async_impl', '_runner']:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._async_impl, name, value)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._runner.run(self._async_impl.close())
+        return False
+
+    # Cover-specific synchronous method wrappers
     def open_cover(self, switch=1, nowait=False):
         """Open the cover"""
-        self.set_status("on", switch, nowait=nowait)
+        return self._runner.run(self._async_impl.open_cover(switch, nowait))
 
     def close_cover(self, switch=1, nowait=False):
         """Close the cover"""
-        self.set_status("off", switch, nowait=nowait)
+        return self._runner.run(self._async_impl.close_cover(switch, nowait))
 
     def stop_cover(self, switch=1, nowait=False):
         """Stop the motion of the cover"""
-        self.set_status("stop", switch, nowait=nowait)
+        return self._runner.run(self._async_impl.stop_cover(switch, nowait))

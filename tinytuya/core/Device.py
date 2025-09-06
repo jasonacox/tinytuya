@@ -1,189 +1,116 @@
-# TinyTuya Module
+# TinyTuya Module - Device (Sync Wrapper)
 # -*- coding: utf-8 -*-
+"""
+Device - Synchronous wrapper around DeviceAsync
+
+This module provides backward-compatible synchronous API by delegating all operations
+to the async implementation via AsyncRunner.
+"""
 
 import logging
-import time
 
-from .XenonDevice import XenonDevice, merge_dps_results
-from . import command_types as CT
-
+from .async_runner import AsyncRunner
+from .DeviceAsync import DeviceAsync
 
 log = logging.getLogger(__name__)
 
-class Device(XenonDevice):
-    #def __init__(self, *args, **kwargs):
-    #    super(Device, self).__init__(*args, **kwargs)
+
+class Device(object):
+    """
+    Synchronous wrapper for DeviceAsync.
+    
+    All methods delegate to the async implementation using AsyncRunner.
+    This maintains full backward compatibility while eliminating code duplication.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize Device wrapper"""
+        # Create the async implementation
+        self._async_impl = DeviceAsync(*args, **kwargs)
+        
+        # Create the async runner for delegation
+        self._runner = AsyncRunner()
+        
+        # Expose key attributes for backward compatibility
+        self.id = self._async_impl.id
+        self.address = self._async_impl.address
+
+    def __del__(self):
+        """Cleanup when object is destroyed"""
+        # AsyncRunner handles cleanup automatically
+        if hasattr(self, '_runner'):
+            self._runner.cleanup()
+
+    def __repr__(self):
+        """String representation of the device"""
+        return repr(self._async_impl)
+
+    # ---- Attribute Delegation ----
+    
+    def __getattr__(self, name):
+        """Delegate attribute access to async implementation"""
+        return getattr(self._async_impl, name)
+    
+    def __setattr__(self, name, value):
+        """Handle attribute setting for both wrapper and async impl"""
+        if name.startswith('_') or name in ('id', 'address'):
+            # Set on wrapper
+            super().__setattr__(name, value)
+        else:
+            # Delegate to async implementation
+            if hasattr(self, '_async_impl'):
+                setattr(self._async_impl, name, value)
+            else:
+                # During __init__, before _async_impl exists
+                super().__setattr__(name, value)
+
+    # ---- Device-Specific Methods ----
 
     def set_status(self, on, switch=1, nowait=False):
-        """
-        Set status of the device to 'on' or 'off'.
-
-        Args:
-            on(bool):  True for 'on', False for 'off'.
-            switch(int): The switch to set
-            nowait(bool): True to send without waiting for response.
-        """
-        # open device, send request, then close connection
-        if isinstance(switch, int):
-            switch = str(switch)  # index and payload is a string
-        payload = self.generate_payload(CT.CONTROL, {switch: on})
-
-        data = self._send_receive(payload, getresponse=(not nowait))
-        log.debug("set_status received data=%r", data)
-
-        return data
+        """Set status of the device to 'on' or 'off'"""
+        return self._runner.run(self._async_impl.set_status(on, switch, nowait))
 
     def product(self):
-        """
-        Request AP_CONFIG Product Info from device. [BETA]
-
-        """
-        # open device, send request, then close connection
-        payload = self.generate_payload(CT.AP_CONFIG)
-        data = self._send_receive(payload, 0)
-        log.debug("product received data=%r", data)
-        return data
+        """Request AP_CONFIG Product Info from device"""
+        return self._runner.run(self._async_impl.product())
 
     def heartbeat(self, nowait=True):
-        """
-        Send a keep-alive HEART_BEAT command to keep the TCP connection open.
-
-        Devices only send an empty-payload response, so no need to wait for it.
-
-        Args:
-            nowait(bool): True to send without waiting for response.
-        """
-        # open device, send request, then close connection
-        payload = self.generate_payload(CT.HEART_BEAT)
-        data = self._send_receive(payload, 0, getresponse=(not nowait))
-        log.debug("heartbeat received data=%r", data)
-        return data
+        """Send a keep-alive HEART_BEAT command"""
+        return self._runner.run(self._async_impl.heartbeat(nowait))
 
     def updatedps(self, index=None, nowait=False):
-        """
-        Request device to update index.
-
-        Args:
-            index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
-            nowait(bool): True to send without waiting for response.
-        """
-        if index is None:
-            index = [1]
-
-        log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
-        # open device, send request, then close connection
-        payload = self.generate_payload(CT.UPDATEDPS, index)
-        data = self._send_receive(payload, 0, getresponse=(not nowait))
-        log.debug("updatedps received data=%r", data)
-        return data
+        """Request device to update DPS values"""
+        return self._runner.run(self._async_impl.updatedps(index, nowait))
 
     def set_value(self, index, value, nowait=False):
-        """
-        Set int value of any index.
-
-        Args:
-            index(int): index to set
-            value(int): new value for the index
-            nowait(bool): True to send without waiting for response.
-        """
-        # open device, send request, then close connection
-        if isinstance(index, int):
-            index = str(index)  # index and payload is a string
-
-        payload = self.generate_payload(CT.CONTROL, {index: value})
-
-        data = self._send_receive(payload, getresponse=(not nowait))
-
-        return data
+        """Set device DPS value"""
+        return self._runner.run(self._async_impl.set_value(index, value, nowait))
 
     def set_multiple_values(self, data, nowait=False):
-        """
-        Set multiple indexes at the same time
-
-        Args:
-            data(dict): array of index/value pairs to set
-            nowait(bool): True to send without waiting for response.
-        """
-        # if nowait is set we can't detect failure
-        if nowait:
-            if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
-                # too many DPs, break it up into smaller chunks
-                ret = None
-                for k in data:
-                    ret = self.set_value(k, data[k], nowait=nowait)
-                return ret
-            else:
-                # send them all. since nowait is set we can't detect failure
-                out = {}
-                for k in data:
-                    out[str(k)] = data[k]
-                payload = self.generate_payload(CT.CONTROL, out)
-                return self._send_receive(payload, getresponse=(not nowait))
-
-        if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
-            # too many DPs, break it up into smaller chunks
-            ret = {}
-            for k in data:
-                if (not nowait) and bool(ret):
-                    time.sleep(1)
-                result = self.set_value(k, data[k], nowait=nowait)
-                merge_dps_results(ret, result)
-            return ret
-
-        # send them all, but try to detect devices which cannot handle multiple
-        out = {}
-        for k in data:
-            out[str(k)] = data[k]
-
-        payload = self.generate_payload(CT.CONTROL, out)
-        result = self._send_receive(payload, getresponse=(not nowait))
-
-        if result and 'Err' in result and len(out) > 1:
-            # sending failed! device might only be able to handle 1 DP at a time
-            first_dp = next(iter( out ))
-            res = self.set_value(first_dp, out[first_dp], nowait=nowait)
-            del out[first_dp]
-            if res and 'Err' not in res:
-                # single DP succeeded! set limit to 1
-                self.max_simultaneous_dps = 1
-                result = res
-                for k in out:
-                    res = self.set_value(k, out[k], nowait=nowait)
-                    merge_dps_results(result, res)
-        return result
+        """Set multiple DPS values"""
+        return self._runner.run(self._async_impl.set_multiple_values(data, nowait))
 
     def turn_on(self, switch=1, nowait=False):
         """Turn the device on"""
-        return self.set_status(True, switch, nowait)
+        return self._runner.run(self._async_impl.turn_on(switch, nowait))
 
     def turn_off(self, switch=1, nowait=False):
         """Turn the device off"""
-        return self.set_status(False, switch, nowait)
+        return self._runner.run(self._async_impl.turn_off(switch, nowait))
 
     def set_timer(self, num_secs, dps_id=0, nowait=False):
-        """
-        Set a timer.
+        """Set a timer"""
+        return self._runner.run(self._async_impl.set_timer(num_secs, dps_id, nowait))
 
-        Args:
-            num_secs(int): Number of seconds
-            dps_id(int): DPS Index for Timer
-            nowait(bool): True to send without waiting for response.
-        """
+    # ---- Inherited methods from XenonDevice (delegated automatically via __getattr__)----
+    # status, cached_status, close, set_version, generate_payload, etc. all work automatically
 
-        # Query status, pick last device id as that is probably the timer
-        if dps_id == 0:
-            status = self.status()
-            if "dps" in status:
-                devices = status["dps"]
-                devices_numbers = list(devices.keys())
-                devices_numbers.sort()
-                dps_id = devices_numbers[-1]
-            else:
-                log.debug("set_timer received error=%r", status)
-                return status
+    # ---- Context Manager Support ----
 
-        payload = self.generate_payload(CT.CONTROL, {dps_id: num_secs})
+    def __enter__(self):
+        """Enter synchronous context manager"""
+        return self
 
-        data = self._send_receive(payload, getresponse=(not nowait))
-        log.debug("set_timer received data=%r", data)
-        return data
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit synchronous context manager"""
+        self._runner.run(self._async_impl.close())
