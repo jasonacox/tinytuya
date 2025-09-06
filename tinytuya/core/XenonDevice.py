@@ -226,10 +226,6 @@ class XenonDevice(object):
         """Send payload to device and receive response (quick mode)"""  
         return self._runner.run(self._async_impl._send_receive_quick(payload, minresponse, getresponse))
 
-    def generate_payload(self, command, data=None):
-        """Generate message payload"""
-        return self._async_impl.generate_payload(command, data)
-
     def _encode_message(self, msg):
         """Encode message for transmission"""
         return self._async_impl._encode_message(msg)
