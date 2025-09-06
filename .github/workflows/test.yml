@@ -27,5 +27,5 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install --upgrade cryptography requests colorama
 
-      - name: "Run test.py and tests.py on ${{ matrix.python-version }}"
-        run: "python -m test.py && python -m tests"
+      - name: "Run test suite on ${{ matrix.python-version }}"
+        run: "python run_tests.py"
