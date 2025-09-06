@@ -443,7 +443,7 @@ class BulbDeviceAsync(DeviceAsync):
             mode(string): white,colour,scene,music
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'mode', nowait=nowait ):
+        if not await self.bulb_has_capability( 'mode', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'Bulb does not support mode setting.')
 
         check_values = {
@@ -461,7 +461,7 @@ class BulbDeviceAsync(DeviceAsync):
             scene(int): Value for the scene as int from 1-4 (Type A bulbs) or 1-N (Type B bulbs).
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'scene', nowait=nowait ):
+        if not await self.bulb_has_capability( 'scene', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_scene: Bulb does not support scenes.')
 
         # Type A, scene idx is part of the mode
@@ -497,7 +497,7 @@ class BulbDeviceAsync(DeviceAsync):
         if dps_id:
             return await self.set_value(dps_id, num_secs, nowait=nowait)
 
-        if not self.bulb_has_capability( 'timer', nowait=nowait ):
+        if not await self.bulb_has_capability( 'timer', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_timer: Bulb does not support timer.')
         return await self.set_value(self.dpset['timer'], num_secs, nowait=nowait)
 
@@ -513,7 +513,7 @@ class BulbDeviceAsync(DeviceAsync):
             colourtemp(float): optional white light colourtemp
             transition(int): optional transition. will use transition provided in set_musicmode() if not provided
         """
-        if not self.bulb_has_capability( 'music', nowait=nowait ):
+        if not await self.bulb_has_capability( 'music', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_music_colour: Device does not support music mode.")
 
         colour = '%x' % transition
@@ -543,7 +543,7 @@ class BulbDeviceAsync(DeviceAsync):
             b(float): Value for the colour Blue from 0.0-255.0.
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'colour', nowait=nowait ):
+        if not await self.bulb_has_capability( 'colour', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
 
         check_values = {
@@ -564,7 +564,7 @@ class BulbDeviceAsync(DeviceAsync):
             v(float): colour Value as float from 0-1
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'colour', nowait=nowait ):
+        if not await self.bulb_has_capability( 'colour', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_colour: Device does not support color.")
 
         check_values = {
@@ -612,7 +612,7 @@ class BulbDeviceAsync(DeviceAsync):
 
         Note: unlike set_colourtemp(), the colour temp will be silently ignored if the bulb does not support it
         """
-        if not self.bulb_has_capability( 'brightness', nowait=nowait ):
+        if not await self.bulb_has_capability( 'brightness', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_white: Device does not support brightness.')
 
         # Brightness (default: Max)
@@ -668,7 +668,7 @@ class BulbDeviceAsync(DeviceAsync):
             brightness(int): Value for the brightness (25-255).
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( 'brightness', nowait=nowait ):
+        if not await self.bulb_has_capability( 'brightness', nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_brightness: Device does not support brightness.')
 
         # Brightness (default Max)
@@ -716,7 +716,7 @@ class BulbDeviceAsync(DeviceAsync):
             colourtemp(int): Value for the colour temperature (0-255).
             nowait(bool): True to send without waiting for response.
         """
-        if not self.bulb_has_capability( self.BULB_FEATURE_COLOURTEMP, nowait=nowait ):
+        if not await self.bulb_has_capability( self.BULB_FEATURE_COLOURTEMP, nowait=nowait ):
             return error_json(ERR_FUNCTION, 'set_colourtemp: Device does not support colourtemp.')
 
         if not 0 <= colourtemp <= self.dpset['value_max']:
@@ -817,14 +817,14 @@ class BulbDeviceAsync(DeviceAsync):
         #print( 'state:', state )
         return state
 
-    def bulb_has_capability( self, feature, nowait=False ):
+    async def bulb_has_capability( self, feature, nowait=False ):
         if not self.bulb_configured:
-            self.detect_bulb( nowait=nowait )
+            await self.detect_bulb( nowait=nowait )
             if not self.bulb_configured:
                 raise RuntimeError('Bulb not configured, cannot get device capabilities.')
         return bool( self.dpset[feature] )
 
-    def detect_bulb(self, response=None, nowait=False):
+    async def detect_bulb(self, response=None, nowait=False):
         """
         Attempt to determine BulbDevice Type A, B or C based on:
             Type A has keys 1-9
@@ -852,12 +852,12 @@ class BulbDeviceAsync(DeviceAsync):
             1: switch, 2: brightness, 3: minimum dim %, 4: installed bulb type (LED/incandescent)
         """
         if not response:
-            response = self.cached_status(historic=True, nowait=nowait)
+            response = await self.cached_status(historic=True, nowait=nowait)
             if (not response) or ('dps' not in response):
                 if nowait:
                     log.debug('No cached status, but nowait set! detect_bulb() exiting without detecting bulb!')
                 else:
-                    response = self.status()
+                    response = await self.status()
                 # return here as self.status() will call us again
                 return
         if response and 'dps' in response and isinstance(response['dps'], dict):

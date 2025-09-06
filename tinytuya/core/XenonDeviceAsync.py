@@ -187,8 +187,8 @@ class XenonDeviceAsync(object):
         # Protocol state
         self.seqno = 1
         self.sendWait = 0.01
-        self.version = float(version)  # Ensure version is always a float
-        self.version_str = "v" + str(version)
+        self.version = float(version or 3.1)
+        self.version_str = "v" + str(self.version)
         self.version_bytes = str(self.version).encode('latin1')
         self.version_header = self.version_bytes + H.PROTOCOL_3x_HEADER
         self.dps_cache = {}

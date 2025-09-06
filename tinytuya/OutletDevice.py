@@ -45,121 +45,18 @@
         receive()
 """
 
-from .core.XenonDevice import XenonDevice
-from .OutletDeviceAsync import OutletDeviceAsync
+from .core import Device
 
 
-class OutletDevice(XenonDevice):
+class OutletDevice(Device):
     """
-    Synchronous wrapper for OutletDeviceAsync.
-    
     Represents a Tuya based Smart Plug or Switch.
-    All methods delegate to the async implementation using AsyncRunner.
+    
+    Inherits all basic device functionality from Device and adds outlet-specific features.
     """
-
-    def __init__(self, *args, **kwargs):
-        """Initialize OutletDevice wrapper"""
-        # Initialize with OutletDeviceAsync instead of XenonDeviceAsync
-        super().__init__(*args, **kwargs)
-        # Replace the base async implementation with outlet-specific one
-        self._async_impl = OutletDeviceAsync(*args, **kwargs)
-        
-        # Expose key attributes for backward compatibility
-        self.id = self._async_impl.id
-        self.address = self._async_impl.address
-
-    def __del__(self):
-        """Cleanup when object is destroyed"""
-        try:
-            if '_runner' in self.__dict__:
-                self._runner.cleanup()
-        except (AttributeError, RuntimeError):
-            # Ignore cleanup errors during shutdown
-            pass
-
-    def __repr__(self):
-        """String representation of the device"""
-        return repr(self._async_impl)
-
-    # ---- Attribute Delegation ----
-    
-    def __getattr__(self, name):
-        """Delegate attribute access to async implementation"""
-        return getattr(self._async_impl, name)
-    
-    def __setattr__(self, name, value):
-        """Handle attribute setting for both wrapper and async impl"""
-        if name.startswith('_') or name in ('id', 'address'):
-            # Set on wrapper
-            super().__setattr__(name, value)
-        else:
-            # Delegate to async implementation
-            if hasattr(self, '_async_impl'):
-                setattr(self._async_impl, name, value)
-            else:
-                # During __init__, before _async_impl exists
-                super().__setattr__(name, value)
 
     # ---- OutletDevice-Specific Methods ----
-
-    def status(self, nowait=False):
-        """Get device status"""
-        return self._runner.run(self._async_impl.status(nowait))
-
-    def set_status(self, on, switch=1, nowait=False):
-        """Set device status"""
-        return self._runner.run(self._async_impl.set_status(on, switch, nowait))
-
-    def turn_on(self, switch=1, nowait=False):
-        """Turn device on"""
-        return self._runner.run(self._async_impl.turn_on(switch, nowait))
-
-    def turn_off(self, switch=1, nowait=False):
-        """Turn device off"""
-        return self._runner.run(self._async_impl.turn_off(switch, nowait))
-
-    def cached_status(self, historic=False, nowait=False):
-        """Get cached device status"""
-        return self._runner.run(self._async_impl.cached_status(historic, nowait))
-
-    def heartbeat(self, nowait=False):
-        """Send heartbeat to device"""
-        return self._runner.run(self._async_impl.heartbeat(nowait))
-
-    def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True):
-        """Send payload to device and receive response"""
-        return self._runner.run(self._async_impl._send_receive(payload, minresponse, getresponse, decode_response))
-
-    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
-        """Generate message payload"""
-        return self._async_impl.generate_payload(command, data, gwId, devId, uid, rawData, reqType)
-
-    def _encode_message(self, msg):
-        """Encode message for transmission"""
-        return self._async_impl._encode_message(msg)
-
-    def _negotiate_session_key_generate_step_1(self):
-        """Generate step 1 of session key negotiation"""
-        return self._async_impl._negotiate_session_key_generate_step_1()
-
-    def _negotiate_session_key_generate_step_3(self, rkey):
-        """Generate step 3 of session key negotiation"""
-        return self._async_impl._negotiate_session_key_generate_step_3(rkey)
-
-    def _negotiate_session_key_generate_finalize(self):
-        """Finalize session key negotiation"""
-        return self._async_impl._negotiate_session_key_generate_finalize()
 
     def set_dimmer(self, percentage=None, value=None, dps_id=3, nowait=False):
         """Set dimmer value"""
         return self._runner.run(self._async_impl.set_dimmer(percentage, value, dps_id, nowait))
-
-    # ---- Context Manager Support ----
-
-    def __enter__(self):
-        """Enter synchronous context manager"""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit synchronous context manager"""
-        self._runner.run(self._async_impl.close())
