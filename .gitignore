@@ -130,3 +130,9 @@ mappings.json
 # test scripts
 server/r
 server/tinytuya
+
+# regression testing
+regression/regression_report.json
+regression/simple_test.py
+regression/test34.py
+regression/scanner_style_test.py

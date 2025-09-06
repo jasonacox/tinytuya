@@ -5,13 +5,17 @@ requires = ["setuptools", "colorama", "requests", "cryptography"]
 minversion = "6.0"
 addopts = "-ra -q --tb=short"
 testpaths = ["tests"]
+norecursedirs = ["regression", "sandbox", "server", "tools", "examples", ".git", "__pycache__"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
-    "ignore::RuntimeWarning:coroutine.*was never awaited",
+    "ignore:coroutine.*was never awaited:RuntimeWarning:unittest.mock",
+    "ignore:coroutine.*was never awaited:RuntimeWarning",
+    "ignore:Enable tracemalloc to get traceback:RuntimeWarning",
+    "ignore::RuntimeWarning:unittest.mock",
 ]
 
 [tool.coverage.run]
