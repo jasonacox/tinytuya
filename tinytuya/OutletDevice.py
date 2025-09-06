@@ -71,8 +71,12 @@ class OutletDevice(object):
 
     def __del__(self):
         """Cleanup when object is destroyed"""
-        if hasattr(self, '_runner'):
-            self._runner.cleanup()
+        try:
+            if '_runner' in self.__dict__:
+                self._runner.cleanup()
+        except (AttributeError, RuntimeError):
+            # Ignore cleanup errors during shutdown
+            pass
 
     def __repr__(self):
         """String representation of the device"""

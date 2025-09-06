@@ -221,7 +221,6 @@ class XenonDeviceAsync(object):
         # Async-specific attributes
         self.reader = None
         self.writer = None
-        self.queue_lock = asyncio.Lock()
         self._initialized = False
         
         # Initialize payload dictionary based on device type

@@ -88,10 +88,12 @@ class XenonDevice(object):
 
     def __del__(self):
         """Cleanup when object is destroyed"""
-        # AsyncRunner handles cleanup automatically
-        if hasattr(self, '_runner'):
-            # Ensure clean shutdown
-            self._runner.cleanup()
+        try:
+            if '_runner' in self.__dict__:
+                self._runner.cleanup()
+        except (AttributeError, RuntimeError):
+            # Ignore cleanup errors during shutdown
+            pass
 
     def __repr__(self):
         """String representation of the device"""
