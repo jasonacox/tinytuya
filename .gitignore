@@ -138,3 +138,4 @@ regression/test34.py
 regression/scanner_style_test.py
 WRAPPER.md
 regression/test34-simple.py
+regression/async_test_report.json
