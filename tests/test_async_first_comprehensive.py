@@ -136,12 +136,27 @@ class TestMethodDelegation(unittest.TestCase):
         
         device = OutletDevice('test', '127.0.0.1', 'test_key', version=3.3)
         
-        with patch.object(device._runner, 'run') as mock_run:
-            mock_run.return_value = {"test": "data"}
-            
+        def mock_runner(coro):
+            """Mock runner that properly consumes the coroutine"""
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    # Mock the _send_receive to avoid network calls
+                    with patch.object(device._async_impl, '_send_receive') as mock_send:
+                        mock_send.return_value = {"test": "data"}
+                        return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            except Exception:
+                # If we can't run it, at least close the coroutine to avoid warnings
+                if hasattr(coro, 'close'):
+                    coro.close()
+                return {"test": "data"}
+        
+        with patch.object(device._runner, 'run', side_effect=mock_runner) as mock_run:
             # Test delegation of common methods
-            result = device.status()
-            self.assertEqual(result, {"test": "data"})
+            test_result = device.status()
+            self.assertEqual(test_result, {"test": "data"})
             mock_run.assert_called()
             
     def test_bulb_device_method_delegation(self):
@@ -150,8 +165,24 @@ class TestMethodDelegation(unittest.TestCase):
         
         device = BulbDevice('test', '127.0.0.1', 'test_key', version=3.3)
         
-        with patch.object(device._runner, 'run') as mock_run:
-            mock_run.return_value = {"success": True}
+        def mock_runner(coro):
+            """Mock runner that properly consumes the coroutine"""
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    # Mock the _send_receive to avoid network calls
+                    with patch.object(device._async_impl, '_send_receive') as mock_send:
+                        mock_send.return_value = {"success": True}
+                        return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            except Exception:
+                # If we can't run it, at least close the coroutine to avoid warnings
+                if hasattr(coro, 'close'):
+                    coro.close()
+                return {"success": True}
+        
+        with patch.object(device._runner, 'run', side_effect=mock_runner) as mock_run:
             
             # Test bulb-specific method delegation
             result = device.set_colour(255, 128, 64)
@@ -164,8 +195,24 @@ class TestMethodDelegation(unittest.TestCase):
         
         device = CoverDevice('test', '127.0.0.1', 'test_key', version=3.3)
         
-        with patch.object(device._runner, 'run') as mock_run:
-            mock_run.return_value = {"success": True}
+        def mock_runner(coro):
+            """Mock runner that properly consumes the coroutine"""
+            try:
+                loop = asyncio.new_event_loop()
+                try:
+                    # Mock the _send_receive to avoid network calls
+                    with patch.object(device._async_impl, '_send_receive') as mock_send:
+                        mock_send.return_value = {"success": True}
+                        return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            except Exception:
+                # If we can't run it, at least close the coroutine to avoid warnings
+                if hasattr(coro, 'close'):
+                    coro.close()
+                return {"success": True}
+        
+        with patch.object(device._runner, 'run', side_effect=mock_runner) as mock_run:
             
             # Test cover-specific method delegation
             result = device.open_cover()

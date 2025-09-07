@@ -41,7 +41,8 @@ class TestBulbDeviceWrapper(unittest.TestCase):
             self.bulb = BulbDevice(self.device_id, self.device_ip, self.device_key, version=3.1)
             # Mock the _async_impl after creation
             self.bulb._async_impl = Mock()
-            self.bulb._async_impl.close = AsyncMock()
+            # Use a simple Mock instead of AsyncMock to avoid unawaited coroutine warnings
+            self.bulb._async_impl.close = Mock()
 
     def test_initialization(self):
         """Test that BulbDevice properly initializes with async components."""
@@ -132,17 +133,21 @@ class TestBulbDeviceWrapper(unittest.TestCase):
 
     def test_context_manager(self):
         """Test context manager functionality."""
-        with patch.object(self.bulb._runner, 'run') as mock_run:
-            mock_run.return_value = None
+        # Test that context manager returns self
+        with self.bulb as bulb_context:
+            self.assertIs(bulb_context, self.bulb)
+        
+        # Test context manager cleanup behavior
+        with patch.object(self.bulb, '_async_impl') as mock_async_impl:
+            # Create a simple mock that doesn't return coroutines
+            mock_close = Mock()
+            mock_async_impl.close = mock_close
             
-            with self.bulb as bulb_context:
-                self.assertIs(bulb_context, self.bulb)
+            with self.bulb:
+                pass
             
-            # Should call close() via runner on exit if async_impl has close method
-            if hasattr(self.bulb._async_impl, 'close'):
-                mock_run.assert_called()
-            else:
-                mock_run.assert_not_called()
+            # Verify that close was called during cleanup
+            mock_close.assert_called_once()
 
     def test_method_existence(self):
         """Test that all expected methods exist on the wrapper."""
