@@ -227,26 +227,12 @@ class XenonDeviceAsync(object):
         self._initialize_payload_dict()
 
     def _initialize_payload_dict(self):
-        """Initialize the payload dictionary based on device type"""
-        payload_dict_by_type = {
-            "device22": {
-                CT.DP_QUERY: {'gwId': '', 'devId': '', 'uid': '', 't': ''},
-                CT.CONTROL: {'devId': '', 'uid': '', 't': ''},
-                CT.STATUS: {'gwId': '', 'devId': ''},
-                CT.HEART_BEAT: {'gwId': '', 'devId': ''},
-                CT.UPDATEDPS: {"dpId": [18, 19, 20]},
-                CT.AP_CONFIG: {'gwId': '', 'devId': '', 'uid': '', 't': ''},
-            },
-            "zigbee": {
-                CT.CONTROL: {'cid': '', 't': ''},
-                CT.STATUS: {'cid': ''},
-            }
-        }
-
-        if self.dev_type in payload_dict_by_type:
-            self.payload_dict = payload_dict_by_type[self.dev_type].copy()
-        else:
-            self.payload_dict = {}
+        """Initialize the payload dictionary based on device type - DEPRECATED"""
+        # This method is deprecated and should not be used.
+        # Payload dictionary initialization is now handled in generate_payload()
+        # which properly merges the global payload_dict configurations.
+        # This method is kept for backward compatibility but does nothing.
+        pass
 
     def __del__(self):
         """Cleanup when object is destroyed"""

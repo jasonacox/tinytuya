@@ -23,7 +23,7 @@
         await set_timer(self, num_secs, nowait=False):
         await set_musicmode(self, transition, modify_settings=True, nowait=False):
         unset_musicmode( self ):
-        await set_music_colour( self, red, green, blue, brightness=None, colourtemp=None, transition=None, nowait=False ):
+        await set_music_colour( self, transition, red, green, blue, brightness=None, colourtemp=None, nowait=False ):
         await set_colour(r, g, b, nowait):
         await set_hsv(h, s, v, nowait):
         await set_white_percentage(brightness=100, colourtemp=0, nowait):
@@ -506,12 +506,12 @@ class BulbDeviceAsync(DeviceAsync):
         Set a colour while in music mode
 
         Args:
+            transition(int): transition type (0=jump, 1=fade)
             red(float): red value, 0.0 - 255.0
             green(float): green value, 0.0 - 255.0
             blue(float): blue value, 0.0 - 255.0
             brightness(float): optional white light brightness
             colourtemp(float): optional white light colourtemp
-            transition(int): optional transition. will use transition provided in set_musicmode() if not provided
         """
         if not await self.bulb_has_capability( 'music', nowait=nowait ):
             return error_json(ERR_FUNCTION, "set_music_colour: Device does not support music mode.")

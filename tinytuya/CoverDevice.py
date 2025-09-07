@@ -73,6 +73,9 @@ class CoverDevice(Device):
         self.address = kwargs.get('address') if 'address' in kwargs else (args[1] if len(args) > 1 else None)
         self.cid = kwargs.get('cid') or kwargs.get('node_id')
         self.port = kwargs.get('port', 6668)
+        
+        # Initialize the async implementation to handle Auto-IP and device.json lookup
+        self._runner.run(self._async_impl.initialize())
 
     # ---- Cover-Specific Constants ----
     DPS_INDEX_MOVE = "1"

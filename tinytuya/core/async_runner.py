@@ -6,6 +6,7 @@ This is the key component that enables sync wrappers to call async implementatio
 """
 
 import asyncio
+import atexit
 import sys
 import threading
 import logging
@@ -115,5 +116,4 @@ class AsyncRunner:
                 raise RuntimeError(f"TinyTuya AsyncRunner encountered an unexpected error: {e}") from e
 
 # Cleanup thread pool on module exit
-import atexit
 atexit.register(AsyncRunner.cleanup)
