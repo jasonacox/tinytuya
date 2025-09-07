@@ -276,23 +276,47 @@ class TestBackwardCompatibility(unittest.TestCase):
     def test_initialization_parameters_unchanged(self):
         """Test that device initialization parameters work as before."""
         from tinytuya import OutletDevice, BulbDevice, CoverDevice
+        import time
         
-        # Test various initialization patterns (skip Auto-IP in test environment)
+        # Test various initialization patterns including Auto-IP discovery
         test_params = [
             ('device_id', '192.168.1.100', 'local_key'),
             ('device_id', '192.168.1.100', 'local_key', 'default'),
-            # Skip Auto-IP discovery in test environment: ('device_id', None, 'local_key'),
+            ('device_id', None, 'local_key'),  # Auto IP discovery - should timeout gracefully in test environment
         ]
         
-        for params in test_params:
-            # Should not raise exceptions
-            outlet = OutletDevice(*params, version=3.3)
-            bulb = BulbDevice(*params, version=3.3)
-            cover = CoverDevice(*params, version=3.3)
+        for i, params in enumerate(test_params):
+            # For Auto-IP discovery test (last one), expect timeout/failure but allow the process to run
+            is_auto_ip_test = (i == len(test_params) - 1 and params[1] is None)
             
-            self.assertIsNotNone(outlet)
-            self.assertIsNotNone(bulb)
-            self.assertIsNotNone(cover)
+            if is_auto_ip_test:
+                # Test Auto-IP discovery - expect it to fail but validate the discovery process runs
+                for device_class in [OutletDevice, BulbDevice, CoverDevice]:
+                    start_time = time.time()
+                    try:
+                        device = device_class(*params, version=3.3)
+                        # If we somehow succeed (real device found), that's also valid
+                        self.assertIsNotNone(device)
+                        print(f"Auto-IP discovery succeeded for {device_class.__name__} - device found!")
+                    except RuntimeError as e:
+                        # Expected: "Unable to find device on network (specify IP address)"
+                        elapsed_time = time.time() - start_time
+                        self.assertIn("Unable to find device on network", str(e))
+                        # Ensure the discovery process ran with reasonable timing (should timeout around 5s in test)
+                        self.assertGreater(elapsed_time, 2, "Discovery should have taken at least 2 seconds to scan")
+                        self.assertLess(elapsed_time, 10, "Discovery should timeout within 10 seconds in test environment")
+                        print(f"Auto-IP discovery for {device_class.__name__} completed in {elapsed_time:.1f}s (expected timeout)")
+                    except Exception as e:
+                        self.fail(f"Unexpected exception during Auto-IP discovery for {device_class.__name__}: {e}")
+            else:
+                # Regular tests - should not raise exceptions
+                outlet = OutletDevice(*params, version=3.3)
+                bulb = BulbDevice(*params, version=3.3)
+                cover = CoverDevice(*params, version=3.3)
+                
+                self.assertIsNotNone(outlet)
+                self.assertIsNotNone(bulb)
+                self.assertIsNotNone(cover)
 
 
 if __name__ == '__main__':

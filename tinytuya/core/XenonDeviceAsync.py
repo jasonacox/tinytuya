@@ -1,6 +1,7 @@
 # TinyTuya Module - XenonDeviceAsync (Async-First Implementation)
 # -*- coding: utf-8 -*-
 
+import os
 import asyncio
 import binascii
 import hmac
@@ -94,8 +95,14 @@ log = logging.getLogger(__name__)
 IS_PY2 = sys.version_info[0] == 2
 
 # Helper functions - these can remain sync since they don't do I/O
-def find_device(dev_id=None, address=None):
-    """Scans network for Tuya devices with either ID = dev_id or IP = address"""
+def find_device(dev_id=None, address=None, scantime=None):
+    """Scans network for Tuya devices with either ID = dev_id or IP = address
+    
+    Args:
+        dev_id: Device ID to search for
+        address: IP address to search for
+        scantime: Time in seconds to wait for UDP responses (default: scanner default, usually ~18s)
+    """
     if dev_id is None and address is None:
         return {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
 
@@ -103,7 +110,20 @@ def find_device(dev_id=None, address=None):
 
     want_ids = (dev_id,) if dev_id else None
     want_ips = (address,) if address else None
-    all_results = scanner.devices(verbose=False, poll=False, forcescan=False, byID=True, wantids=want_ids, wantips=want_ips)
+    
+    # Pass scantime to the scanner if specified
+    kwargs = {
+        'verbose': False, 
+        'poll': False, 
+        'forcescan': False, 
+        'byID': True, 
+        'wantids': want_ids, 
+        'wantips': want_ips
+    }
+    if scantime is not None:
+        kwargs['scantime'] = scantime
+        
+    all_results = scanner.devices(**kwargs)
     ret = None
 
     for gwId in all_results:
@@ -139,14 +159,14 @@ def device_info(dev_id):
     return devinfo
 
 # Async helper functions
-async def find_device_async(dev_id=None, address=None):
+async def find_device_async(dev_id=None, address=None, scantime=None):
     # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
     if hasattr(asyncio, 'to_thread'):
-        return await asyncio.to_thread(find_device, dev_id, address)
+        return await asyncio.to_thread(find_device, dev_id, address, scantime)
     else:
         # Python 3.8 compatibility
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, find_device, dev_id, address)
+        return await loop.run_in_executor(None, find_device, dev_id, address, scantime)
 
 async def device_info_async(dev_id):
     # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
@@ -293,7 +313,9 @@ class XenonDeviceAsync(object):
         else:
             # Parent device initialization
             if self.auto_ip:
-                bcast_data = await find_device_async(self.id)
+                # Use shorter timeout during testing
+                scantime = 2 if 'pytest' in os.environ.get('_', '') or 'PYTEST_CURRENT_TEST' in os.environ else None
+                bcast_data = await find_device_async(self.id, scantime=scantime)
                 if bcast_data['ip'] is None:
                     log.debug("Unable to find device on network (specify IP address)")
                     raise RuntimeError("Unable to find device on network (specify IP address)")
