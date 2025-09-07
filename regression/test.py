@@ -76,7 +76,7 @@ Examples:
         print(f"   Found {len(version_summary)} different versions:")
         for ver in sorted(version_summary.keys()):
             count = len(version_summary[ver])
-            selected_device = next((d for d in test_devices if d['ver'] == ver), None)
+            selected_device = next((d for d in test_devices if d.get('version', d.get('ver', '3.3')) == ver), None)
             if selected_device:
                 print(f"   • Version {ver}: {count} devices → Testing '{selected_device['name']}'")
         print(f"   Total devices to test: {len(test_devices)}")

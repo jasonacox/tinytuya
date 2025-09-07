@@ -1004,6 +1004,56 @@ class XenonDeviceAsync(object):
 
         return buffer
     
+    async def _negotiate_session_key(self):
+        """
+        Negotiate session key for v3.4+ devices
+        
+        Returns:
+            bool: True if negotiation successful, False otherwise
+        """
+        try:
+            # Step 1: Send initial session key request
+            step1 = self._negotiate_session_key_generate_step_1()
+            enc_step1 = self._encode_message(step1)
+            self.writer.write(enc_step1)
+            await self.writer.drain()
+            
+            log.debug("Sent session key step 1")
+            
+            # Wait for response with timeout
+            try:
+                msg = await asyncio.wait_for(self._receive_async(), timeout=5.0)
+            except asyncio.TimeoutError:
+                log.debug("Session key step 1 response timeout")
+                return False
+                
+            if not msg:
+                log.debug("Empty session key response")
+                return False
+                
+            log.debug("Received session key response: cmd=%s", msg.cmd)
+            
+            if msg.cmd == CT.SESS_KEY_NEG_RESP:
+                log.debug("Processing session key step 2...")
+                step3 = self._negotiate_session_key_generate_step_3(msg)
+                if step3:
+                    enc_step3 = self._encode_message(step3)
+                    self.writer.write(enc_step3)
+                    await self.writer.drain()
+                    self._negotiate_session_key_generate_finalize()
+                    log.debug("Session key negotiation complete!")
+                    return True
+                else:
+                    log.debug("Session key step 3 generation failed")
+                    return False
+            else:
+                log.debug("Unexpected response cmd: %s", msg.cmd)
+                return False
+                
+        except Exception as e:
+            log.debug("Session key negotiation failed: %s", e, exc_info=True)
+            return False
+    
     def _negotiate_session_key_generate_step_1(self):
         """Generate step 1 of session key negotiation"""
         self.local_nonce = b'0123456789abcdef'  # not-so-random random key
