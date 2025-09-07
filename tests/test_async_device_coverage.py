@@ -159,18 +159,18 @@ class TestOutletDeviceAsync(unittest.TestCase):
         device = OutletDeviceAsync(self.device_id, self.device_ip, self.device_key)
         self.assertIsInstance(device, XenonDeviceAsync)
         
-    @patch('tinytuya.OutletDeviceAsync.OutletDeviceAsync._send_receive')  
-    def test_outlet_device_async_set_dimmer(self, mock_send_receive):
+    def test_outlet_device_async_set_dimmer(self):
         """Test OutletDeviceAsync set_dimmer method."""
         device = OutletDeviceAsync(self.device_id, self.device_ip, self.device_key, version=3.1)
         
         async def test_dimmer():
             if hasattr(device, 'set_dimmer'):
-                mock_send_receive.return_value = {"dps": {"2": 75}}
-                # set_dimmer doesn't return a value, it performs operations
-                await device.set_dimmer(75)
-                # Verify that _send_receive was called (indicating operations occurred)
-                mock_send_receive.assert_called()
+                with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                    mock_send_receive.return_value = {"dps": {"2": 75}}
+                    # set_dimmer doesn't return a value, it performs operations
+                    await device.set_dimmer(75)
+                    # Verify that _send_receive was called (indicating operations occurred)
+                    mock_send_receive.assert_called()
                 
         test_runner = AsyncRunner()
         test_runner.run(test_dimmer())
@@ -191,9 +191,7 @@ class TestBulbDeviceAsync(unittest.TestCase):
         device = BulbDeviceAsync(self.device_id, self.device_ip, self.device_key, version=3.1)
         self.assertIsInstance(device, XenonDeviceAsync)
         
-    @patch('tinytuya.BulbDeviceAsync.BulbDeviceAsync._send_receive')
-    @patch('tinytuya.BulbDeviceAsync.BulbDeviceAsync.detect_bulb')
-    def test_bulb_device_async_color_methods(self, mock_detect_bulb, mock_send_receive):
+    def test_bulb_device_async_color_methods(self):
         """Test BulbDeviceAsync color methods."""
         device = BulbDeviceAsync(self.device_id, self.device_ip, self.device_key, version=3.1)
         
@@ -217,10 +215,11 @@ class TestBulbDeviceAsync(unittest.TestCase):
         async def test_color_operations():
             # Test set_colour
             if hasattr(device, 'set_colour'):
-                mock_send_receive.return_value = {"dps": {"5": "ff0000ff"}}
-                result = await device.set_colour(255, 0, 0)
-                # Color methods typically return None if successful, so check they don't raise errors
-                mock_send_receive.assert_called()
+                with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                    mock_send_receive.return_value = {"dps": {"5": "ff0000ff"}}
+                    result = await device.set_colour(255, 0, 0)
+                    # Color methods typically return None if successful, so check they don't raise errors
+                    mock_send_receive.assert_called()
                 
             # Test basic color functionality exists
             self.assertTrue(hasattr(device, 'set_colour'))
@@ -246,29 +245,31 @@ class TestCoverDeviceAsync(unittest.TestCase):
         device = CoverDeviceAsync(self.device_id, self.device_ip, self.device_key)
         self.assertIsInstance(device, XenonDeviceAsync)
         
-    @patch('tinytuya.CoverDeviceAsync.CoverDeviceAsync._send_receive')
-    def test_cover_device_async_operations(self, mock_send_receive):
+    def test_cover_device_async_operations(self):
         """Test CoverDeviceAsync cover operations."""
         device = CoverDeviceAsync(self.device_id, self.device_ip, self.device_key)
         
         async def test_cover_operations():
             # Test open_cover
             if hasattr(device, 'open_cover'):
-                mock_send_receive.return_value = {"dps": {"1": "open"}}
-                result = await device.open_cover()
-                self.assertIsNotNone(result)
-                
+                with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                    mock_send_receive.return_value = {"dps": {"1": "open"}}
+                    result = await device.open_cover()
+                    self.assertIsNotNone(result)
+                    
             # Test close_cover
             if hasattr(device, 'close_cover'):
-                mock_send_receive.return_value = {"dps": {"1": "close"}}
-                result = await device.close_cover()
-                self.assertIsNotNone(result)
-                
+                with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                    mock_send_receive.return_value = {"dps": {"1": "close"}}
+                    result = await device.close_cover()
+                    self.assertIsNotNone(result)
+                    
             # Test stop_cover
             if hasattr(device, 'stop_cover'):
-                mock_send_receive.return_value = {"dps": {"1": "stop"}}
-                result = await device.stop_cover()
-                self.assertIsNotNone(result)
+                with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                    mock_send_receive.return_value = {"dps": {"1": "stop"}}
+                    result = await device.stop_cover()
+                    self.assertIsNotNone(result)
                 
         runner = AsyncRunner()
         runner.run(test_cover_operations())
@@ -353,21 +354,22 @@ class TestAsyncErrorHandling(unittest.TestCase):
             test_runner = AsyncRunner()
             test_runner.run(test_timeout_error())
         
-    @patch('tinytuya.BulbDeviceAsync.BulbDeviceAsync._send_receive')
-    def test_async_invalid_response(self, mock_send_receive):
+    def test_async_invalid_response(self):
         """Test async invalid response handling."""
         device = BulbDeviceAsync(self.device_id, self.device_ip, self.device_key, version=3.1)
         
         async def test_invalid_response():
             # Test None response
-            mock_send_receive.return_value = None
-            result = await device.status()
-            self.assertIsNone(result)
-            
+            with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                mock_send_receive.return_value = None
+                result = await device.status()
+                self.assertIsNone(result)
+                
             # Test empty response
-            mock_send_receive.return_value = {}
-            result = await device.status()
-            self.assertEqual(result, {})
+            with patch.object(device, '_send_receive', new_callable=AsyncMock) as mock_send_receive:
+                mock_send_receive.return_value = {}
+                result = await device.status()
+                self.assertEqual(result, {})
             
         runner = AsyncRunner()
         runner.run(test_invalid_response())

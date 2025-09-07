@@ -62,10 +62,19 @@ class AsyncRunner:
         Raises:
             Any exception raised by the coroutine
         """
+        # First, try to detect if we're in a running event loop
         try:
-            # Try to get the current event loop
-            loop = asyncio.get_running_loop()
-            # If we're already in an async context, we need to run in a thread
+            # Use get_running_loop() if available (Python 3.7+)
+            # For Python 3.6 and below, fallback to get_event_loop() + is_running() check
+            if hasattr(asyncio, 'get_running_loop'):
+                loop = asyncio.get_running_loop()
+            else:
+                # Python 3.6 and below fallback
+                loop = asyncio.get_event_loop()
+                if not loop.is_running():
+                    raise RuntimeError("no running event loop")
+                    
+            # If we reach here, we're in an async context and need to run in a thread
             log.debug("Already in event loop, running async code in thread pool")
             executor = AsyncRunner.get_thread_pool()
             
@@ -86,7 +95,10 @@ class AsyncRunner:
             
         except RuntimeError as e:
             # No running loop or other asyncio error
-            if "no running event loop" in str(e).lower() or "no current event loop" in str(e).lower():
+            error_msg = str(e).lower()
+            if ("no running event loop" in error_msg or 
+                "no current event loop" in error_msg or
+                "tinytuya detected async context" in error_msg):
                 log.debug("No event loop running, creating new one")
                 # We can run directly since there's no event loop
                 if sys.version_info >= (3, 7):
@@ -99,8 +111,8 @@ class AsyncRunner:
                     finally:
                         loop.close()
             else:
-                # Some other asyncio error, re-raise
-                raise
+                # Some other asyncio error, re-raise with better context
+                raise RuntimeError(f"TinyTuya AsyncRunner encountered an unexpected error: {e}") from e
 
 # Cleanup thread pool on module exit
 import atexit

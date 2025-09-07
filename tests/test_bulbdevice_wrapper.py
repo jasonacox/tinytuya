@@ -138,8 +138,11 @@ class TestBulbDeviceWrapper(unittest.TestCase):
             with self.bulb as bulb_context:
                 self.assertIs(bulb_context, self.bulb)
             
-            # Should call close() on exit
-            mock_run.assert_called()
+            # Should call close() via runner on exit if async_impl has close method
+            if hasattr(self.bulb._async_impl, 'close'):
+                mock_run.assert_called()
+            else:
+                mock_run.assert_not_called()
 
     def test_method_existence(self):
         """Test that all expected methods exist on the wrapper."""
