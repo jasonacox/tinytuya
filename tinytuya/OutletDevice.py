@@ -45,6 +45,7 @@
         receive()
 """
 
+from .OutletDeviceAsync import OutletDeviceAsync
 from .core import Device
 
 
@@ -52,11 +53,24 @@ class OutletDevice(Device):
     """
     Represents a Tuya based Smart Plug or Switch.
     
-    Inherits all basic device functionality from Device and adds outlet-specific features.
+    Inherits from Device but uses OutletDeviceAsync implementation for outlet-specific functionality.
+    Uses the new AsyncWrapper architecture for automatic method delegation.
     """
 
-    # ---- OutletDevice-Specific Methods ----
-
-    def set_dimmer(self, percentage=None, value=None, dps_id=3, nowait=False):
-        """Set dimmer value"""
-        return self._runner.run(self._async_impl.set_dimmer(percentage, value, dps_id, nowait))
+    def __init__(self, *args, **kwargs):
+        """Initialize OutletDevice with OutletDeviceAsync implementation"""
+        # Initialize AsyncWrapper directly with OutletDeviceAsync instead of calling super()
+        # because super() would create DeviceAsync, but we want OutletDeviceAsync
+        from .core.AsyncWrapper import AsyncWrapper
+        AsyncWrapper.__init__(self, OutletDeviceAsync, *args, **kwargs)
+        
+        # Set the attributes that Device/XenonDevice would normally set
+        # Extract from args/kwargs for backward compatibility
+        if args:
+            self.id = args[0]  # dev_id is first argument
+        else:
+            self.id = kwargs.get('dev_id')
+        
+        self.address = kwargs.get('address') if 'address' in kwargs else (args[1] if len(args) > 1 else None)
+        self.cid = kwargs.get('cid') or kwargs.get('node_id')
+        self.port = kwargs.get('port', 6668)

@@ -180,7 +180,7 @@ class BulbDeviceAsync(DeviceAsync):
         result = await super(BulbDeviceAsync, self).status(nowait=nowait)
         self.tried_status = True
         if result and (not self.bulb_configured) and ('dps' in result):
-            self.detect_bulb(result, nowait=nowait)
+            await self.detect_bulb(result, nowait=nowait)
         return result
 
     @staticmethod
@@ -421,11 +421,11 @@ class BulbDeviceAsync(DeviceAsync):
         """Turn the device on or off"""
         if not switch:
             if not self.tried_status:
-                self.detect_bulb( nowait=nowait )
+                await self.detect_bulb( nowait=nowait )
             # some people may use BulbDevice as the default even for non-bulb
             #   devices, so default to '1' if we can't detect it
             switch = self.dpset['switch'] if self.dpset['switch'] else 1
-        return self.set_status(on, switch, nowait=nowait)
+        return await self.set_status(on, switch, nowait=nowait)
 
     async def turn_on(self, switch=0, nowait=False):
         """Turn the device on"""
@@ -675,12 +675,12 @@ class BulbDeviceAsync(DeviceAsync):
         if brightness < 0:
             brightness = self.dpset['value_max']
         elif brightness < self.dpset['value_min']:
-            return self.turn_off(0, nowait=nowait)
+            return await self.turn_off(0, nowait=nowait)
         elif brightness > self.dpset['value_max']:
             raise ValueError('set_brightness: The brightness needs to be between %d and %d.' % (self.dpset['value_min'], self.dpset['value_max']))
 
         # Determine which mode bulb is in and adjust accordingly
-        state = self.state(nowait=nowait)
+        state = await self.state(nowait=nowait)
 
         if ('Error' in state) or ('mode' not in state):
             return state
@@ -730,9 +730,9 @@ class BulbDeviceAsync(DeviceAsync):
 
         return await self._set_values_check( check_values, nowait=nowait )
 
-    def get_value(self, feature, state=None, nowait=False):
+    async def get_value(self, feature, state=None, nowait=False):
         if not state:
-            state = self.state(nowait=nowait)
+            state = await self.state(nowait=nowait)
         if 'Error' in state:
             raise RuntimeError('Error getting device current state.')
         if feature not in state:
@@ -743,9 +743,9 @@ class BulbDeviceAsync(DeviceAsync):
         """Return current working mode"""
         return self.get_value('mode', state=state, nowait=nowait)
 
-    def white_percentage(self, state=None, nowait=False):
+    async def white_percentage(self, state=None, nowait=False):
         if not state:
-            state = self.state(nowait=nowait)
+            state = await self.state(nowait=nowait)
         return (self.brightness_percentage(state=state, nowait=nowait), self.colourtemp_percentage(state=state, nowait=nowait))
 
     #def white(self, state=None, nowait=False):
@@ -783,14 +783,14 @@ class BulbDeviceAsync(DeviceAsync):
             return hexvalue # Error
         return BulbDeviceAsync.hexvalue_to_hsv(hexvalue, self.dpset['value_hexformat'])
 
-    def state(self, nowait=False):
+    async def state(self, nowait=False):
         """Return state of Bulb"""
         if not self.bulb_configured:
-            self.detect_bulb(nowait=nowait)
+            await self.detect_bulb(nowait=nowait)
             if not self.bulb_configured:
                 raise RuntimeError('Bulb not configured, cannot get device current state.')
 
-        status = self.cached_status(nowait=nowait)
+        status = await self.cached_status(nowait=nowait)
         state = {}
         if not status:
             return error_json(ERR_JSON, "state: empty response")

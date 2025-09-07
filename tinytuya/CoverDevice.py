@@ -44,6 +44,7 @@
         receive()
 """
 
+from .CoverDeviceAsync import CoverDeviceAsync
 from .core import Device
 
 
@@ -51,8 +52,27 @@ class CoverDevice(Device):
     """
     Represents a Tuya based Smart Window Cover.
     
-    Inherits all basic device functionality from Device and adds cover-specific features.
+    Inherits from Device but uses CoverDeviceAsync implementation for cover-specific functionality.
+    Uses the new AsyncWrapper architecture for automatic method delegation.
     """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize CoverDevice with CoverDeviceAsync implementation"""
+        # Initialize AsyncWrapper directly with CoverDeviceAsync instead of calling super()
+        # because super() would create DeviceAsync, but we want CoverDeviceAsync
+        from .core.AsyncWrapper import AsyncWrapper
+        AsyncWrapper.__init__(self, CoverDeviceAsync, *args, **kwargs)
+        
+        # Set the attributes that Device/XenonDevice would normally set
+        # Extract from args/kwargs for backward compatibility
+        if args:
+            self.id = args[0]  # dev_id is first argument
+        else:
+            self.id = kwargs.get('dev_id')
+        
+        self.address = kwargs.get('address') if 'address' in kwargs else (args[1] if len(args) > 1 else None)
+        self.cid = kwargs.get('cid') or kwargs.get('node_id')
+        self.port = kwargs.get('port', 6668)
 
     # ---- Cover-Specific Constants ----
     DPS_INDEX_MOVE = "1"
@@ -62,17 +82,3 @@ class CoverDevice(Device):
         "1": "movement",
         "101": "backlight",
     }
-
-    # ---- Cover-Specific Methods ----
-
-    def open_cover(self, switch=1, nowait=False):
-        """Open the cover"""
-        return self.set_status("on", switch, nowait)
-
-    def close_cover(self, switch=1, nowait=False):
-        """Close the cover"""
-        return self.set_status("off", switch, nowait)
-
-    def stop_cover(self, switch=1, nowait=False):
-        """Stop the motion of the cover"""
-        return self.set_status("stop", switch, nowait)

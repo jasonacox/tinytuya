@@ -91,16 +91,23 @@ class TestBulbDeviceWrapper(unittest.TestCase):
 
     def test_async_method_delegation(self):
         """Test that methods are properly delegated to async device."""
-        with patch.object(self.bulb._runner, 'run') as mock_run:
-            mock_run.return_value = {'status': 'ok'}
-            result = self.bulb.status()
-            self.assertEqual(result, {'status': 'ok'})
+        # Create a proper async mock method
+        async def mock_status():
+            return {'status': 'ok'}
+        
+        # Set the async method on the mock
+        self.bulb._async_impl.status = mock_status
+        
+        # Test that the method is called and wrapped properly
+        result = self.bulb.status()
+        self.assertEqual(result, {'status': 'ok'})
 
     def test_property_delegation(self):
         """Test that property access is delegated to async device."""
         # Test attribute access delegation
-        with patch.object(self.bulb._async_impl, 'id', 'test_id'):
-            self.assertEqual(self.bulb.id, 'test_id')
+        # Set a property directly on the mock async_impl
+        self.bulb._async_impl.test_property = 'test_value'
+        self.assertEqual(self.bulb.test_property, 'test_value')
         
         # Test attribute setting delegation  
         self.bulb.connection_timeout = 15
@@ -109,13 +116,19 @@ class TestBulbDeviceWrapper(unittest.TestCase):
     def test_setattr_behavior(self):
         """Test __setattr__ behavior for internal vs external attributes."""
         # Test that internal attributes are set on wrapper
-        self.bulb._async_impl = Mock()
+        original_async_impl = self.bulb._async_impl
+        new_mock = Mock()
+        self.bulb._async_impl = new_mock
         self.assertIsInstance(self.bulb._async_impl, Mock)
+        self.assertIs(self.bulb._async_impl, new_mock)
         
         # Test that external attributes are set on _async_impl
         test_value = "test_value"
         self.bulb.some_property = test_value
+        # Check that the value was actually set (not just a Mock)
         self.assertEqual(self.bulb._async_impl.some_property, test_value)
+        # Verify by accessing it again
+        self.assertEqual(self.bulb.some_property, test_value)
 
     def test_context_manager(self):
         """Test context manager functionality."""
@@ -229,12 +242,16 @@ class TestBulbDeviceWrapper(unittest.TestCase):
 
     def test_error_handling(self):
         """Test error handling in the wrapper."""
-        with patch.object(self.bulb._runner, 'run') as mock_run:
-            # Test that exceptions are properly propagated
-            mock_run.side_effect = RuntimeError("Connection failed")
-            
-            with self.assertRaises(RuntimeError):
-                self.bulb.status()
+        # Create an async method that raises an exception
+        async def mock_status():
+            raise RuntimeError("Connection failed")
+        
+        # Set the async method on the mock
+        self.bulb._async_impl.status = mock_status
+        
+        # Test that exceptions are properly propagated
+        with self.assertRaises(RuntimeError):
+            self.bulb.status()
 
     def test_performance_baseline(self):
         """Test performance characteristics of the wrapper."""
@@ -263,11 +280,19 @@ class TestBulbDeviceWrapper(unittest.TestCase):
 
     def test_inheritance_hierarchy(self):
         """Test the inheritance hierarchy works correctly."""
-        # BulbDevice should not inherit from Device (it's a wrapper)
+        # In the new AsyncWrapper architecture, BulbDevice inherits from Device
         from tinytuya.core.Device import Device
-        self.assertFalse(isinstance(self.bulb, Device))
+        self.assertTrue(isinstance(self.bulb, Device))
         
-        # The _async_impl should be a BulbDeviceAsync instance (mocked)
+        # And Device inherits from XenonDevice
+        from tinytuya.core.XenonDevice import XenonDevice
+        self.assertTrue(isinstance(self.bulb, XenonDevice))
+        
+        # And XenonDevice inherits from AsyncWrapper
+        from tinytuya.core.AsyncWrapper import AsyncWrapper
+        self.assertTrue(isinstance(self.bulb, AsyncWrapper))
+        
+        # The _async_impl should be a BulbDeviceAsync instance (mocked in setUp)
         self.assertTrue(hasattr(self.bulb, '_async_impl'))
 
 
