@@ -17,7 +17,7 @@ Author: Jason A. Cox
 import unittest
 import sys
 import asyncio
-from unittest.mock import Mock, patch, MagicMock, AsyncMock as MockAsyncMock
+from unittest.mock import patch
 
 # Python 3.7 compatibility
 from .test_compat import AsyncMock
