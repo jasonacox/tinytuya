@@ -634,6 +634,26 @@ class XenonDeviceAsync(object):
                     else:
                         success = True
                         log.debug("received message=%r", msg)
+                        
+                        # Check if this message will result in a 904 error that we should retry
+                        # Only check if we have retry enabled and haven't exceeded retry limit
+                        if (self.retry and decode_response and msg and 
+                            recv_retries < max_recv_retries):
+                            # Process the message to see if it will be a 904 error
+                            temp_result = await self._process_message_async(msg, dev_type, from_child, minresponse, decode_response)
+                            if (temp_result and isinstance(temp_result, dict) and 
+                                'Error' in temp_result and temp_result.get('Err') == str(ERR_PAYLOAD)):
+                                
+                                log.debug("Got 904 payload error, retrying with fresh connection - retry %d/%d", 
+                                         recv_retries + 1, max_recv_retries)
+                                
+                                # Reset success and force retry with new connection
+                                success = False
+                                do_send = True
+                                recv_retries += 1
+                                await self._check_socket_close_async(True)
+                                await asyncio.sleep(0.8)  # Give Tuya device more time to be ready
+                                continue  # This continue is now inside the while loop
                 else:
                     # legacy/default mode avoids persisting socket across commands
                     await self._check_socket_close_async()
@@ -664,6 +684,19 @@ class XenonDeviceAsync(object):
                     )
                     # timeout reached - return error
                     return error_json(ERR_KEY_OR_VER)
+                # wait a bit before retrying
+                await asyncio.sleep(0.1)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as err:
+                # Connection errors bubbled up from _recv_all_async - treat as connection failure, not decode failure
+                log.debug("Connection error during receive - retry %s/%s", retries, self.socketRetryLimit, exc_info=True)
+                do_send = True
+                retries += 1
+                # toss old socket and get new one
+                await self._check_socket_close_async(True)
+                # if we exceed the limit of retries then lets get out of here
+                if retries > self.socketRetryLimit:
+                    log.debug("Exceeded tinytuya retry limit (%s) due to connection errors", self.socketRetryLimit)
+                    return error_json(ERR_CONNECT)
                 # wait a bit before retrying
                 await asyncio.sleep(0.1)
             except DecodeError as err:
@@ -897,7 +930,21 @@ class XenonDeviceAsync(object):
 
         while length > 0:
             try:
-                newdata = await self.reader.read(length)
+                # Add timeout protection to read operations, just like sync version
+                newdata = await asyncio.wait_for(self.reader.read(length), timeout=self.connection_timeout)
+            except asyncio.TimeoutError:
+                log.debug("_recv_all_async(): timeout reading data")
+                tries -= 1
+                if tries == 0:
+                    raise DecodeError('Timeout reading data - connection may be unstable')
+                if self.sendWait is not None:
+                    await asyncio.sleep(self.sendWait)
+                continue
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as e:
+                # Connection errors should bubble up to _send_receive for proper retry handling
+                # Don't convert these to DecodeErrors - they're connection issues, not decode issues
+                log.debug("_recv_all_async(): connection error %r", e)
+                raise
             except Exception as e:
                 log.debug("_recv_all_async(): exception %r", e)
                 newdata = b''
