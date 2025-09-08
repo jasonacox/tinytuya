@@ -161,6 +161,7 @@ def device_info(dev_id):
 # Async helper functions
 async def find_device_async(dev_id=None, address=None, scantime=None):
     # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
+    # Call the actual sync implementation defined above, not the wrapper
     if hasattr(asyncio, 'to_thread'):
         return await asyncio.to_thread(find_device, dev_id, address, scantime)
     else:
@@ -169,7 +170,8 @@ async def find_device_async(dev_id=None, address=None, scantime=None):
         return await loop.run_in_executor(None, find_device, dev_id, address, scantime)
 
 async def device_info_async(dev_id):
-    # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
+    # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor  
+    # Call the actual sync implementation defined above, not the wrapper
     if hasattr(asyncio, 'to_thread'):
         return await asyncio.to_thread(device_info, dev_id)
     else:

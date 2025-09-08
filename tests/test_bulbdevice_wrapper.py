@@ -24,7 +24,7 @@ sys.path.insert(0, '.')
 
 from tinytuya import BulbDevice
 from tinytuya.BulbDeviceAsync import BulbDeviceAsync
-from tinytuya.core import AsyncRunner
+from tinytuya.core.async_runner import AsyncRunner
 
 
 class TestBulbDeviceWrapper(unittest.TestCase):

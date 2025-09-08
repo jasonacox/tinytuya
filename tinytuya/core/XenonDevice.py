@@ -10,9 +10,9 @@ to the async implementation via AsyncRunner.
 import logging
 import sys
 
-from .async_runner import AsyncRunner
 from .AsyncWrapper import AsyncWrapper
-from .XenonDeviceAsync import XenonDeviceAsync, find_device_async, device_info_async, merge_dps_results
+from .XenonDeviceAsync import XenonDeviceAsync
+from .XenonDeviceAsync import find_device as _sync_find_device, device_info as _sync_device_info
 
 log = logging.getLogger(__name__)
 
@@ -29,13 +29,11 @@ def find_device(dev_id=None, address=None):
     Response:
         {'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}
     """
-    runner = AsyncRunner()
-    return runner.run(find_device_async(dev_id, address))
+    return _sync_find_device(dev_id, address)
 
 def device_info(dev_id):
     """Get device info from devicefile"""
-    runner = AsyncRunner()
-    return runner.run(device_info_async(dev_id))
+    return _sync_device_info(dev_id)
 
 
 class XenonDevice(AsyncWrapper):
