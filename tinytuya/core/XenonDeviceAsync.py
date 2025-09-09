@@ -208,13 +208,37 @@ payload_dict = {
     },
 }
 
-async def find_device_async(dev_id=None, address=None):
-    return await asyncio.to_thread(find_device, dev_id, address)
+# Async helper functions
+async def find_device_async(dev_id=None, address=None, scantime=None):
+    # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
+    # Call the actual sync implementation defined above, not the wrapper
+    if hasattr(asyncio, 'to_thread'):
+        return await asyncio.to_thread(find_device, dev_id, address, scantime)
+    else:
+        # Python 3.8 compatibility
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, find_device, dev_id, address, scantime)
 
 async def device_info_async(dev_id):
-    return await asyncio.to_thread(device_info, dev_id)
+    # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
+    # Call the actual sync implementation defined above, not the wrapper
+    if hasattr(asyncio, 'to_thread'):
+        return await asyncio.to_thread(device_info, dev_id)
+    else:
+        # Python 3.8 compatibility
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, device_info, dev_id)
 
 class XenonDeviceAsync(object):
+    """
+    Async-first implementation containing ALL device communication logic.
+
+    This class contains the complete implementation that was previously
+    split between XenonDevice (sync) and XenonDeviceAsync (async wrapper).
+
+    All device communication, protocol handling, and state management
+    happens here using async/await patterns.
+    """
     def __init__(
             self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
             version=3.1, persist=False, cid=None, node_id=None, parent=None,
@@ -257,7 +281,6 @@ class XenonDeviceAsync(object):
         self.cipher = None
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
-        self.queue_lock = asyncio.Lock()
         self._initialized = False
         self.version = version
 
@@ -271,6 +294,7 @@ class XenonDeviceAsync(object):
         if self._initialized:
             return
         self._initialized = True
+
         if self.parent:
             # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
             if not self.cid:
@@ -319,6 +343,7 @@ class XenonDeviceAsync(object):
         await self.close()
 
     async def _ensure_connection(self, renew=False):
+        # Replaces _get_socket method
         if renew and self.writer:
             await self.close()
 
@@ -479,20 +504,19 @@ class XenonDeviceAsync(object):
         if self.parent:
             return await self.parent._send_receive(payload, minresponse, getresponse, decode_response, from_child=self)
 
-        async with self.queue_lock:
-            if (not payload) and getresponse and self.received_wrong_cid_queue:
-                if (not self.children) or (not from_child):
-                    r = self.received_wrong_cid_queue[0]
-                    self.received_wrong_cid_queue = self.received_wrong_cid_queue[1:]
-                    return r
-                found_rq = False
-                for rq in self.received_wrong_cid_queue:
-                    if rq[0] == from_child:
-                        found_rq = rq
-                        break
-                if found_rq:
-                    self.received_wrong_cid_queue.remove(found_rq)
-                    return found_rq[1]
+        if (not payload) and getresponse and self.received_wrong_cid_queue:
+            if (not self.children) or (not from_child):
+                r = self.received_wrong_cid_queue[0]
+                self.received_wrong_cid_queue = self.received_wrong_cid_queue[1:]
+                return r
+            found_rq = False
+            for rq in self.received_wrong_cid_queue:
+                if rq[0] == from_child:
+                    found_rq = rq
+                    break
+            if found_rq:
+                self.received_wrong_cid_queue.remove(found_rq)
+                return found_rq[1]
 
         success = False
         partial_success = False
@@ -661,8 +685,7 @@ class XenonDeviceAsync(object):
                     else:
                         self._cache_response(result)
                         result = self._process_response(result)
-                    async with self.queue_lock:
-                        self.received_wrong_cid_queue.append( (found_child, result) )
+                    self.received_wrong_cid_queue.append( (found_child, result) )
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return await self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
 
