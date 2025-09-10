@@ -55,7 +55,7 @@ class AsyncWrapper:
 
     def cleanup(self, nowait=False):
         """
-        Cleans up the resources, when the class is not used with a context manager.
+        Cleans up the resources.
         """
         if self._running:
             self._running = False
