@@ -49,7 +49,7 @@ turn_on('Dining Room')
 
 ## Multi-Threaded Example
 
-[threading.py](threading.py) - Example that uses python threading to connect to multiple devices and listen for updates.
+[multi-threading.py](multi-threading.py) - Example that uses python threading to connect to multiple devices and listen for updates.
 
 ## Multiple Device Select Example
 
