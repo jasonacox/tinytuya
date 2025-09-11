@@ -40,7 +40,7 @@ class AsyncWrapper:
         self._async_impl = async_class(*args, **kwargs)
         self._runner = AsyncRunner()
         self._async_class = async_class
-        self._running = True
+        self._cleanup_flag = False
 
         # Cache commonly accessed attributes to avoid repeated __getattr__ calls
         self._cached_attrs = {}
@@ -57,8 +57,8 @@ class AsyncWrapper:
         """
         Cleans up the resources, when the class is not used with a context manager.
         """
-        if self._running:
-            self._running = False
+        if not nowait or not self._cleanup_flag:
+            self._cleanup_flag = True
             if hasattr(self._async_impl, 'close'):
                 try:
                     close_method = getattr(self._async_impl, 'close')
