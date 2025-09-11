@@ -55,7 +55,7 @@ class AsyncWrapper:
 
     def cleanup(self, nowait=False):
         """
-        Cleans up the resources.
+        Cleans up the resources, when the class is not used with a context manager.
         """
         if self._running:
             self._running = False
@@ -70,12 +70,10 @@ class AsyncWrapper:
                     # Don't raise exceptions during cleanup, just log them
                     import logging
                     logging.getLogger(__name__).warning(
-                        "Error during cleanup of %s", 
+                        "Error during cleanup of %s",
                         self.__class__.__name__,
                         exc_info=True
                     )
-            # stop event loop
-            self._runner.shutdown()
 
     def __getattr__(self, name: str) -> Any:
         """

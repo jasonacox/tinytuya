@@ -1,6 +1,38 @@
+# TinyTuya Async Runner Utility
+# -*- coding: utf-8 -*-
+"""
+Utility for running async code from sync contexts across Python versions.
+This is the key component that enables sync wrappers to call async implementations.
+"""
+
 import asyncio
+import logging
 import threading
 from concurrent.futures import Future
+
+tinytuya_event = {
+    'loop': None,
+    'thread': None,
+    'ready': threading.Event(),
+    'lock': threading.Lock(),
+}
+
+log = logging.getLogger(__name__)
+
+def create_eventloop():
+    """Creating and starting the event loop thread."""
+    global tinytuya_event
+    tinytuya_event['thread'] = threading.Thread(target=run_eventloop, daemon=True)
+    tinytuya_event['thread'].start()
+    tinytuya_event['ready'].wait()
+
+def run_eventloop():
+    """Global method to create and run the asyncio event loop."""
+    global tinytuya_event
+    tinytuya_event['loop'] = asyncio.new_event_loop()
+    asyncio.set_event_loop(tinytuya_event['loop'])
+    tinytuya_event['ready'].set()
+    tinytuya_event['loop'].run_forever()
 
 class AsyncRunner:
     """A class to run an asyncio event loop in a separate, dedicated thread.
@@ -11,18 +43,12 @@ class AsyncRunner:
     """
     def __init__(self):
         """Initializes the AsyncRunner, creating and starting the event loop thread."""
-        self._loop = None
-        self._loop_ready_event = threading.Event()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
-        self._loop_ready_event.wait()
-
-    def _run_loop(self):
-        """Internal method to create and run the asyncio event loop."""
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        self._loop_ready_event.set()
-        self._loop.run_forever()
+        global tinytuya_event
+        with tinytuya_event['lock']:
+            if not tinytuya_event['ready'].is_set():
+                log.debug("No event loop running, creating new one")
+                create_eventloop()
+            self._loop = tinytuya_event['loop']
 
     def run(self, coro, nowait=False):
         """
@@ -43,14 +69,3 @@ class AsyncRunner:
         else:
             future: Future = asyncio.run_coroutine_threadsafe(coro, self._loop)
             return future.result()
-
-    def shutdown(self):
-        """Stops the event loop and joins the thread.
-
-        Note: The shutdown is safe because `XenonDeviceAsync.close` is always called
-        before this method, which ensures the event loop is properly and
-        gracefully shut down.
-        """
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        self._thread.join()

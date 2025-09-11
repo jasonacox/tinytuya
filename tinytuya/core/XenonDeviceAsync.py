@@ -1084,18 +1084,18 @@ class XenonDeviceAsync(object):
 
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
-        if self.socket and not persist:
-            self.socket.close()
-            self.socket = None
+        if not persist:
+            self.close()
             self.cache_clear()
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
-        if self.socket:
+        sock = self.writer.get_extra_info('socket')
+        if sock:
             if nodelay:
-                self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             else:
-                self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 0)
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 0)
 
     def set_socketRetryLimit(self, limit):
         self.socketRetryLimit = limit

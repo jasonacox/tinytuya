@@ -12,34 +12,17 @@ import sys
 
 from .AsyncWrapper import AsyncWrapper
 from .XenonDeviceAsync import XenonDeviceAsync
-from .XenonDeviceAsync import find_device as _sync_find_device, device_info as _sync_device_info
+from .XenonDeviceAsync import find_device, device_info
 
 log = logging.getLogger(__name__)
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
 
-def find_device(dev_id=None, address=None):
-    """Scans network for Tuya devices with either ID = dev_id or IP = address
-
-    Parameters:
-        dev_id = The specific Device ID you are looking for
-        address = The IP address you are tring to find the Device ID for
-
-    Response:
-        {'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}
-    """
-    return _sync_find_device(dev_id, address)
-
-def device_info(dev_id):
-    """Get device info from devicefile"""
-    return _sync_device_info(dev_id)
-
-
 class XenonDevice(AsyncWrapper):
     """
     Synchronous wrapper for XenonDeviceAsync.
-    
+
     Uses the new AsyncWrapper architecture for automatic method delegation
     and simplified maintenance.
     """
@@ -67,7 +50,7 @@ class XenonDevice(AsyncWrapper):
         """
         # Initialize the async wrapper with proper parent handling
         parent_async = parent._async_impl if parent and hasattr(parent, '_async_impl') else parent
-        
+
         super().__init__(
             XenonDeviceAsync,
             dev_id=dev_id, address=address, local_key=local_key,
@@ -78,13 +61,13 @@ class XenonDevice(AsyncWrapper):
             connection_retry_delay=connection_retry_delay,
             port=port, max_simultaneous_dps=max_simultaneous_dps
         )
-        
+
         # For backward compatibility, expose key attributes directly
         self.id = dev_id
         self.address = address
         self.cid = cid if cid else node_id
         self.port = port
-    
+
     def _register_child(self, child):
         """Register a child device (for gateway devices)"""
         # Need to register the child's async implementation
