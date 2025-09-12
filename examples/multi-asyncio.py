@@ -58,7 +58,7 @@ async def create_device(i):
     device = await tinytuya.DeviceAsync.create(i["Device ID"], i["Address"], i["Local Key"], version=i["Version"])
     return device
 
-async def reconnect_device(device_info, status, cool_down_time=5):
+async def reconnect_device(device_info, cool_down_time=5):
     """
     Attempts to reconnect the device after a cool-down period and update the statuses.
     """
@@ -76,13 +76,14 @@ async def reconnect_device(device_info, status, cool_down_time=5):
             print(f"Reconnected and got status from {device.id}: {initial_status}")
             status = {"id": device.id, "status": initial_status["dps"]}
         else:
-            raise Exception(f"Failed to get valid initial status after reconnect for {device.id}: {initial_status}")
+            print(f"Failed to get valid initial status after reconnect for {device.id}: {initial_status}")
+            status = {"id": device.id, "status": {}}
 
-        return device
+        return device, status
     except Exception as e:
         print(f"Failed to reconnect to {device_info['Device ID']}: {e}")
         status = {"id": device_info["Device ID"], "status": "Disconnected"}
-        return None
+        return None, None
 
 async def send_heartbeat(device):
     """
@@ -107,14 +108,14 @@ async def single_device_worker(device_info):
         device.set_socketPersistent(True)
         initial_status = await device.status()
         if "dps" in initial_status:
-            print(f"INITIAL status from {device.id}: {initial_status}")
-            status = {"id": device.id, "status": initial_status["dps"]}
+            print(f"INITIAL status from {device_info['Device ID']}: {initial_status}")
+            status = {"id": device_info['Device ID'], "status": initial_status["dps"]}
         else:
-            print(f"Failed to get initial status from {device.id}")
-            status = {"id": device.id, "status": {}}
+            print(f"Failed to get initial status from {device_info['Device ID']}")
+            status = {"id": device_info['Device ID'], "status": {}}
     except Exception as e:
-        print(f"Error getting initial status from {device.id}: {e}")
-        status = {"id": device.id, "status": {}}
+        print(f"Error getting initial status from {device_info['Device ID']}: {e}")
+        status = {"id": device_info['Device ID'], "status": {}}
         return
 
     last_heartbeat_time = time.time()  # Track the last time a heartbeat was sent
@@ -122,26 +123,32 @@ async def single_device_worker(device_info):
     # Infinite loop to listen for status updates
     while True:
         try:
-            # Send a heartbeat every 5 seconds to all devices
-            if time.time() - last_heartbeat_time >= TTL_HEARTBEAT:
-                await send_heartbeat(device)
-                last_heartbeat_time = time.time()  # Reset heartbeat timer
+            if device:
+                # Send a heartbeat
+                if time.time() - last_heartbeat_time >= TTL_HEARTBEAT:
+                    await send_heartbeat(device)
+                    last_heartbeat_time = time.time()  # Reset heartbeat timer
 
-            updated_status = await device.receive()
-            if updated_status:
-                print(f"UPDATE status from {device.id}: {updated_status}")
-                # We may only get one DPS, so just update that one item
-                if "dps" in updated_status:
-                    for key in updated_status["dps"]:
-                        status["status"][key] = updated_status["dps"][key]
-                        print(f" - Updated status for {device.id} DPS {key} to {updated_status['dps'][key]}")
-                else:
-                    print(f"Received empty status from {device.id}")
+                updated_status = await device.receive()
+                if updated_status:
+                    print(f"UPDATE status from {device.id}: {updated_status}")
+                    # We may only get one DPS, so just update that one item
+                    if "dps" in updated_status:
+                        for key in updated_status["dps"]:
+                            status["status"][key] = updated_status["dps"][key]
+                            print(f" - Updated status for {device.id} DPS {key} to {updated_status['dps'][key]}")
+                        continue
+                print(f"Received empty status from {device.id}")
+            else:
+                device, status = await reconnect_device(device_info)
 
         except Exception as e:
-            print(f"Device disconnected: {e}")
-            device.close()
-            device = await reconnect_device(device_info, status)
+            print(f"Device {device_info['Device ID']} disconnected: {e}")
+            try:
+                device.close()
+            except:
+                pass
+            device = None
 
 async def getDeviceStatuses(tuyadevices):
     # Create a list of tasks to monitor
