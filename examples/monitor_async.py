@@ -1,3 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+TinyTuya - Asynchronous Example
+
+This demonstrates how to use the `tinytuya.DeviceAsync` class to control and
+monitor a Tuya device asynchronously. The example shows how to run
+concurrent tasks for a device's routine and main control flow, ensuring
+non-blocking I/O operations.
+
+Setup:
+    Replace 'DEVICEID', 'DEVICEADDRESS', 'DEVICEKEY', and 'DEVICEVERSION'
+    with your specific device details. The script will create a background
+    task to listen for device status updates and a main task to send
+    commands to the device.
+
+Author: 3735943886
+For more information, see https://github.com/jasonacox/tinytuya
+"""
 import asyncio
 import tinytuya
 
