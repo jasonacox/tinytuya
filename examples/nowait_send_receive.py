@@ -1,7 +1,7 @@
 # TinyTuya Example
 # -*- coding: utf-8 -*-
 """
- TinyTuya - Example showing async persistent connection to device with
+ TinyTuya - Example showing nowait persistent connection to device with
  continual loop watching for device updates.
 
  Author: Jason A. Cox
