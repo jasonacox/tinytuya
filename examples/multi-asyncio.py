@@ -145,7 +145,7 @@ async def single_device_worker(device_info):
         except Exception as e:
             print(f"Device {device_info['Device ID']} disconnected: {e}")
             try:
-                device.close()
+                await device.close()
             except:
                 pass
             device = None
