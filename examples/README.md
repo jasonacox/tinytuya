@@ -20,9 +20,11 @@ Tested devices:  Peteme Smart Light Bulbs, Wi-Fi - [link](https://www.amazon.com
 
 [monitor.py](monitor.py) - This script uses a loop to listen to a Tuya device for any state changes.  
 
-## Async Send and Receive
+[monitor_async.py](monitor_async.py) - This script uses asyncio to monitor a Tuya device for state changes in a non-blocking manner, allowing other tasks to run simultaneously.
 
-[async_send_receive.py](async_send_receive.py) - This demonstrates how you can make a persistent connection to a Tuya device, send commands and monitor for responses in an async way.
+## Nowait Send and Receive
+
+[nowait_send_receive.py](async_send_receive.py) - This demonstrates how you can make a persistent connection to a Tuya device, send commands and monitor for responses without waiting.
 
 ## Send Raw DPS Values
 
@@ -51,6 +53,6 @@ turn_on('Dining Room')
 
 [multi-threading.py](multi-threading.py) - Example that uses python threading to connect to multiple devices and listen for updates.
 
-## Multiple Device Select Example
+## Multiple Device Asyncio Example
 
-[multi-select.py](multi-select.py) - Example that uses python select() to connect to multiple devices and listen for updates simultaneously. By using select(), the program avoids having to create separate threads for each device and can efficiently handle multiple device connections in a single loop.
+[multi-asyncio.py](multi-asyncio.py) - Example that uses asyncio library to connect to multiple devices and listen for updates simultaneously. By using asyncio, the program can efficiently handle multiple device connections in a single, non-blocking event loop, avoiding the need for separate threads for each device.
