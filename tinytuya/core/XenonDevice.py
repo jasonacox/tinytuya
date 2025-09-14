@@ -9,7 +9,6 @@ import logging
 import socket
 import struct
 import time
-import sys
 
 from .const import DEVICEFILE, TCPPORT
 from .crypto_helper import AESCipher
@@ -20,8 +19,6 @@ from . import command_types as CT, header as H
 
 log = logging.getLogger(__name__)
 
-# Python 2 Support
-IS_PY2 = sys.version_info[0] == 2
 
 def find_device(dev_id=None, address=None):
     """Scans network for Tuya devices with either ID = dev_id or IP = address
@@ -904,11 +901,8 @@ class XenonDevice(object):
         return MessagePayload(CT.SESS_KEY_NEG_FINISH, rkey_hmac)
 
     def _negotiate_session_key_generate_finalize( self ):
-        if IS_PY2:
-            k = [ chr(ord(a)^ord(b)) for (a,b) in zip(self.local_nonce,self.remote_nonce) ]
-            self.local_key = ''.join(k)
-        else:
-            self.local_key = bytes( [ a^b for (a,b) in zip(self.local_nonce,self.remote_nonce) ] )
+        # Python 3: nonce XOR produces bytes object directly
+        self.local_key = bytes(a ^ b for (a, b) in zip(self.local_nonce, self.remote_nonce))
         log.debug("Session nonce XOR'd: %r", self.local_key)
 
         cipher = AESCipher(self.real_local_key)

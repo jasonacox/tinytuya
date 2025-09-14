@@ -1,5 +1,27 @@
 # RELEASE NOTES
 
+## v2.0.0 - Async Architecture Introduction (BREAKING MAJOR VERSION)
+
+This major release introduces the foundation for native asyncio-based device communication while fully preserving the existing synchronous API for backward compatibility.
+
+Highlights:
+* Version bump to 2.x to signal new async subsystem (legacy sync classes unchanged).
+* Planning document `ASYNC.md` added (vision, goals, milestones for XenonDeviceAsync & related classes).
+* No behavioral changes to existing synchronous code paths in this initial 2.0.0 tag.
+* Future minor releases (2.1.x+) will add new async classes and examples without removing sync support.
+
+Compatibility:
+* Existing imports and synchronous usage continue to work (API surface of 1.x retained).
+* New async classes will live alongside current modules (no name collisions) and require explicit opt‑in.
+* Officially removed Python 2.7 support.
+
+Migration Guidance:
+* You can adopt async incrementally—no action required if you stay with sync API.
+* When async classes land, prefer `await device.status_async()` patterns in event loops for concurrency gains.
+
+See `ASYNC.md` for roadmap details.
+
+
 ## 1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640

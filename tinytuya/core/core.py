@@ -1,7 +1,8 @@
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 """
- Python module to interface with Tuya WiFi smart devices
+ Python module to interface with Tuya WiFi smart devices.
+ (Python 3 only as of v2.0.0 – legacy Python 2 support removed.)
 
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
@@ -76,7 +77,6 @@
 """
 
 # Modules
-from __future__ import print_function  # python 2.7 support
 import logging
 import sys
 
@@ -90,45 +90,24 @@ HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 from .crypto_helper import AESCipher
 
-# Backward compatibility for python2
-try:
-    input = raw_input
-except NameError:
-    pass
-
 
 # Colorama terminal color capability for all platforms
 if HAVE_COLORAMA:
     init()
 
-version_tuple = (1, 17, 4)  # Major, Minor, Patch
+version_tuple = (2, 0, 0)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
 
 
-# Python 2 Support
-IS_PY2 = sys.version_info[0] == 2
-
-
-# Misc Helpers
 def bin2hex(x, pretty=False):
-    if pretty:
-        space = " "
-    else:
-        space = ""
-    if IS_PY2:
-        result = "".join("%02X%s" % (ord(y), space) for y in x)
-    else:
-        result = "".join("%02X%s" % (y, space) for y in x)
-    return result
+    space = " " if pretty else ""
+    return "".join("%02X%s" % (b, space) for b in x)
 
 def hex2bin(x):
-    if IS_PY2:
-        return x.decode("hex")
-    else:
-        return bytes.fromhex(x)
+    return bytes.fromhex(x)
 
 def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""
