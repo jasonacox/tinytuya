@@ -25,7 +25,7 @@ jobs:
           python -VV
           python -m site
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install --upgrade cryptography requests colorama pytest pytest-cov
+          python -m pip install --upgrade cryptography requests colorama pytest pytest-cov pytest-asyncio
           # project editable install
           pip install -e .
 
