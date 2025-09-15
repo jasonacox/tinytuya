@@ -37,11 +37,14 @@ async def device_info_async(dev_id):
     # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
     # Call the actual sync implementation defined above, not the wrapper
     if hasattr(asyncio, 'to_thread'):
-        return await asyncio.to_thread(device_info, dev_id)
+        devinfo = await asyncio.to_thread(device_info, dev_id)
     else:
         # Python 3.8 compatibility
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, device_info, dev_id)
+        devinfo = await loop.run_in_executor(None, device_info, dev_id)
+    if not devinfo:
+        return {}
+    return devinfo
 
 class DeviceAsync(object):
     def __init__(
@@ -66,7 +69,6 @@ class DeviceAsync(object):
         """
 
         self.id = dev_id
-        self.cid = cid if cid else node_id
         self.address = address
         self.auto_ip = (not address) or address == "Auto" or address == "0.0.0.0"
         self.dev_type = dev_type
@@ -85,6 +87,9 @@ class DeviceAsync(object):
         self.dps_cache = {}
         self.parent = parent
         self.children = {}
+        self.cid = cid if cid else node_id
+        self.auto_cid = not self.cid
+        self._auto_cid_children = False
         self.received_wrong_cid_queue = []
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
@@ -101,7 +106,7 @@ class DeviceAsync(object):
         self.cipher = None
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
-        self._initialized = False
+        self.auto_key = not local_key
         self.version = version
         #self._callback_queue = asyncio.Queue()
         self._callbacks_connect = []
@@ -109,43 +114,12 @@ class DeviceAsync(object):
         self._callbacks_data = []
         self._scanner = None
 
-    @classmethod
-    async def create(cls, *args, **kwargs):
-        device = cls(*args, **kwargs)
-        await device.initialize()
-        return device
-
-    async def initialize(self):
-        if self._initialized:
-            return
-        self._initialized = True
-
         if self.parent:
-            # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
-            if not self.cid:
-                devinfo = await device_info_async( self.id )
-                if devinfo and 'node_id' in devinfo and devinfo['node_id']:
-                    self.cid = devinfo['node_id']
-            if not self.cid:
-                # not fatal as the user could have set the device_id to the cid
-                # in that case dev_type should be 'zigbee' to set the proper fields in requests
-                log.debug( 'Child device but no cid/node_id given!' )
             self._set_version(self.parent.version)
             self.parent._register_child(self)
+            if self.auto_cid and not self.cid:
+                self.parent._auto_cid_children = True
         else:
-            if self.auto_ip:
-                bcast_data = await find_device_async(self.id)
-                if bcast_data['ip'] is None:
-                    log.debug("Unable to find device on network (specify IP address)")
-                    raise RuntimeError("Unable to find device on network (specify IP address)")
-                self.address = bcast_data['ip']
-                self.version = float(bcast_data['version'])
-            if self.local_key == "":
-                devinfo = await device_info_async( self.id )
-                if devinfo and 'key' in devinfo and devinfo['key']:
-                    local_key = devinfo['key']
-                    self.local_key = local_key.encode("latin1")
-                    self.real_local_key = self.local_key
             if self.version:
                 self._set_version(float(self.version))
             else:
@@ -161,11 +135,30 @@ class DeviceAsync(object):
                 (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent, self.cid, parent, self.children))
 
     async def __aenter__(self):
-        await self.initialize()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
+
+    async def _load_child_cids( self ):
+        self._auto_cid_children = False
+        for child in self.children:
+            # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
+            if child.auto_cid and not child.cid:
+                devinfo = await device_info_async( child.id )
+                if devinfo.get('node_id'):
+                    child.cid = devinfo['node_id']
+                    child.auto_cid = False
+                if not child.cid:
+                    # not fatal as the user could have set the device_id to the cid
+                    # in that case dev_type should be 'zigbee' to set the proper fields in requests
+                    log.debug( 'Child device but no cid/node_id given!' )
+
+    async def _load_local_key( self ):
+        devinfo = await device_info_async( self.id )
+        if devinfo.get('key'):
+            self.local_key = devinfo['key'].encode("latin1")
+            self.real_local_key = self.local_key
 
     async def _ensure_connection(self, renew=False):
         """
@@ -177,12 +170,18 @@ class DeviceAsync(object):
         if renew and self.writer:
             await self.close()
 
+        if self._auto_cid_children:
+            await self._load_child_cids()
+
         if self.writer:
             return 0
 
         retries = 0
         err = ERR_OFFLINE
         while retries < self.socketRetryLimit:
+            if self.auto_key: # and not self.local_key:
+                self._load_local_key()
+
             if self.auto_ip and not self.address:
                 if self._scanner:
                     bcast_data = await self._scanner.scanfor( self.id, timeout=None )
@@ -223,12 +222,15 @@ class DeviceAsync(object):
                     # restart session key negotiation
                     if await self._negotiate_session_key():
                         err = 0
+                        break
                     else:
-                        await self.close()
                         err = ERR_KEY_OR_VER
+                        if not self.auto_key:
+                            await self.close()
+                            break
                 else:
                     err = 0
-                break
+                    break
             except (asyncio.TimeoutError, socket.timeout):
                 log.debug(f"Connection timeout - retry {retries}/{self.socketRetryLimit}")
                 err = ERR_OFFLINE
@@ -241,6 +243,8 @@ class DeviceAsync(object):
                 await asyncio.sleep(self.socketRetryDelay)
             if self.auto_ip:
                 self.address = None
+            #if self.auto_key:
+            #    self.local_key = b''
 
         for cb in self._callbacks_connect:
             await cb( self, err )
@@ -972,6 +976,9 @@ class DeviceAsync(object):
 
     def set_sendWait(self, s):
         self.sendWait = s
+
+    #async def open(self):
+    #    return await self._ensure_connection()
 
     async def close(self):
         if self.writer:
