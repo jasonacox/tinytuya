@@ -259,7 +259,7 @@ class DeviceAsync(object):
         self.last_dev_type = ''
         self.connection_timeout = connection_timeout
         self.retry = True
-        self.disabledetect = False
+        self.disabledetect = False # if True do not detect device22
         self.port = port
         self.socketPersistent = persist
         self.socketNODELAY = True
@@ -271,7 +271,7 @@ class DeviceAsync(object):
         self.parent = parent
         self.children = {}
         self.received_wrong_cid_queue = []
-        self.local_nonce = b'0123456789abcdef'
+        self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
         self.payload_dict = None
         self._historic_status = {}
@@ -310,7 +310,7 @@ class DeviceAsync(object):
                 # not fatal as the user could have set the device_id to the cid
                 # in that case dev_type should be 'zigbee' to set the proper fields in requests
                 log.debug( 'Child device but no cid/node_id given!' )
-            self.set_version(self.parent.version)
+            self._set_version(self.parent.version)
             self.parent._register_child(self)
         else:
             if self.auto_ip:
@@ -327,9 +327,9 @@ class DeviceAsync(object):
                     self.local_key = local_key.encode("latin1")
                     self.real_local_key = self.local_key
             if self.version:
-                self.set_version(float(self.version))
+                self._set_version(float(self.version))
             else:
-                self.set_version(3.1)
+                self._set_version(3.1)
 
     def __repr__(self):
         # FIXME can do better than this
@@ -362,15 +362,19 @@ class DeviceAsync(object):
                         log.debug("Unable to find device on network (specify IP address)")
                         return ERR_OFFLINE
                     self.address = bcast_data['ip']
-                    self.set_version(float(bcast_data['version']))
+                    self._set_version(float(bcast_data['version']))
 
                 if not self.address:
                     log.debug("No address for device!")
                     return ERR_OFFLINE
 
-                if (self.version > 3.1) and ((not self.local_key) or (len(self.local_key) != 16)):
-                    log.debug("No/bad local key for device!")
-                    return ERR_KEY_OR_VER
+                if self.version > 3.1:
+                    if not self.local_key:
+                        log.debug("No local key for device!")
+                        return ERR_KEY_OR_VER
+                    elif len(self.local_key) != 16:
+                        log.debug("Bad local key length for device!")
+                        return ERR_KEY_OR_VER
 
                 try:
                     retries += 1
@@ -383,6 +387,7 @@ class DeviceAsync(object):
                         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
                     if self.version >= 3.4:
+                        # restart session key negotiation
                         if await self._negotiate_session_key():
                             return True
                         else:
@@ -581,6 +586,7 @@ class DeviceAsync(object):
             except (asyncio.TimeoutError, socket.timeout):
                 # a socket timeout occurred
                 if payload is None:
+                    # Receive only mode - return None
                     await self._check_socket_close()
                     return None
                 do_send = True
@@ -618,6 +624,7 @@ class DeviceAsync(object):
                         self.socketRetryLimit
                     )
                     log.debug("Unable to connect to device ")
+                    # timeout reached - return error
                     return error_json(ERR_CONNECT)
                 # wait a bit before retrying
                 await asyncio.sleep(0.1)
@@ -1072,7 +1079,11 @@ class DeviceAsync(object):
         else:
             self.dps_to_request.update({str(index): None for index in dp_indicies})
 
-    def set_version(self, version): # pylint: disable=W0621
+    def set_version(self, version):
+        return self._set_version(version)
+
+    def _set_version(self, version):
+        # FIXME rework the await self.detect_available_dps() below
         version = float(version)
         self.version = version
         self.version_str = "v" + str(version)
