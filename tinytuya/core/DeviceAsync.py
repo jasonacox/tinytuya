@@ -37,11 +37,14 @@ async def device_info_async(dev_id):
     # Use asyncio.to_thread if available (Python 3.9+), otherwise use executor
     # Call the actual sync implementation defined above, not the wrapper
     if hasattr(asyncio, 'to_thread'):
-        return await asyncio.to_thread(device_info, dev_id)
+        devinfo = await asyncio.to_thread(device_info, dev_id)
     else:
         # Python 3.8 compatibility
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, device_info, dev_id)
+        devinfo = await loop.run_in_executor(None, device_info, dev_id)
+    if not devinfo:
+        return {}
+    return devinfo
 
 class DeviceAsync(object):
     def __init__(
@@ -66,7 +69,6 @@ class DeviceAsync(object):
         """
 
         self.id = dev_id
-        self.cid = cid if cid else node_id
         self.address = address
         self.auto_ip = (not address) or address == "Auto" or address == "0.0.0.0"
         self.dev_type = dev_type
@@ -85,6 +87,9 @@ class DeviceAsync(object):
         self.dps_cache = {}
         self.parent = parent
         self.children = {}
+        self.cid = cid if cid else node_id
+        self.auto_cid = not self.cid
+        self._auto_cid_children = False
         self.received_wrong_cid_queue = []
         self.local_nonce = b'0123456789abcdef' # not-so-random random key
         self.remote_nonce = b''
@@ -101,46 +106,20 @@ class DeviceAsync(object):
         self.cipher = None
         self.local_key = local_key.encode("latin1")
         self.real_local_key = self.local_key
-        self._initialized = False
+        self.auto_key = not local_key
         self.version = version
-
-    @classmethod
-    async def create(cls, *args, **kwargs):
-        device = cls(*args, **kwargs)
-        await device.initialize()
-        return device
-
-    async def initialize(self):
-        if self._initialized:
-            return
-        self._initialized = True
+        #self._callback_queue = asyncio.Queue()
+        self._callbacks_connect = []
+        self._callbacks_response = []
+        self._callbacks_data = []
+        self._scanner = None
 
         if self.parent:
-            # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
-            if not self.cid:
-                devinfo = await device_info_async( self.id )
-                if devinfo and 'node_id' in devinfo and devinfo['node_id']:
-                    self.cid = devinfo['node_id']
-            if not self.cid:
-                # not fatal as the user could have set the device_id to the cid
-                # in that case dev_type should be 'zigbee' to set the proper fields in requests
-                log.debug( 'Child device but no cid/node_id given!' )
             self._set_version(self.parent.version)
             self.parent._register_child(self)
+            if self.auto_cid and not self.cid:
+                self.parent._auto_cid_children = True
         else:
-            if self.auto_ip:
-                bcast_data = await find_device_async(self.id)
-                if bcast_data['ip'] is None:
-                    log.debug("Unable to find device on network (specify IP address)")
-                    raise RuntimeError("Unable to find device on network (specify IP address)")
-                self.address = bcast_data['ip']
-                self.version = float(bcast_data['version'])
-            if self.local_key == "":
-                devinfo = await device_info_async( self.id )
-                if devinfo and 'key' in devinfo and devinfo['key']:
-                    local_key = devinfo['key']
-                    self.local_key = local_key.encode("latin1")
-                    self.real_local_key = self.local_key
             if self.version:
                 self._set_version(float(self.version))
             else:
@@ -156,74 +135,121 @@ class DeviceAsync(object):
                 (self.__class__.__name__, self.id, self.address, self.real_local_key.decode(), self.dev_type, self.connection_timeout, self.version, self.socketPersistent, self.cid, parent, self.children))
 
     async def __aenter__(self):
-        await self.initialize()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
+    async def _load_child_cids( self ):
+        self._auto_cid_children = False
+        for child in self.children:
+            # if we are a child then we should have a cid/node_id but none were given - try and find it the same way we look up local keys
+            if child.auto_cid and not child.cid:
+                devinfo = await device_info_async( child.id )
+                if devinfo.get('node_id'):
+                    child.cid = devinfo['node_id']
+                    child.auto_cid = False
+                if not child.cid:
+                    # not fatal as the user could have set the device_id to the cid
+                    # in that case dev_type should be 'zigbee' to set the proper fields in requests
+                    log.debug( 'Child device but no cid/node_id given!' )
+
+    async def _load_local_key( self ):
+        devinfo = await device_info_async( self.id )
+        if devinfo.get('key'):
+            self.local_key = devinfo['key'].encode("latin1")
+            self.real_local_key = self.local_key
+
     async def _ensure_connection(self, renew=False):
+        """
+        error = self._ensure_socket_connection(renew=False)
+
+        Returns 0 on success, or an ERR_* constant on error
+        """
         # Replaces _get_socket method
         if renew and self.writer:
             await self.close()
 
-        if not self.writer:
-            retries = 0
-            err = ERR_OFFLINE
-            while retries < self.socketRetryLimit:
-                if self.auto_ip and not self.address:
+        if self._auto_cid_children:
+            await self._load_child_cids()
+
+        if self.writer:
+            return 0
+
+        retries = 0
+        err = ERR_OFFLINE
+        while retries < self.socketRetryLimit:
+            if self.auto_key: # and not self.local_key:
+                self._load_local_key()
+
+            if self.auto_ip and not self.address:
+                if self._scanner:
+                    bcast_data = await self._scanner.scanfor( self.id, timeout=None )
+                else:
                     bcast_data = await find_device_async(self.id)
-                    if bcast_data['ip'] is None:
-                        log.debug("Unable to find device on network (specify IP address)")
-                        return ERR_OFFLINE
-                    self.address = bcast_data['ip']
-                    self._set_version(float(bcast_data['version']))
-
-                if not self.address:
-                    log.debug("No address for device!")
-                    return ERR_OFFLINE
-
-                if self.version > 3.1:
-                    if not self.local_key:
-                        log.debug("No local key for device!")
-                        return ERR_KEY_OR_VER
-                    elif len(self.local_key) != 16:
-                        log.debug("Bad local key length for device!")
-                        return ERR_KEY_OR_VER
-
-                try:
-                    retries += 1
-                    fut = asyncio.open_connection(self.address, self.port)
-                    self.reader, self.writer = await asyncio.wait_for(fut, timeout=self.connection_timeout)
-
-                    # TCP_NODELAY
-                    sock = self.writer.get_extra_info('socket')
-                    if sock and self.socketNODELAY:
-                        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-
-                    if self.version >= 3.4:
-                        # restart session key negotiation
-                        if await self._negotiate_session_key():
-                            return True
-                        else:
-                            await self.close()
-                            return ERR_KEY_OR_VER
-                    else:
-                        return True
-                except (asyncio.TimeoutError, socket.timeout):
-                    log.debug(f"Connection timeout - retry {retries}/{self.socketRetryLimit}")
+                if bcast_data['ip'] is None:
+                    log.debug("Unable to find device on network (specify IP address)")
                     err = ERR_OFFLINE
-                except Exception as e:
-                    log.debug(f"Connection failed (exception) - retry {retries}/{self.socketRetryLimit}", exc_info=True)
-                    err = ERR_CONNECT
+                    break
+                self.address = bcast_data['ip']
+                self._set_version(float(bcast_data['version']))
 
-                await self.close()
-                if retries < self.socketRetryLimit:
-                    await asyncio.sleep(self.socketRetryDelay)
-                if self.auto_ip:
-                    self.address = None
-            return err
-        return True
+            if not self.address:
+                log.debug("No address for device!")
+                err = ERR_OFFLINE
+                break
+
+            if self.version > 3.1:
+                if not self.local_key:
+                    log.debug("No local key for device!")
+                    err = ERR_KEY_OR_VER
+                    break
+                elif len(self.local_key) != 16:
+                    log.debug("Bad local key length for device!")
+                    err = ERR_KEY_OR_VER
+                    break
+            try:
+                retries += 1
+                fut = asyncio.open_connection(self.address, self.port)
+                self.reader, self.writer = await asyncio.wait_for(fut, timeout=self.connection_timeout)
+
+                # TCP_NODELAY
+                sock = self.writer.get_extra_info('socket')
+                if sock and self.socketNODELAY:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+                if self.version >= 3.4:
+                    # restart session key negotiation
+                    if await self._negotiate_session_key():
+                        err = 0
+                        break
+                    else:
+                        err = ERR_KEY_OR_VER
+                        if not self.auto_key:
+                            await self.close()
+                            break
+                else:
+                    err = 0
+                    break
+            except (asyncio.TimeoutError, socket.timeout):
+                log.debug(f"Connection timeout - retry {retries}/{self.socketRetryLimit}")
+                err = ERR_OFFLINE
+            except Exception as e:
+                log.debug(f"Connection failed (exception) - retry {retries}/{self.socketRetryLimit}", exc_info=True)
+                err = ERR_CONNECT
+
+            await self.close()
+            if retries < self.socketRetryLimit:
+                await asyncio.sleep(self.socketRetryDelay)
+            if self.auto_ip:
+                self.address = None
+            #if self.auto_key:
+            #    self.local_key = b''
+
+        for cb in self._callbacks_connect:
+            await cb( self, err )
+
+        return err
 
     async def _check_socket_close(self, force=False):
         if force or not self.socketPersistent:
@@ -285,7 +311,7 @@ class DeviceAsync(object):
         self.raw_sent = None
         self.raw_recv = []
         self.cmd_retcode = None
-        if await self._ensure_connection() is not True:
+        if await self._ensure_connection():
             return None
         enc_payload = self._encode_message(payload) if isinstance(payload, MessagePayload) else payload
         try:
@@ -355,10 +381,10 @@ class DeviceAsync(object):
         self.cmd_retcode = None
         while not success:
             # open up socket if device is available
-            sock_result = await self._ensure_connection()
-            if sock_result is not True:
+            sock_error = await self._ensure_connection()
+            if sock_error:
                 await self._check_socket_close(True)
-                return error_json(sock_result if sock_result else ERR_OFFLINE)
+                return error_json(sock_error)
             # send request to device
             try:
                 if payload is not None and do_send:
@@ -383,6 +409,9 @@ class DeviceAsync(object):
                         msg = rmsg
                         self.raw_recv.append(rmsg)
                         self._get_retcode(self.raw_sent, rmsg) # set self.cmd_retcode
+                        if len(msg.payload) == 0:
+                            for cb in self._callbacks_response:
+                                await cb( self, msg )
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -507,10 +536,10 @@ class DeviceAsync(object):
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
                     if found_child:
-                        found_child._cache_response(result)
+                        await found_child._handle_response(result, msg)
                         result = found_child._process_response(result)
                     else:
-                        self._cache_response(result)
+                        await self._handle_response(result, msg)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
@@ -520,10 +549,10 @@ class DeviceAsync(object):
         await self._check_socket_close()
 
         if found_child:
-            found_child._cache_response(result)
+            await found_child._handle_response(result, msg)
             return found_child._process_response(result)
 
-        self._cache_response(result)
+        await self._handle_response(result, msg)
         return self._process_response(result)
 
     def _decode_payload(self, payload):
@@ -622,11 +651,16 @@ class DeviceAsync(object):
 
         return json_payload
 
-    def _cache_response(self, response):
+    async def _handle_response(self, response, raw_msg ):
         """
-        Save (cache) the last value of every DP
+        Cache the last DP values and kick off the data callbacks
         """
+
+        # Save (cache) the last value of every DP
         merge_dps_results(self._historic_status, response)
+
+        for cb in self._callbacks_data:
+            await cb( self, response, raw_msg )
 
         if (not self.socketPersistent) or (not self.writer):
             return
@@ -943,6 +977,9 @@ class DeviceAsync(object):
     def set_sendWait(self, s):
         self.sendWait = s
 
+    #async def open(self):
+    #    return await self._ensure_connection()
+
     async def close(self):
         if self.writer:
             try:
@@ -1095,6 +1132,21 @@ class DeviceAsync(object):
         # create Tuya message packet
         return MessagePayload(command_override, payload)
 
+
+    def register_connect_handler( self, cb ):
+        if cb not in self._callbacks_connect:
+            self._callbacks_connect.append( cb )
+
+    def register_response_handler( self, cb ):
+        if cb not in self._callbacks_response:
+            self._callbacks_response.append( cb )
+
+    def register_data_handler( self, cb ):
+        if cb not in self._callbacks_data:
+            self._callbacks_data.append( cb )
+
+    def register_scanner( self, scanner ):
+        self._scanner = scanner
 
     #
     # The following methods are taken from the v1 Device class and modified to be async-compatible.
