@@ -163,6 +163,28 @@ def assign_dp_mappings( tuyadevices, mappings ):
             dev['mapping'] = None
 
 
+def merge_dps_results(dest, src):
+    """Merge multiple receive() responses into a single dict
+
+    `src` will be combined with and merged into `dest`
+    """
+    if src and isinstance(src, dict) and 'Error' not in src and 'Err' not in src:
+        for k in src:
+            if k == 'dps' and src[k] and isinstance(src[k], dict):
+                if 'dps' not in dest or not isinstance(dest['dps'], dict):
+                    dest['dps'] = {}
+                for dkey in src[k]:
+                    dest['dps'][dkey] = src[k][dkey]
+            elif k == 'data' and src[k] and isinstance(src[k], dict) and 'dps' in src[k] and isinstance(src[k]['dps'], dict):
+                if k not in dest or not isinstance(dest[k], dict):
+                    dest[k] = {'dps': {}}
+                if 'dps' not in dest[k] or not isinstance(dest[k]['dps'], dict):
+                    dest[k]['dps'] = {}
+                for dkey in src[k]['dps']:
+                    dest[k]['dps'][dkey] = src[k]['dps'][dkey]
+            else:
+                dest[k] = src[k]
+
 
 ########################################################
 #             Core Classes and Functions
