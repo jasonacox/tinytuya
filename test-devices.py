@@ -22,7 +22,7 @@ Usage:
 Exit code is 0 if all succeeded, 1 if any device failed.
 """
 from __future__ import annotations
-import asyncio, json, argparse, sys, time, os
+import asyncio, json, argparse, sys, time, os, socket
 try:
     from colorama import init as colorama_init, Fore, Style
     colorama_init()
@@ -38,6 +38,10 @@ except ImportError:  # fallback
     Fore = _ForeDummy()
     Style = _StyleDummy()
 import tinytuya
+try:
+    from tinytuya.async_scanner import shared_discover  # native async UDP discovery
+except Exception:  # fallback if module path changes
+    shared_discover = None  # type: ignore
 
 DEFAULT_DEVICES_FILE = 'devices.json'
 
@@ -100,19 +104,18 @@ def _short_error(msg: str, limit: int = 60) -> str:
 async def fetch_status(meta: dict, sem: asyncio.Semaphore, timeout: float = 8.0) -> dict:
     start = time.time()
     async with sem:
-        dev = tinytuya.DeviceAsync(
-            meta['id'],
-            address=meta['ip'],
-            local_key=meta['key'],
-            version=meta['version'],
-            dev_type=meta['dev_type'],
-            persist=False
-        )
         try:
-            await asyncio.wait_for(dev.initialize(), timeout=timeout)
-            result = await asyncio.wait_for(dev.status(), timeout=timeout)
-            duration = time.time() - start
-            await dev.close()
+            async with tinytuya.DeviceAsync(
+                meta['id'],
+                address=meta['ip'],
+                local_key=meta['key'],
+                version=meta['version'],
+                dev_type=meta['dev_type'],
+                persist=False
+            ) as dev:
+                # Directly call status(); DeviceAsync handles any lazy setup internally.
+                result = await asyncio.wait_for(dev.status(), timeout=timeout)
+                duration = time.time() - start
             if not result:
                 raise RuntimeError('No response')
             if isinstance(result, dict) and 'dps' in result:
@@ -126,22 +129,32 @@ async def fetch_status(meta: dict, sem: asyncio.Semaphore, timeout: float = 8.0)
                 'version': meta['version'],
                 'ok': True,
                 'dps': dps,
-                'elapsed': round(duration, 3)
+                'elapsed': round(duration, 3),
+                'category': 'ok'
             }
         except Exception as e:  # gather error info
-            try:
-                await dev.close()
-            except Exception:
-                pass
             duration = time.time() - start
+            emsg = f"{e.__class__.__name__}: {e}" if isinstance(e, Exception) else str(e)
+            low = emsg.lower()
+            if isinstance(e, asyncio.TimeoutError) or 'timeout' in low:
+                cat = 'timeout'
+            elif isinstance(e, (ConnectionError, OSError, socket.timeout)) or 'network' in low or 'connect' in low:
+                cat = 'network'
+            elif 'key' in low:
+                cat = 'key'
+            elif 'payload' in low or 'decode' in low or 'protocol' in low:
+                cat = 'protocol'
+            else:
+                cat = 'other'
             return {
                 'id': meta['id'],
                 'name': meta['name'],
                 'ip': meta['ip'],
                 'version': meta['version'],
                 'ok': False,
-                'error': f"{e.__class__.__name__}: {e}" if isinstance(e, Exception) else str(e),
-                'elapsed': round(duration, 3)
+                'error': emsg,
+                'elapsed': round(duration, 3),
+                'category': cat
             }
 
 # -------------------- Main --------------------
@@ -162,6 +175,30 @@ async def run(args) -> int:
         for m in meta_list:
             m['ip'] = None  # force AUTO discovery
         print('Forcing IP discovery for all devices (ignoring stored IPs)...')
+
+    # Shared discovery pre-pass (quick win) if any device missing IP or rediscover forced
+    need_discovery = any(m['ip'] is None for m in meta_list)
+    if need_discovery and shared_discover:
+        try:
+            print(f"Performing shared discovery ({args.discover_seconds:.1f}s)...", flush=True)
+            discovered = await shared_discover(listen_seconds=args.discover_seconds, include_app=True, verbose=False)
+            # discovered is dict: id -> info
+            hits = 0
+            for m in meta_list:
+                info = discovered.get(m['id'])
+                if info and info.get('ip'):
+                    m['ip'] = info.get('ip')
+                    # update version if available
+                    ver = info.get('version')
+                    try:
+                        if ver:
+                            m['version'] = float(ver)
+                    except Exception:
+                        pass
+                    hits += 1
+            print(f"Discovery matched {hits} / {total} device IDs.")
+        except Exception as e:
+            print(f"Shared discovery failed: {e}")
 
     total = len(meta_list)
     name_width = max(len(m['name']) for m in meta_list)
@@ -230,6 +267,15 @@ async def run(args) -> int:
             summary = f"Done: {ok}/{total} succeeded; {total-ok} failed."
         print(summary)
 
+        # Error category counters
+        categories = {}
+        for r in results:
+            cat = r.get('category', 'unknown')
+            categories[cat] = categories.get(cat, 0) + 1
+        if any(not r['ok'] for r in results):
+            parts = [f"{k}={v}" for k, v in sorted(categories.items())]
+            print("Categories: " + ", ".join(parts))
+
     return 0 if all(r['ok'] for r in results) else 1
 
 # -------------------- CLI --------------------
@@ -241,6 +287,7 @@ def parse_args(argv=None):
     p.add_argument('--rediscover', action='store_true', help='Ignore stored IPs and force broadcast discovery for every device')
     p.add_argument('-l','--limit', type=int, default=10, help='Max concurrent connections (default: 10)')
     p.add_argument('-t','--timeout', type=float, default=8.0, help='Per-device connect+status timeout seconds (default: 8)')
+    p.add_argument('--discover-seconds', type=float, default=3.0, help='Seconds for shared discovery pre-pass (default: 3.0)')
     p.add_argument('--json', action='store_true', help='Output JSON array instead of text summary')
     return p.parse_args(argv)
 
