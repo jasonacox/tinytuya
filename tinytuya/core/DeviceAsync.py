@@ -18,6 +18,7 @@ from .exceptions import DecodeError
 from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_message, parse_header
 from . import command_types as CT, header as H
 from .core import merge_dps_results
+from .XenonDevice import find_device, device_info
 
 log = logging.getLogger(__name__)
 
