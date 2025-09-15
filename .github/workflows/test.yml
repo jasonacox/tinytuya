@@ -25,7 +25,28 @@ jobs:
           python -VV
           python -m site
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install --upgrade cryptography requests colorama
+          python -m pip install --upgrade cryptography requests colorama pytest pytest-cov
+          # project editable install
+          pip install -e .
 
-      - name: "Run test.py and tests.py on ${{ matrix.python-version }}"
-        run: "python -m test.py && python -m tests"
+      - name: "Run legacy scripts"
+        run: python -m test.py && python -m tests
+
+      - name: "Run pytest with coverage"
+        run: pytest --cov=tinytuya --cov-report=xml --cov-report=term-missing
+
+      - name: "Upload coverage artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+
+      - name: "Codecov upload"
+        if: matrix.python-version == '3.10'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+          verbose: true

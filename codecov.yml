@@ -1,0 +1,27 @@
+codecov:
+  require_ci_to_pass: no
+
+coverage:
+  precision: 2
+  round: down
+  range: 60..95
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+    patch:
+      default:
+        target: auto
+        threshold: 2%
+
+ignore:
+  - "sandbox/*"
+  - "tests/*"
+  - "build/*"
+  - "docs/*"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: false
