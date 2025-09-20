@@ -1328,7 +1328,7 @@ class DeviceAsync(object):
                 # too many DPs, break it up into smaller chunks
                 ret = None
                 for k in data:
-                    ret = await self.set_value(k, data[k], nowait=nowait)
+                    ret = await self.set_value(k, data[k])
                 return ret
             else:
                 # send them all. since nowait is set we can't detect failure
@@ -1336,7 +1336,7 @@ class DeviceAsync(object):
                 for k in data:
                     out[str(k)] = data[k]
                 payload = self._generate_payload(CT.CONTROL, out)
-                return await self._send_receive(payload, getresponse=(not nowait))
+                return await self._send_receive(payload, getresponse=False)
 
         if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
             # too many DPs, break it up into smaller chunks
@@ -1344,7 +1344,7 @@ class DeviceAsync(object):
             for k in data:
                 if (not nowait) and bool(ret):
                     await asyncio.sleep(1)
-                result = await self.set_value(k, data[k], nowait=nowait)
+                result = await self.set_value(k, data[k])
                 merge_dps_results(ret, result)
             return ret
 
@@ -1354,19 +1354,19 @@ class DeviceAsync(object):
             out[str(k)] = data[k]
 
         payload = self._generate_payload(CT.CONTROL, out)
-        result = await self._send_receive(payload, getresponse=(not nowait))
+        result = await self._send_receive(payload, getresponse=False)
 
         if result and 'Err' in result and len(out) > 1:
             # sending failed! device might only be able to handle 1 DP at a time
             first_dp = next(iter( out ))
-            res = await self.set_value(first_dp, out[first_dp], nowait=nowait)
+            res = await self.set_value(first_dp, out[first_dp])
             del out[first_dp]
             if res and 'Err' not in res:
                 # single DP succeeded! set limit to 1
                 self.max_simultaneous_dps = 1
                 result = res
                 for k in out:
-                    res = await self.set_value(k, out[k], nowait=nowait)
+                    res = await self.set_value(k, out[k])
                     merge_dps_results(result, res)
         return result
 
