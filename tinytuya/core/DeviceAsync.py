@@ -110,8 +110,11 @@ class DeviceAsync(object):
         self.version = version
         #self._callback_queue = asyncio.Queue()
         self._callbacks_connect = []
+        self._callbacks_disconnect = []
         self._callbacks_response = []
-        self._callbacks_data = []
+        self._deferred_callbacks = []
+        self._deferred_task = None
+        self._deferred_task_running = False
         self._scanner = None
 
         if self.parent:
@@ -139,6 +142,39 @@ class DeviceAsync(object):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
+
+    async def _defer_callbacks(self, long_delay=True):
+        if self._deferred_task and not self._deferred_task_running:
+            if (not long_delay) or self._deferred_task.done():
+                self._deferred_task.cancel()
+                await self._deferred_task
+                self._deferred_task = None
+        if self._deferred_callbacks and not self._deferred_task:
+            if long_delay:
+                print('deferring cb for 100ms')
+                self._deferred_task = asyncio.create_task( self._run_deferred_callbacks_later() )
+            else:
+                print('scheduling cb immediately')
+                self._deferred_task = asyncio.create_task( self._run_deferred_callbacks() )
+
+    async def _run_deferred_callbacks(self):
+        self._deferred_task_running = True
+        print('running CBs')
+        cbs = self._deferred_callbacks
+        self._deferred_callbacks = []
+        for cb in cbs:
+            await cb
+        if self._deferred_callbacks:
+            await self._run_deferred_callbacks()
+        self._deferred_task_running = False
+
+    async def _run_deferred_callbacks_later(self):
+        try:
+            await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            return
+        self._deferred_task_running = True
+        await self._run_deferred_callbacks()
 
     async def _load_child_cids( self ):
         self._auto_cid_children = False
@@ -179,7 +215,7 @@ class DeviceAsync(object):
         retries = 0
         err = ERR_OFFLINE
         while retries < self.socketRetryLimit:
-            if self.auto_key: # and not self.local_key:
+            if self.auto_key:
                 await self._load_local_key()
 
             if self.auto_ip and not self.address:
@@ -226,7 +262,7 @@ class DeviceAsync(object):
                     else:
                         err = ERR_KEY_OR_VER
                         if not self.auto_key:
-                            await self.close()
+                            await self.close(err)
                             break
                 else:
                     err = 0
@@ -238,21 +274,20 @@ class DeviceAsync(object):
                 log.debug(f"Connection failed (exception) - retry {retries}/{self.socketRetryLimit}", exc_info=True)
                 err = ERR_CONNECT
 
-            await self.close()
+            await self.close(err)
             if retries < self.socketRetryLimit:
                 await asyncio.sleep(self.socketRetryDelay)
             if self.auto_ip:
                 self.address = None
-            #if self.auto_key:
-            #    self.local_key = b''
 
         for cb in self._callbacks_connect:
-            await cb( self, err )
+            self._deferred_callbacks.append( cb( self, err ) )
+        await self._defer_callbacks()
 
         return err
 
-    async def _check_socket_close(self, force=False):
-        if force or not self.socketPersistent:
+    async def _check_socket_close(self):
+        if not self.socketPersistent:
             await self.close()
 
     async def _recv_all(self, length):
@@ -318,7 +353,7 @@ class DeviceAsync(object):
             self.writer.write(enc_payload)
             await self.writer.drain()
         except Exception:
-            await self._check_socket_close(True)
+            await self.close(ERR_PAYLOAD) # FIXME is this the best error to use?
             return None
         try:
             self.raw_sent = parse_header(enc_payload)
@@ -383,7 +418,7 @@ class DeviceAsync(object):
             # open up socket if device is available
             sock_error = await self._ensure_connection()
             if sock_error:
-                await self._check_socket_close(True)
+                await self.close(sock_error)
                 return error_json(sock_error)
             # send request to device
             try:
@@ -411,7 +446,8 @@ class DeviceAsync(object):
                         self._get_retcode(self.raw_sent, rmsg) # set self.cmd_retcode
                         if len(msg.payload) == 0:
                             for cb in self._callbacks_response:
-                                await cb( self, msg )
+                                self._deferred_callbacks.append( cb( self, None, msg ) )
+                            await self._defer_callbacks()
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -435,12 +471,13 @@ class DeviceAsync(object):
                     return None
                 do_send = True
                 retries += 1
-                # toss old socket and get new one
-                await self._check_socket_close(True)
                 log.debug(f"Timeout in _send_receive() - retry {retries}/{self.socketRetryLimit}")
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
+                    await self.close(ERR_KEY_OR_VER)
                     return error_json(ERR_KEY_OR_VER)
+                # toss old socket and get new one
+                await self.close(ERR_PAYLOAD) # FIXME is this the best error to use?
                 # wait a bit before retrying
                 await asyncio.sleep(0.1)
             except DecodeError:
@@ -452,14 +489,14 @@ class DeviceAsync(object):
                         await self._check_socket_close()
                         return None
                     # no valid messages received
-                    await self._check_socket_close(True)
+                    await self.close(ERR_PAYLOAD)
                     return error_json(ERR_PAYLOAD)
             except Exception as err:
                 # likely network or connection error
                 do_send = True
                 retries += 1
                 # toss old socket and get new one
-                await self._check_socket_close(True)
+                await self.close(ERR_CONNECT)
                 log.debug(f"Network connection error - retry {retries}/{self.socketRetryLimit}", exc_info=True)
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -536,24 +573,27 @@ class DeviceAsync(object):
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
                     if found_child:
-                        await found_child._handle_response(result, msg)
+                        found_child._handle_response(result, msg)
+                        for cb in found_child._callbacks_response:
+                            self._deferred_callbacks.append( cb( found_child, response, msg ) )
                         result = found_child._process_response(result)
                     else:
-                        await self._handle_response(result, msg)
+                        self._handle_response(result, msg)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
+                    await self._defer_callbacks(False)
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return await self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
 
         # legacy/default mode avoids persisting socket across commands
         await self._check_socket_close()
 
-        if found_child:
-            await found_child._handle_response(result, msg)
-            return found_child._process_response(result)
-
-        await self._handle_response(result, msg)
-        return self._process_response(result)
+        obj = self if not found_child else found_child
+        obj._handle_response(result, msg)
+        for cb in obj._callbacks_response:
+            self._deferred_callbacks.append( cb( obj, result, msg ) )
+        await self._defer_callbacks(False)
+        return obj._process_response(result)
 
     def _decode_payload(self, payload):
         log.debug("decode payload=%r", payload)
@@ -651,16 +691,13 @@ class DeviceAsync(object):
 
         return json_payload
 
-    async def _handle_response(self, response, raw_msg ):
+    def _handle_response(self, response, raw_msg ):
         """
         Cache the last DP values and kick off the data callbacks
         """
 
         # Save (cache) the last value of every DP
         merge_dps_results(self._historic_status, response)
-
-        for cb in self._callbacks_data:
-            await cb( self, response, raw_msg )
 
         if (not self.socketPersistent) or (not self.writer):
             return
@@ -948,7 +985,6 @@ class DeviceAsync(object):
         self.socketPersistent = persist
         if not persist:
             self.close()
-            self.cache_clear()
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
@@ -980,13 +1016,17 @@ class DeviceAsync(object):
     #async def open(self):
     #    return await self._ensure_connection()
 
-    async def close(self):
+    async def close(self, reason=None):
         if self.writer:
             try:
                 self.writer.close()
                 await self.writer.wait_closed()
             except Exception as e:
                 log.debug(f"Error closing writer: {e}")
+            for cb in self._callbacks_disconnect:
+                self._deferred_callbacks.append( cb( self, reason ) )
+            await self._defer_callbacks()
+
         self.writer = None
         self.reader = None
         self.cache_clear()
@@ -1137,13 +1177,13 @@ class DeviceAsync(object):
         if cb not in self._callbacks_connect:
             self._callbacks_connect.append( cb )
 
+    def register_disconnect_handler( self, cb ):
+        if cb not in self._callbacks_disconnect:
+            self._callbacks_disconnect.append( cb )
+
     def register_response_handler( self, cb ):
         if cb not in self._callbacks_response:
             self._callbacks_response.append( cb )
-
-    def register_data_handler( self, cb ):
-        if cb not in self._callbacks_data:
-            self._callbacks_data.append( cb )
 
     def register_scanner( self, scanner ):
         self._scanner = scanner
