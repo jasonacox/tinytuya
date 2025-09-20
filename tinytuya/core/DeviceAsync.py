@@ -552,22 +552,39 @@ class DeviceAsync(object):
         try:
             # Data available: seqno cmd retcode payload crc
             log.debug("raw unpacked message = %r", msg)
-            result = self._decode_payload(msg.payload)
-
-            if result is None:
-                log.debug("_decode_payload() failed!")
+            payload = self._decrypt_payload(msg.payload)
         except:
-            log.debug("error unpacking or decoding tuya JSON payload", exc_info=True)
-            result = error_json(ERR_PAYLOAD)
+            log.debug("error decrypting tuya JSON payload", exc_info=True)
+            payload = None
 
-        # Did we detect a device22 device? Return ERR_DEVTYPE error.
-        if dev_type and dev_type != self.dev_type:
+        if payload is None:
+            log.debug("_decrypt_payload() failed!")
+            return error_json(ERR_PAYLOAD)
+
+        if( (not self.disabledetect) and
+            b"data unvalid" in payload and
+            self.version == 3.3 and
+            msg.retcode != 0 and
+            msg.cmd in (CT.DP_QUERY, CT.DP_QUERY_NEW) and
+            self.dev_type != "device22"
+           ):
+            dev_type = self.dev_type
+            self.dev_type = "device22"
+            # set at least one DPS
+            self.dps_to_request = {"1": None}
             log.debug(
-                "Device22 detected and updated (%s -> %s) - Update payload and try again",
+                "'data unvalid' error detected: switching dev_type (%r -> %r) - Update payload and try again",
                 dev_type,
                 self.dev_type,
             )
-            result = error_json(ERR_DEVTYPE)
+
+            #log.debug("status() rebuilding payload for device22")
+            #payload = self._generate_payload(query_type)
+            #data = await self._send_receive(payload)
+
+            # FIXME resend status request?
+
+        result = self._decode_payload(payload)
 
         found_child = False
         if self.children:
@@ -610,7 +627,7 @@ class DeviceAsync(object):
             self._deferred_callbacks.append( cb( obj, result, msg ) )
         return obj._process_response(result)
 
-    def _decode_payload(self, payload):
+    def _decrypt_payload(self, payload):
         log.debug("decode payload=%r", payload)
         cipher = AESCipher(self.local_key)
 
@@ -657,19 +674,13 @@ class DeviceAsync(object):
             if isinstance(payload, str):
                 payload = payload.encode('utf-8')
 
-            if not self.disabledetect and b"data unvalid" in payload and self.version in (3.3, 3.4):
-                self.dev_type = "device22"
-                # set at least one DPS
-                self.dps_to_request = {"1": None}
-                log.debug(
-                    "'data unvalid' error detected: switching to dev_type %r",
-                    self.dev_type,
-                )
-                return None
         elif not payload.startswith(b"{"):
             log.debug("Unexpected payload=%r", payload)
             return error_json(ERR_PAYLOAD, payload)
 
+        return payload
+
+    def _decode_payload(self, payload):
         invalid_json = None
         if not isinstance(payload, str):
             try:
@@ -695,10 +706,10 @@ class DeviceAsync(object):
         except:
             json_payload = error_json(ERR_JSON, payload)
             json_payload['invalid_json'] = payload
-
-        if invalid_json and isinstance(json_payload, dict):
-            # give it to the user so they can try to decode it if they want
-            json_payload['invalid_json'] = invalid_json
+        else:
+            if invalid_json and isinstance(json_payload, dict):
+                # give it to the user so they can try to decode it if they want
+                json_payload['invalid_json'] = invalid_json
 
         # v3.4 stuffs it into {"data":{"dps":{"1":true}}, ...}
         if "dps" not in json_payload and "data" in json_payload and "dps" in json_payload['data']:
