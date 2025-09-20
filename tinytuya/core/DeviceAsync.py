@@ -883,14 +883,14 @@ class DeviceAsync(object):
         """Return device status."""
         query_type = CT.DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
-        payload = self.generate_payload(query_type)
+        payload = self._generate_payload(query_type)
 
         data = await self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("status() received data=%r", data)
         if (not nowait) and data and "Err" in data:
             if data["Err"] == str(ERR_DEVTYPE):
                 log.debug("status() rebuilding payload for device22")
-                payload = self.generate_payload(query_type)
+                payload = self._generate_payload(query_type)
                 data = await self._send_receive(payload)
             elif data["Err"] == str(ERR_PAYLOAD):
                 log.debug("Status request error, check version %r and key %r", self.version, self.local_key)
@@ -925,7 +925,7 @@ class DeviceAsync(object):
     async def subdev_query(self, nowait=False):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
-        payload = self.generate_payload(CT.LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
+        payload = self._generate_payload(CT.LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
         return await self._send_receive(payload, 0, getresponse=(not nowait))
 
     async def detect_available_dps(self):
@@ -1031,7 +1031,7 @@ class DeviceAsync(object):
         self.reader = None
         self.cache_clear()
 
-    def generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
+    def _generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
         """
         Generate the payload to send.
 
@@ -1203,7 +1203,7 @@ class DeviceAsync(object):
         # open device, send request, then close connection
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
-        payload = self.generate_payload(CT.CONTROL, {switch: on})
+        payload = self._generate_payload(CT.CONTROL, {switch: on})
 
         data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_status received data=%r", data)
@@ -1216,7 +1216,7 @@ class DeviceAsync(object):
 
         """
         # open device, send request, then close connection
-        payload = self.generate_payload(CT.AP_CONFIG)
+        payload = self._generate_payload(CT.AP_CONFIG)
         data = await self._send_receive(payload, 0)
         log.debug("product received data=%r", data)
         return data
@@ -1231,7 +1231,7 @@ class DeviceAsync(object):
             nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
-        payload = self.generate_payload(CT.HEART_BEAT)
+        payload = self._generate_payload(CT.HEART_BEAT)
         data = await self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("heartbeat received data=%r", data)
         return data
@@ -1249,7 +1249,7 @@ class DeviceAsync(object):
 
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
-        payload = self.generate_payload(CT.UPDATEDPS, index)
+        payload = self._generate_payload(CT.UPDATEDPS, index)
         data = await self._send_receive(payload, 0, getresponse=(not nowait))
         log.debug("updatedps received data=%r", data)
         return data
@@ -1267,7 +1267,7 @@ class DeviceAsync(object):
         if isinstance(index, int):
             index = str(index)  # index and payload is a string
 
-        payload = self.generate_payload(CT.CONTROL, {index: value})
+        payload = self._generate_payload(CT.CONTROL, {index: value})
 
         data = await self._send_receive(payload, getresponse=(not nowait))
 
@@ -1294,7 +1294,7 @@ class DeviceAsync(object):
                 out = {}
                 for k in data:
                     out[str(k)] = data[k]
-                payload = self.generate_payload(CT.CONTROL, out)
+                payload = self._generate_payload(CT.CONTROL, out)
                 return await self._send_receive(payload, getresponse=(not nowait))
 
         if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
@@ -1312,7 +1312,7 @@ class DeviceAsync(object):
         for k in data:
             out[str(k)] = data[k]
 
-        payload = self.generate_payload(CT.CONTROL, out)
+        payload = self._generate_payload(CT.CONTROL, out)
         result = await self._send_receive(payload, getresponse=(not nowait))
 
         if result and 'Err' in result and len(out) > 1:
@@ -1359,7 +1359,7 @@ class DeviceAsync(object):
                 log.debug("set_timer received error=%r", status)
                 return status
 
-        payload = self.generate_payload(CT.CONTROL, {dps_id: num_secs})
+        payload = self._generate_payload(CT.CONTROL, {dps_id: num_secs})
 
         data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("set_timer received data=%r", data)
