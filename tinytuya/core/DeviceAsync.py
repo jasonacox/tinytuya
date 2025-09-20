@@ -378,17 +378,16 @@ class DeviceAsync(object):
                 log.debug("received null payload (%r), fetch new one - %s retries remaining", msg, recv_retries)
         return False
 
-    async def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
+    async def _send_receive(self, payload, getresponse=True, decode_response=True, from_child=None):
         """
         Send single buffer `payload` and receive a single buffer.
 
         Args:
             payload(bytes): Data to send. Set to 'None' to receive only.
-            minresponse(int): Minimum response size expected (default=28 bytes)
             getresponse(bool): If True, wait for and return response.
         """
         if self.parent:
-            return await self.parent._send_receive(payload, minresponse, getresponse, decode_response, from_child=self)
+            return await self.parent._send_receive(payload, getresponse, decode_response, from_child=self)
 
         if (not payload) and getresponse and self.received_wrong_cid_queue:
             if (not self.children) or (not from_child):
@@ -517,9 +516,9 @@ class DeviceAsync(object):
             await self._check_socket_close()
             return msg
 
-        return await self._process_message(msg, dev_type, from_child, minresponse, decode_response)
+        return await self._process_message(msg, dev_type, from_child, decode_response)
 
-    async def _process_message( self, msg, dev_type=None, from_child=None, minresponse=28, decode_response=True ):
+    async def _process_message( self, msg, dev_type=None, from_child=None, decode_response=True ):
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
             log.debug("raw unpacked message = %r", msg)
@@ -575,7 +574,7 @@ class DeviceAsync(object):
                     if found_child:
                         found_child._handle_response(result, msg)
                         for cb in found_child._callbacks_response:
-                            self._deferred_callbacks.append( cb( found_child, response, msg ) )
+                            self._deferred_callbacks.append( cb( found_child, result, msg ) )
                         result = found_child._process_response(result)
                     else:
                         self._handle_response(result, msg)
@@ -583,7 +582,7 @@ class DeviceAsync(object):
                     self.received_wrong_cid_queue.append( (found_child, result) )
                     await self._defer_callbacks(False)
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
-                return await self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
+                return await self._send_receive( None, True, decode_response, from_child=from_child)
 
         # legacy/default mode avoids persisting socket across commands
         await self._check_socket_close()
@@ -877,7 +876,7 @@ class DeviceAsync(object):
         Args:
             payload(bytes): Data to send.
         """
-        return await self._send_receive(payload, 0, getresponse=False)
+        return await self._send_receive(payload, getresponse=False)
 
     async def status(self, nowait=False):
         """Return device status."""
@@ -885,7 +884,7 @@ class DeviceAsync(object):
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self._generate_payload(query_type)
 
-        data = await self._send_receive(payload, 0, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("status() received data=%r", data)
         if (not nowait) and data and "Err" in data:
             if data["Err"] == str(ERR_DEVTYPE):
@@ -926,7 +925,7 @@ class DeviceAsync(object):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
         payload = self._generate_payload(CT.LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
-        return await self._send_receive(payload, 0, getresponse=(not nowait))
+        return await self._send_receive(payload, getresponse=(not nowait))
 
     async def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
@@ -1217,7 +1216,7 @@ class DeviceAsync(object):
         """
         # open device, send request, then close connection
         payload = self._generate_payload(CT.AP_CONFIG)
-        data = await self._send_receive(payload, 0)
+        data = await self._send_receive(payload)
         log.debug("product received data=%r", data)
         return data
 
@@ -1232,7 +1231,7 @@ class DeviceAsync(object):
         """
         # open device, send request, then close connection
         payload = self._generate_payload(CT.HEART_BEAT)
-        data = await self._send_receive(payload, 0, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("heartbeat received data=%r", data)
         return data
 
@@ -1250,7 +1249,7 @@ class DeviceAsync(object):
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self._generate_payload(CT.UPDATEDPS, index)
-        data = await self._send_receive(payload, 0, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("updatedps received data=%r", data)
         return data
 
