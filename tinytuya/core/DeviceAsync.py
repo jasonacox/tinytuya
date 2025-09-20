@@ -116,7 +116,10 @@ class DeviceAsync(object):
         self._deferred_task = None
         self._deferred_task_running = False
         self._scanner = None
-        self._lock = None
+        self._lock = asyncio.Lock()
+        self.connected = asyncio.Event()
+        self._stop_heartbeats = asyncio.Event()
+        self._stop_heartbeats.set()
 
         if self.parent:
             self._set_version(self.parent.version)
@@ -142,7 +145,7 @@ class DeviceAsync(object):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+        await self._close()
 
     async def _defer_callbacks(self, delay=True, pause=False):
         if self._deferred_task and not self._deferred_task_running:
@@ -166,6 +169,7 @@ class DeviceAsync(object):
         for cb in cbs:
             await cb
         if self._deferred_callbacks:
+            print('running CBs again')
             await self._run_deferred_callbacks()
         self._deferred_task_running = False
 
@@ -205,7 +209,7 @@ class DeviceAsync(object):
         """
         # Replaces _get_socket method
         if renew and self.writer:
-            await self.close()
+            await self._close()
 
         if self._auto_cid_children:
             await self._load_child_cids()
@@ -263,7 +267,7 @@ class DeviceAsync(object):
                     else:
                         err = ERR_KEY_OR_VER
                         if not self.auto_key:
-                            await self.close(err)
+                            await self._close(err)
                             break
                 else:
                     err = 0
@@ -275,7 +279,7 @@ class DeviceAsync(object):
                 log.debug(f"Connection failed (exception) - retry {retries}/{self.socketRetryLimit}", exc_info=True)
                 err = ERR_CONNECT
 
-            await self.close(err)
+            await self._close(err)
             if retries < self.socketRetryLimit:
                 await asyncio.sleep(self.socketRetryDelay)
             if self.auto_ip:
@@ -285,18 +289,23 @@ class DeviceAsync(object):
             self._deferred_callbacks.append( cb( self, err ) )
         await self._defer_callbacks()
 
+        if err:
+            self.connected.clear()
+        else:
+            self.connected.set()
+
         return err
 
     async def _check_socket_close(self):
         if not self.socketPersistent:
-            await self.close()
+            await self._close()
 
     async def _recv_all(self, length):
         try:
             return await asyncio.wait_for(self.reader.readexactly(length), timeout=self.connection_timeout)
         except asyncio.IncompleteReadError as e:
             log.debug(f"_recv_all(): no data?: {e}")
-            raise DecodeError('No data received - connection closed?')
+            raise DecodeError('No data received - connection closed')
 
     async def _receive(self):
         # make sure to use the parent's self.seqno and session key
@@ -343,7 +352,7 @@ class DeviceAsync(object):
         if self.parent:
             return await self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
-        log.debug("sending payload quick")
+        log.debug("sending payload quick: %r", payload)
         self.raw_sent = None
         self.raw_recv = []
         self.cmd_retcode = None
@@ -354,7 +363,7 @@ class DeviceAsync(object):
             self.writer.write(enc_payload)
             await self.writer.drain()
         except Exception:
-            await self.close(ERR_PAYLOAD) # FIXME is this the best error to use?
+            await self._close(ERR_PAYLOAD) # FIXME is this the best error to use?
             return None
         try:
             self.raw_sent = parse_header(enc_payload)
@@ -404,9 +413,6 @@ class DeviceAsync(object):
                 self.received_wrong_cid_queue.remove(found_rq)
                 return found_rq[1]
 
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-
         await self._defer_callbacks(pause=True)
         async with self._lock:
             result = await self._send_receive_locked(payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child)
@@ -428,12 +434,12 @@ class DeviceAsync(object):
             # open up socket if device is available
             sock_error = await self._ensure_connection()
             if sock_error:
-                await self.close(sock_error)
+                await self._close(sock_error)
                 return error_json(sock_error)
             # send request to device
             try:
                 if payload is not None and do_send:
-                    log.debug("sending payload")
+                    log.debug("sending payload: %r", payload)
                     enc_payload = self._encode_message(payload) if isinstance(payload, MessagePayload) else payload
                     self.writer.write(enc_payload)
                     await self.writer.drain()
@@ -474,6 +480,7 @@ class DeviceAsync(object):
                 raise
             except (asyncio.TimeoutError, socket.timeout):
                 # a socket timeout occurred
+                log.debug("Timeout in _send_receive()")
                 if payload is None:
                     # Receive only mode - return None
                     await self._check_socket_close()
@@ -483,29 +490,30 @@ class DeviceAsync(object):
                 log.debug(f"Timeout in _send_receive() - retry {retries}/{self.socketRetryLimit}")
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
-                    await self.close(ERR_KEY_OR_VER)
+                    await self._close(ERR_KEY_OR_VER)
                     return error_json(ERR_KEY_OR_VER)
                 # toss old socket and get new one
-                await self.close(ERR_PAYLOAD) # FIXME is this the best error to use?
+                await self._close(ERR_PAYLOAD) # FIXME is this the best error to use?
                 # wait a bit before retrying
                 await asyncio.sleep(0.1)
             except DecodeError:
-                log.debug("Error decoding received data - retry", exc_info=True)
+                # connection closed!
+                log.debug("Connection closed during receive", exc_info=True)
+                await self._close(ERR_CONNECT)
                 recv_retries += 1
                 if recv_retries > max_recv_retries:
-                    # we recieved at least 1 valid message with a null payload, so the send was successful
                     if partial_success:
-                        await self._check_socket_close()
+                        # we recieved at least 1 valid message with a null payload, so the send was successful
                         return None
-                    # no valid messages received
-                    await self.close(ERR_PAYLOAD)
-                    return error_json(ERR_PAYLOAD)
+                    # device is probably rejecting the payload
+                    return error_json(ERR_PAYLOAD if payload else ERR_CONNECT)
             except Exception as err:
                 # likely network or connection error
-                do_send = True
+                if not partial_success:
+                    do_send = True
                 retries += 1
                 # toss old socket and get new one
-                await self.close(ERR_CONNECT)
+                await self._close(ERR_CONNECT)
                 log.debug(f"Network connection error - retry {retries}/{self.socketRetryLimit}", exc_info=True)
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self.socketRetryLimit:
@@ -813,7 +821,8 @@ class DeviceAsync(object):
                 msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
                 data = pack_message(msg,hmac_key=self.local_key)
-                log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
+                #log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
+                log.debug("payload %r encrypted=%r", msg, binascii.hexlify(data) )
                 return data
 
             payload = self.cipher.encrypt(payload, False)
@@ -848,7 +857,7 @@ class DeviceAsync(object):
         msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg,hmac_key=hmac_key)
-        log.debug("payload encrypted=%r",binascii.hexlify(buffer))
+        log.debug("payload %r encrypted=%r", msg, binascii.hexlify(buffer))
         return buffer
 
     def _get_retcode(self, sent, msg):
@@ -870,6 +879,9 @@ class DeviceAsync(object):
         # disable device22 detection as some gateways return "json obj data unvalid" when the gateway is polled without a cid
         self.disabledetect = True
         self.payload_dict = None
+
+    def is_connected(self):
+        return self.connected.is_set()
 
     async def receive(self):
         """
@@ -991,7 +1003,7 @@ class DeviceAsync(object):
     def set_socketPersistent(self, persist):
         self.socketPersistent = persist
         if not persist:
-            self.close()
+            self._close()
 
     def set_socketNODELAY(self, nodelay):
         self.socketNODELAY = nodelay
@@ -1020,11 +1032,21 @@ class DeviceAsync(object):
     def set_sendWait(self, s):
         self.sendWait = s
 
-    #async def open(self):
-    #    return await self._ensure_connection()
+    async def open(self):
+        await self._defer_callbacks(pause=True)
+        async with self._lock:
+            result = await self._ensure_connection()
+        await self._defer_callbacks(delay=False)
+        return result
 
     async def close(self, reason=None):
+        async with self._lock:
+            await self._close()
+
+    async def _close(self, reason=None):
+        self.connected.clear()
         if self.writer:
+            await self._defer_callbacks(pause=True)
             try:
                 self.writer.close()
                 await self.writer.wait_closed()
@@ -1032,8 +1054,7 @@ class DeviceAsync(object):
                 log.debug(f"Error closing writer: {e}")
             for cb in self._callbacks_disconnect:
                 self._deferred_callbacks.append( cb( self, reason ) )
-            await self._defer_callbacks()
-
+            await self._defer_callbacks(delay=False)
         self.writer = None
         self.reader = None
         self.cache_clear()
@@ -1237,11 +1258,28 @@ class DeviceAsync(object):
         Args:
             nowait(bool): True to send without waiting for response.
         """
-        # open device, send request, then close connection
+        #print('sending hb', self.id)
         payload = self._generate_payload(CT.HEART_BEAT)
         data = await self._send_receive(payload, getresponse=(not nowait))
         log.debug("heartbeat received data=%r", data)
         return data
+
+    async def start_heartbeats(self, auto_open=False):
+        self._stop_heartbeats.clear()
+        while True:
+            try:
+                await asyncio.wait_for(self._stop_heartbeats.wait(), timeout=9)
+                break
+            except asyncio.TimeoutError:
+                pass
+            if not self.connected.is_set():
+                if not auto_open:
+                    await self.connected.wait()
+                    continue
+            await self.heartbeat()
+
+    async def stop_heartbeats(self):
+        self._stop_heartbeats.set()
 
     async def updatedps(self, index=None, nowait=False):
         """
