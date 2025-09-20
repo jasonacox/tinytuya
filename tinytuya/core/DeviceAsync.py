@@ -474,7 +474,7 @@ class DeviceAsync(object):
                 else:
                     # legacy/default mode avoids persisting socket across commands
                     await self._check_socket_close()
-                    return None
+                    return {}
             except (KeyboardInterrupt, SystemExit) as err:
                 log.debug("Keyboard Interrupt - Exiting")
                 raise
@@ -484,7 +484,7 @@ class DeviceAsync(object):
                 if payload is None:
                     # Receive only mode - return None
                     await self._check_socket_close()
-                    return None
+                    return {}
                 do_send = True
                 retries += 1
                 log.debug(f"Timeout in _send_receive() - retry {retries}/{self.socketRetryLimit}")
@@ -504,7 +504,7 @@ class DeviceAsync(object):
                 if recv_retries > max_recv_retries:
                     if partial_success:
                         # we recieved at least 1 valid message with a null payload, so the send was successful
-                        return None
+                        return {}
                     # device is probably rejecting the payload
                     return error_json(ERR_PAYLOAD if payload else ERR_CONNECT)
             except Exception as err:
@@ -542,7 +542,7 @@ class DeviceAsync(object):
             log.debug("raw unpacked message = %r", msg)
             # legacy/default mode avoids persisting socket across commands
             await self._check_socket_close()
-            return None
+            return {}
 
         # option - decode Message with hard coded offsets
         # result = self._decode_payload(data[20:-8])
@@ -559,9 +559,9 @@ class DeviceAsync(object):
 
         if payload is None:
             log.debug("_decrypt_payload() failed!")
-            return error_json(ERR_PAYLOAD)
-
-        if( (not self.disabledetect) and
+            result = error_json(ERR_PAYLOAD)
+            #result['invalid_msg'] = msg
+        elif( (not self.disabledetect) and
             b"data unvalid" in payload and
             self.version == 3.3 and
             msg.retcode != 0 and
@@ -584,7 +584,13 @@ class DeviceAsync(object):
 
             # FIXME resend status request?
 
-        result = self._decode_payload(payload)
+
+        elif not payload.startswith(b"{"):
+            log.debug("Unexpected payload=%r", payload)
+            result = error_json(ERR_PAYLOAD, payload)
+            result['invalid_json'] = payload
+        else:
+            result = self._decode_payload(payload)
 
         found_child = False
         if self.children:
@@ -674,42 +680,39 @@ class DeviceAsync(object):
             if isinstance(payload, str):
                 payload = payload.encode('utf-8')
 
-        elif not payload.startswith(b"{"):
-            log.debug("Unexpected payload=%r", payload)
-            return error_json(ERR_PAYLOAD, payload)
-
         return payload
 
     def _decode_payload(self, payload):
         invalid_json = None
-        if not isinstance(payload, str):
-            try:
-                payload = payload.decode()
-            except UnicodeDecodeError:
-                if (payload[:1] == b'{') and (payload[-1:] == b'}'):
-                    try:
-                        invalid_json = payload
-                        payload = payload.decode( errors='replace' )
-                    except:
-                        pass
-            except:
-                pass
-
-            # if .decode() threw an exception, `payload` will still be bytes
+        if not isinstance(payload, dict):
             if not isinstance(payload, str):
-                log.debug("payload was not string type and decoding failed")
-                return error_json(ERR_JSON, payload)
+                try:
+                    payload = payload.decode()
+                except UnicodeDecodeError:
+                    if (payload[:1] == b'{') and (payload[-1:] == b'}'):
+                        try:
+                            invalid_json = payload
+                            payload = payload.decode( errors='replace' )
+                        except:
+                            pass
+                except:
+                    pass
 
-        log.debug("decoded results=%r", payload)
-        try:
-            json_payload = json.loads(payload)
-        except:
-            json_payload = error_json(ERR_JSON, payload)
-            json_payload['invalid_json'] = payload
-        else:
-            if invalid_json and isinstance(json_payload, dict):
-                # give it to the user so they can try to decode it if they want
-                json_payload['invalid_json'] = invalid_json
+                # if .decode() threw an exception, `payload` will still be bytes
+                if not isinstance(payload, str):
+                    log.debug("payload was not string type and decoding failed")
+                    return error_json(ERR_JSON, payload)
+
+            log.debug("decoded results=%r", payload)
+            try:
+                json_payload = json.loads(payload)
+            except:
+                json_payload = error_json(ERR_JSON, payload)
+                json_payload['invalid_json'] = payload
+            else:
+                if invalid_json and isinstance(json_payload, dict):
+                    # give it to the user so they can try to decode it if they want
+                    json_payload['invalid_json'] = invalid_json
 
         # v3.4 stuffs it into {"data":{"dps":{"1":true}}, ...}
         if "dps" not in json_payload and "data" in json_payload and "dps" in json_payload['data']:
