@@ -912,41 +912,27 @@ class DeviceAsync(object):
         """
         return await self._send_receive(payload, getresponse=False)
 
-    async def status(self, nowait=False):
+    async def status(self):
         """Return device status."""
         query_type = CT.DP_QUERY
         log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self._generate_payload(query_type)
-
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
         log.debug("status() received data=%r", data)
-        if (not nowait) and data and "Err" in data:
-            if data["Err"] == str(ERR_DEVTYPE):
-                log.debug("status() rebuilding payload for device22")
-                payload = self._generate_payload(query_type)
-                data = await self._send_receive(payload)
-            elif data["Err"] == str(ERR_PAYLOAD):
-                log.debug("Status request error, check version %r and key %r", self.version, self.local_key)
         return data
 
-    async def cached_status(self, historic=False, nowait=False):
+    async def cached_status(self, historic=False):
         """
         Return device last status if a persistent connection is open.
 
         Args:
-            nowait(bool): If cached status is is not available, either call status() (when nowait=False) or immediately return None (when nowait=True)
 
         Response:
-            json if cache is available, else
-                json from status() if nowait=False, or
-                None if nowait=True
+            json if cache is available, else None
         """
         if historic:
             return self._historic_status
         if (not self._have_status) or (not self.socketPersistent) or (not self.writer) or (not self._last_status):
-            if not nowait:
-                log.debug("Cache not available, requesting status from device")
-                return await self.status()
             log.debug("Cache not available, returning None")
             return None
         return self._last_status
@@ -955,11 +941,11 @@ class DeviceAsync(object):
         self._last_status = {}
         self._have_status = False
 
-    async def subdev_query(self, nowait=False):
+    async def subdev_query(self):
         """Query for a list of sub-devices and their status"""
         # final payload should look like: {"data":{"cids":[]},"reqType":"subdev_online_stat_query"}
         payload = self._generate_payload(CT.LAN_EXT_STREAM, rawData={"cids":[]}, reqType='subdev_online_stat_query')
-        return await self._send_receive(payload, getresponse=(not nowait))
+        return await self._send_receive(payload, getresponse=False)
 
     async def detect_available_dps(self):
         """Return which datapoints are supported by the device."""
@@ -1233,21 +1219,20 @@ class DeviceAsync(object):
     #
     # The following methods are taken from the v1 Device class and modified to be async-compatible.
     #
-    async def set_status(self, on, switch=1, nowait=False):
+    async def set_status(self, on, switch=1):
         """
         Set status of the device to 'on' or 'off'.
 
         Args:
             on(bool):  True for 'on', False for 'off'.
             switch(int): The switch to set
-            nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
         if isinstance(switch, int):
             switch = str(switch)  # index and payload is a string
         payload = self._generate_payload(CT.CONTROL, {switch: on})
 
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
         log.debug("set_status received data=%r", data)
 
         return data
@@ -1263,18 +1248,17 @@ class DeviceAsync(object):
         log.debug("product received data=%r", data)
         return data
 
-    async def heartbeat(self, nowait=True):
+    async def heartbeat(self):
         """
         Send a keep-alive HEART_BEAT command to keep the TCP connection open.
 
         Devices only send an empty-payload response, so no need to wait for it.
 
         Args:
-            nowait(bool): True to send without waiting for response.
         """
         #print('sending hb', self.id)
         payload = self._generate_payload(CT.HEART_BEAT)
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
         log.debug("heartbeat received data=%r", data)
         return data
 
@@ -1295,13 +1279,12 @@ class DeviceAsync(object):
     async def stop_heartbeats(self):
         self._stop_heartbeats.set()
 
-    async def updatedps(self, index=None, nowait=False):
+    async def updatedps(self, index=None):
         """
         Request device to update index.
 
         Args:
             index(array): list of dps to update (ex. [4, 5, 6, 18, 19, 20])
-            nowait(bool): True to send without waiting for response.
         """
         if index is None:
             index = [1]
@@ -1309,18 +1292,17 @@ class DeviceAsync(object):
         log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self._generate_payload(CT.UPDATEDPS, index)
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
         log.debug("updatedps received data=%r", data)
         return data
 
-    async def set_value(self, index, value, nowait=False):
+    async def set_value(self, index, value):
         """
         Set int value of any index.
 
         Args:
             index(int): index to set
             value(int): new value for the index
-            nowait(bool): True to send without waiting for response.
         """
         # open device, send request, then close connection
         if isinstance(index, int):
@@ -1328,19 +1310,19 @@ class DeviceAsync(object):
 
         payload = self._generate_payload(CT.CONTROL, {index: value})
 
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
 
         return data
 
-    async def set_multiple_values(self, data, nowait=False):
+    async def set_multiple_values(self, data):
         """
         Set multiple indexes at the same time
 
         Args:
             data(dict): array of index/value pairs to set
-            nowait(bool): True to send without waiting for response.
         """
-        # if nowait is set we can't detect failure
+        # FIXME if nowait is set we can't detect failure
+        nowait = True
         if nowait:
             if self.max_simultaneous_dps > 0 and len(data) > self.max_simultaneous_dps:
                 # too many DPs, break it up into smaller chunks
@@ -1388,22 +1370,21 @@ class DeviceAsync(object):
                     merge_dps_results(result, res)
         return result
 
-    async def turn_on(self, switch=1, nowait=False):
+    async def turn_on(self, switch=1):
         """Turn the device on"""
-        return await self.set_status(True, switch, nowait)
+        return await self.set_status(True, switch)
 
-    async def turn_off(self, switch=1, nowait=False):
+    async def turn_off(self, switch=1):
         """Turn the device off"""
-        return await self.set_status(False, switch, nowait)
+        return await self.set_status(False, switch)
 
-    async def set_timer(self, num_secs, dps_id=0, nowait=False):
+    async def set_timer(self, num_secs, dps_id=0):
         """
         Set a timer.
 
         Args:
             num_secs(int): Number of seconds
             dps_id(int): DPS Index for Timer
-            nowait(bool): True to send without waiting for response.
         """
 
         # Query status, pick last device id as that is probably the timer
@@ -1420,6 +1401,6 @@ class DeviceAsync(object):
 
         payload = self._generate_payload(CT.CONTROL, {dps_id: num_secs})
 
-        data = await self._send_receive(payload, getresponse=(not nowait))
+        data = await self._send_receive(payload, getresponse=False)
         log.debug("set_timer received data=%r", data)
         return data

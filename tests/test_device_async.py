@@ -17,7 +17,7 @@ async def test_device_async_status_mock(monkeypatch):
     dev = tinytuya.DeviceAsync('did123', address='10.0.0.99', local_key='0123456789abcdef', version=3.3)
 
     # Monkeypatch _send_receive to simulate a status response structure
-    async def fake_send_receive(payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
+    async def fake_send_receive(payload, getresponse=True, decode_response=True, from_child=None):
         return {"dps": {"1": True, "2": 42}}
     monkeypatch.setattr(dev, '_send_receive', fake_send_receive)
 
@@ -30,7 +30,7 @@ async def test_device_async_send_nowait(monkeypatch):
     dev = tinytuya.DeviceAsync('didABC', address='10.0.0.50', local_key='0123456789abcdef', version=3.1)
 
     sent = {}
-    async def fake_send_receive(payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
+    async def fake_send_receive(payload, getresponse=True, decode_response=True, from_child=None):
         sent['called'] = True
         return None
     monkeypatch.setattr(dev, '_send_receive', fake_send_receive)
