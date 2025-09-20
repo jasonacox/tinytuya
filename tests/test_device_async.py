@@ -47,7 +47,7 @@ async def test_device_async_context_manager(monkeypatch):
     closed = {'count': 0}
     async def fake_close():
         closed['count'] += 1
-    monkeypatch.setattr(dev, 'close', fake_close)
+    monkeypatch.setattr(dev, '_close', fake_close)
 
     async with dev:
         # inside context, nothing special to assert yet
