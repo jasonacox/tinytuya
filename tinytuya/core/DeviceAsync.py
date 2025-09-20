@@ -116,6 +116,7 @@ class DeviceAsync(object):
         self._deferred_task = None
         self._deferred_task_running = False
         self._scanner = None
+        self._lock = None
 
         if self.parent:
             self._set_version(self.parent.version)
@@ -143,14 +144,14 @@ class DeviceAsync(object):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def _defer_callbacks(self, long_delay=True):
+    async def _defer_callbacks(self, delay=True, pause=False):
         if self._deferred_task and not self._deferred_task_running:
-            if (not long_delay) or self._deferred_task.done():
+            if (not (delay or pause)) or self._deferred_task.done():
                 self._deferred_task.cancel()
                 await self._deferred_task
                 self._deferred_task = None
-        if self._deferred_callbacks and not self._deferred_task:
-            if long_delay:
+        if self._deferred_callbacks and (not self._deferred_task) and (not pause):
+            if delay:
                 print('deferring cb for 100ms')
                 self._deferred_task = asyncio.create_task( self._run_deferred_callbacks_later() )
             else:
@@ -403,6 +404,16 @@ class DeviceAsync(object):
                 self.received_wrong_cid_queue.remove(found_rq)
                 return found_rq[1]
 
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+
+        await self._defer_callbacks(pause=True)
+        async with self._lock:
+            result = await self._send_receive_locked(payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child)
+        await self._defer_callbacks(delay=False)
+        return result
+
+    async def _send_receive_locked(self, payload=None, getresponse=True, decode_response=True, from_child=None):
         success = False
         partial_success = False
         retries = 0
@@ -446,7 +457,6 @@ class DeviceAsync(object):
                         if len(msg.payload) == 0:
                             for cb in self._callbacks_response:
                                 self._deferred_callbacks.append( cb( self, None, msg ) )
-                            await self._defer_callbacks()
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -580,9 +590,8 @@ class DeviceAsync(object):
                         self._handle_response(result, msg)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
-                    await self._defer_callbacks(False)
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
-                return await self._send_receive( None, True, decode_response, from_child=from_child)
+                return await self._send_receive_locked( None, True, decode_response, from_child=from_child)
 
         # legacy/default mode avoids persisting socket across commands
         await self._check_socket_close()
@@ -591,7 +600,6 @@ class DeviceAsync(object):
         obj._handle_response(result, msg)
         for cb in obj._callbacks_response:
             self._deferred_callbacks.append( cb( obj, result, msg ) )
-        await self._defer_callbacks(False)
         return obj._process_response(result)
 
     def _decode_payload(self, payload):
