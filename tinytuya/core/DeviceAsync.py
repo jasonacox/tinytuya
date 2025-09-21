@@ -298,7 +298,7 @@ class DeviceAsync(object):
 
     async def _check_socket_close(self):
         if not self.socketPersistent:
-            await self._close()
+            await self._schedule_close()
 
     async def _recv_all(self, length, timeout=True):
         try:
@@ -443,7 +443,8 @@ class DeviceAsync(object):
         self.cmd_retcode = None
         while not success:
             # open up socket if device is available
-            sock_error = await self._ensure_connection()
+            # close and re-open if we're sending and socket is not supposed to be persistent
+            sock_error = await self._ensure_connection( renew=(payload and (not self.socketPersistent)) )
             if sock_error:
                 await self._close(sock_error)
                 return error_json(sock_error)
@@ -939,7 +940,7 @@ class DeviceAsync(object):
         """
         if historic:
             return self._historic_status
-        if (not self._have_status) or (not self.socketPersistent) or (not self.writer) or (not self._last_status):
+        if (not self._have_status) or (not self.writer) or (not self._last_status):
             log.debug("Cache not available, returning None")
             return None
         return self._last_status
@@ -1065,6 +1066,29 @@ class DeviceAsync(object):
         self.writer = None
         self.reader = None
         self.cache_clear()
+        if self._lock.locked() and self._close_task:
+            # we are not being called from _run_close() if the lock has been acquired by someone
+            self._close_task.cancel()
+            await self._close_task
+            self._close_task = None
+
+    async def _schedule_close(self):
+        if self._close_task:
+            self._close_task.cancel()
+            await self._close_task
+            self._close_task = None
+        print('closing socket in 100ms')
+        self._close_task = asyncio.create_task( self._run_close() )
+
+    async def _run_close(self):
+        try:
+            await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            return
+        if self._lock.locked():
+            # someone is using the socket
+            return
+        await self._close()
 
     def _generate_payload(self, command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None):
         """
