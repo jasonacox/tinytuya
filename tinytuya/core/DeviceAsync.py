@@ -49,7 +49,7 @@ async def device_info_async(dev_id):
 class DeviceAsync(object):
     def __init__(
             self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
-            version=3.1, persist=False, cid=None, node_id=None, parent=None,
+            version=3.5, persist=True, cid=None, node_id=None, parent=None,
             connection_retry_limit=5, connection_retry_delay=5, port=TCPPORT,
             max_simultaneous_dps=0
     ):
@@ -83,7 +83,7 @@ class DeviceAsync(object):
         self.socketRetryLimit = connection_retry_limit
         self.socketRetryDelay = connection_retry_delay
         self.seqno = 1
-        self.sendWait = 0.01
+        self.sendWait = None
         self.dps_cache = {}
         self.parent = parent
         self.children = {}
