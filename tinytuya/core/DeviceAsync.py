@@ -300,24 +300,29 @@ class DeviceAsync(object):
         if not self.socketPersistent:
             await self._close()
 
-    async def _recv_all(self, length):
+    async def _recv_all(self, length, timeout=True):
         try:
-            return await asyncio.wait_for(self.reader.readexactly(length), timeout=self.connection_timeout)
+            if timeout is None:
+                return self.reader.readexactly(length)
+            elif timeout is True:
+                return await asyncio.wait_for(self.reader.readexactly(length), timeout=self.connection_timeout)
+            else:
+                return await asyncio.wait_for(self.reader.readexactly(length), timeout=timeout)
         except asyncio.IncompleteReadError as e:
             log.debug(f"_recv_all(): no data?: {e}")
             raise DecodeError('No data received - connection closed')
 
-    async def _receive(self):
+    async def _receive(self, timeout=True):
         # make sure to use the parent's self.seqno and session key
         if self.parent:
-            return await self.parent._receive()
+            return await self.parent._receive(timeout)
         # message consists of header + retcode + [data] + crc (4 or 32) + footer
         min_len_55AA = struct.calcsize(H.MESSAGE_HEADER_FMT_55AA) + 4 + 4 + len(H.SUFFIX_BIN)
         # message consists of header + iv + retcode + [data] + crc (16) + footer
         min_len_6699 = struct.calcsize(H.MESSAGE_HEADER_FMT_6699) + 12 + 4 + 16 + len(H.SUFFIX_BIN)
         min_len = min(min_len_55AA, min_len_6699)
 
-        data = await self._recv_all(min_len)
+        data = await self._recv_all(min_len, timeout)
 
         # search for the prefix.  if not found, delete everything except
         # the last (prefix_len - 1) bytes and recv more to replace it
@@ -333,42 +338,48 @@ class DeviceAsync(object):
                 prefix_offset = prefix_offset_6699 if prefix_offset_55AA < 0 else prefix_offset_55AA
                 data = data[prefix_offset:]
 
-            data += await self._recv_all(min_len - len(data))
+            data += await self._recv_all(min_len - len(data), timeout)
             prefix_offset_55AA = data.find(H.PREFIX_55AA_BIN)
             prefix_offset_6699 = data.find(H.PREFIX_6699_BIN)
 
         header = parse_header(data)
         remaining = header.total_length - len(data)
         if remaining > 0:
-            data += await self._recv_all(remaining)
+            data += await self._recv_all(remaining, timeout)
 
         log.debug("received data=%r", binascii.hexlify(data))
         hmac_key = self.local_key if self.version >= 3.4 else None
         no_retcode = False #None if self.version >= 3.5 else False
         return unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
 
+    async def _send_message( self, payload ):
+        log.debug("sending payload: %r", payload)
+        enc_payload = self._encode_message(payload) if isinstance(payload, MessagePayload) else payload
+        self.writer.write(enc_payload)
+        await self.writer.drain()
+        try:
+            self.raw_sent = parse_header(enc_payload)
+        except:
+            self.raw_sent = None
+        return enc_payload
+
     # similar to _send_receive() but never retries sending and does not decode the response
     async def _send_receive_quick(self, payload, recv_retries, from_child=None):
         if self.parent:
             return await self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
-        log.debug("sending payload quick: %r", payload)
         self.raw_sent = None
         self.raw_recv = []
         self.cmd_retcode = None
         if await self._ensure_connection():
             return None
-        enc_payload = self._encode_message(payload) if isinstance(payload, MessagePayload) else payload
+
         try:
-            self.writer.write(enc_payload)
-            await self.writer.drain()
+            await self._send_message( payload )
         except Exception:
-            await self._close(ERR_PAYLOAD) # FIXME is this the best error to use?
+            await self._close(ERR_CONNECT)
             return None
-        try:
-            self.raw_sent = parse_header(enc_payload)
-        except:
-            self.raw_sent = None
+
         if not recv_retries:
             return True
         while recv_retries:
@@ -439,15 +450,8 @@ class DeviceAsync(object):
             # send request to device
             try:
                 if payload is not None and do_send:
-                    log.debug("sending payload: %r", payload)
-                    enc_payload = self._encode_message(payload) if isinstance(payload, MessagePayload) else payload
-                    self.writer.write(enc_payload)
-                    await self.writer.drain()
-                    try:
-                        self.raw_sent = parse_header(enc_payload)
-                    except:
-                        self.raw_sent = None
-                    if self.sendWait is not None:
+                    await self._send_message( payload )
+                    if getresponse and self.sendWait is not None:
                         await asyncio.sleep(self.sendWait)
                 if getresponse:
                     do_send = False
@@ -743,10 +747,13 @@ class DeviceAsync(object):
 
     async def _negotiate_session_key(self):
         rkey = await self._send_receive_quick( self._negotiate_session_key_generate_step_1(), 2 )
+        if not rkey:
+            return False
         step3 = self._negotiate_session_key_generate_step_3( rkey )
         if not step3:
             return False
-        await self._send_receive_quick( step3, None )
+        if not await self._send_receive_quick( step3, None ):
+            return False
         self._negotiate_session_key_generate_finalize()
         return True
 
