@@ -115,7 +115,6 @@ class DeviceAsync(object):
         self._deferred_callbacks = []
         self._deferred_task = None
         self._deferred_task_running = False
-        self._scanner = None
         self._device_lock = asyncio.Lock()
         self._recv_lock = asyncio.Lock()
         self.connected = asyncio.Event()
@@ -228,10 +227,8 @@ class DeviceAsync(object):
                 await self._load_local_key()
 
             if self.auto_ip and not self.address:
-                if self._scanner:
-                    bcast_data = await self._scanner.scanfor( self.id, timeout=True )
-                else:
-                    bcast_data = await find_device_async(self.id)
+                from ..scanner_async import scanfor
+                bcast_data = await scanfor( self.id, timeout=True )
                 if (not bcast_data) or (bcast_data['ip'] is None):
                     log.debug("Unable to find device on network (specify IP address)")
                     err = ERR_OFFLINE
@@ -1256,9 +1253,6 @@ class DeviceAsync(object):
     def register_response_handler( self, cb ):
         if cb not in self._callbacks_response:
             self._callbacks_response.append( cb )
-
-    def register_scanner( self, scanner ):
-        self._scanner = scanner
 
     #
     # The following methods are taken from the v1 Device class and modified to be async-compatible.
