@@ -438,7 +438,7 @@ class DeviceAsync(object):
                 return found_rq[1]
 
         await self._defer_callbacks(pause=True)
-        if (not getresponse) and self.connected.is_set():
+        if (not (getresponse and payload)) and self.connected.is_set():
             result = await self._send_receive_locked( payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child, timeout=timeout, retry=retry )
         else:
             async with self._device_lock:
