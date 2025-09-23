@@ -97,6 +97,7 @@ scanner = None
 async def scanfor( did, timeout=True ):
     global scanner
     if scanner is None:
+        print('creating new scanner')
         scanner = Scanner()
 
     return await scanner.scanfor( did, timeout )
@@ -387,9 +388,11 @@ class Scanner():
         pass
 
     async def scanfor( self, devid, timeout=True, use_cache=True ):
+        print('scanfor adding device:', devid)
         self.start.set() # start it now in case we need to expire old data
         if use_cache and devid in self.found_devices:
-            return self.found_devices[devid]['data']
+            print('scanfor returning cached data:', devid, self.found_devices[devid])
+            return self.found_devices[devid].data
         future = self.loop.create_future()
         if devid not in self.device_listeners:
             self.device_listeners[devid] = [future]
@@ -514,8 +517,10 @@ class Scanner():
                         #continue
 
             while self.device_listeners:
-                await asyncio.sleep( 5 ) #self.scantime)
+                await asyncio.sleep( 2 )
 
+            # keep going for at least this long to refresh the cache
+            await asyncio.sleep( self.scantime )
 
             for client, protocol in discoverers:
                 client.close()

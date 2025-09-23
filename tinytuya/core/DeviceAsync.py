@@ -174,6 +174,7 @@ class DeviceAsync(object):
         if self._deferred_callbacks:
             print('running CBs again')
             await self._run_deferred_callbacks()
+        print('CBs finished')
         self._deferred_task_running = False
 
     async def _run_deferred_callbacks_later(self):
@@ -270,6 +271,9 @@ class DeviceAsync(object):
                         if not self.auto_key:
                             await self._close(err)
                             break
+                        elif retries < self.socketRetryLimit:
+                            # only try reloading the key once
+                            retries = self.socketRetryLimit - 1
                 else:
                     err = 0
                     break
@@ -379,7 +383,7 @@ class DeviceAsync(object):
 
         # loop warning:
         #  _ensure_connection() calls _negotiate_session_key which calls us again!
-        if not self.connected.is_set():
+        if not self.writer:
             return None
 
         if payload:
@@ -477,6 +481,7 @@ class DeviceAsync(object):
                         if len(msg.payload) == 0:
                             for cb in self._callbacks_response:
                                 self._deferred_callbacks.append( cb( self, None, msg ) )
+                            await self._defer_callbacks(delay=False)
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
                         log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
@@ -558,9 +563,6 @@ class DeviceAsync(object):
             await self._check_socket_close()
             return {}
 
-        # option - decode Message with hard coded offsets
-        # result = self._decode_payload(data[20:-8])
-
         # Unpack Message into TuyaMessage format
         # and return payload decrypted
         try:
@@ -633,7 +635,10 @@ class DeviceAsync(object):
                         result = found_child._process_response(result)
                     else:
                         self._handle_response(result, msg)
+                        for cb in self._callbacks_response:
+                            self._deferred_callbacks.append( cb( self, result, msg ) )
                         result = self._process_response(result)
+                    await self._defer_callbacks()
                     self.received_wrong_cid_queue.append( (found_child, result) )
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return await self._send_receive_locked( None, True, decode_response, from_child=from_child, timeout=timeout, retry=retry)
@@ -645,6 +650,7 @@ class DeviceAsync(object):
         obj._handle_response(result, msg)
         for cb in obj._callbacks_response:
             self._deferred_callbacks.append( cb( obj, result, msg ) )
+        await self._defer_callbacks(delay=False)
         return obj._process_response(result)
 
     def _decrypt_payload(self, payload):
@@ -758,6 +764,7 @@ class DeviceAsync(object):
     async def _negotiate_session_key(self):
         rkey = await self._send_receive_quick( self._negotiate_session_key_generate_step_1(), 2 )
         if not rkey:
+            log.debug('_negotiate_session_key: rkey is None!')
             return False
         step3 = self._negotiate_session_key_generate_step_3( rkey )
         if not step3:
