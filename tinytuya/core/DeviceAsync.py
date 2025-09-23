@@ -551,9 +551,9 @@ class DeviceAsync(object):
             await self._check_socket_close()
             return msg
 
-        return await self._process_message(msg, dev_type, from_child, decode_response)
+        return await self._process_message(msg, dev_type, from_child, decode_response, timeout, retry)
 
-    async def _process_message( self, msg, dev_type=None, from_child=None, decode_response=True ):
+    async def _process_message( self, msg, dev_type=None, from_child=None, decode_response=True, timeout=True, retry=True ):
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
             log.debug("raw unpacked message = %r", msg)
