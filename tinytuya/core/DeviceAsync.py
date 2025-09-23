@@ -115,6 +115,7 @@ class DeviceAsync(object):
         self._deferred_callbacks = []
         self._deferred_task = None
         self._deferred_task_running = False
+        self._close_task = None
         self._scanner = None
         self._lock = asyncio.Lock()
         self.connected = asyncio.Event()
