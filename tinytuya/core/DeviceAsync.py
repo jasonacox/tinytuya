@@ -115,8 +115,10 @@ class DeviceAsync(object):
         self._deferred_callbacks = []
         self._deferred_task = None
         self._deferred_task_running = False
-        self._device_lock = asyncio.Lock()
+        self._send_lock = asyncio.Lock()
         self._recv_lock = asyncio.Lock()
+        self._rcv2_lock = asyncio.Lock()
+        self._conn_lock = asyncio.Lock()
         self.connected = asyncio.Event()
         self._stop_heartbeats = asyncio.Event()
         self._stop_heartbeats.set()
@@ -206,6 +208,10 @@ class DeviceAsync(object):
             self.real_local_key = self.local_key
 
     async def _ensure_connection(self, renew=False):
+        async with self._conn_lock:
+            return await self._ensure_connection_locked(renew=renew)
+
+    async def _ensure_connection_locked(self, renew=False):
         """
         error = self._ensure_socket_connection(renew=False)
 
@@ -321,7 +327,7 @@ class DeviceAsync(object):
         # make sure to use the parent's self.seqno and session key
         if self.parent:
             return await self.parent._receive(timeout)
-        async with self._recv_lock:
+        async with self._rcv2_lock:
             return await self._receive_locked( timeout )
 
     async def _receive_locked(self, timeout):
@@ -437,11 +443,18 @@ class DeviceAsync(object):
                 self.received_wrong_cid_queue.remove(found_rq)
                 return found_rq[1]
 
-        await self._defer_callbacks(pause=True)
-        if (not (getresponse and payload)) and self.connected.is_set():
-            result = await self._send_receive_locked( payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child, timeout=timeout, retry=retry )
+        if getresponse and payload:
+            async with self._send_lock:
+                async with self._recv_lock:
+                    await self._defer_callbacks(pause=True)
+                    result = await self._send_receive_locked( payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child, timeout=timeout, retry=retry )
+        elif getresponse:
+            async with self._recv_lock:
+                await self._defer_callbacks(pause=True)
+                result = await self._send_receive_locked( payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child, timeout=timeout, retry=retry )
         else:
-            async with self._device_lock:
+            async with self._send_lock:
+                await self._defer_callbacks(pause=True)
                 result = await self._send_receive_locked( payload=payload, getresponse=getresponse, decode_response=decode_response, from_child=from_child, timeout=timeout, retry=retry )
         await self._defer_callbacks(delay=False)
         return result
@@ -470,7 +483,7 @@ class DeviceAsync(object):
                     await self._send_message( payload )
                     if getresponse and self.sendWait is not None:
                         await asyncio.sleep(self.sendWait)
-                if getresponse and not self._recv_lock.locked():
+                if getresponse:
                     do_send = False
                     rmsg = await self._receive(timeout)
                     # device may send null ack (28 byte) response before a full response
@@ -1025,6 +1038,7 @@ class DeviceAsync(object):
         if version == 3.2: # 3.2 behaves like 3.3 with device22
             self.dev_type="device22"
             if self.dps_to_request == {}:
+                # FIXME cannot await here
                 self.detect_available_dps()
 
     def set_socketPersistent(self, persist):
@@ -1061,15 +1075,12 @@ class DeviceAsync(object):
 
     async def open(self):
         await self._defer_callbacks(pause=True)
-        async with self._device_lock:
-            result = await self._ensure_connection()
+        result = await self._ensure_connection()
         await self._defer_callbacks(delay=False)
         return result
 
     async def close(self, reason=None):
-        async with self._device_lock:
-            #async with self._recv_lock:
-            await self._close()
+        await self._close()
 
     async def _close(self, reason=None):
         self.connected.clear()
@@ -1086,7 +1097,7 @@ class DeviceAsync(object):
         self.writer = None
         self.reader = None
         self.cache_clear()
-        if self._device_lock.locked() and self._close_task:
+        if (self._recv_lock.locked() or self._send_lock.locked()) and self._close_task:
             # we are not being called from _run_close() if the lock has been acquired by someone
             self._close_task.cancel()
             await self._close_task
@@ -1105,7 +1116,7 @@ class DeviceAsync(object):
             await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             return
-        if self._device_lock.locked() or self._recv_lock.locked():
+        if self._send_lock.locked() or self._recv_lock.locked() or self._conn_lock.locked():
             # someone is using the socket
             return
         await self._close()
@@ -1337,15 +1348,16 @@ class DeviceAsync(object):
         while not self._stop_receiving.is_set():
             if not self.connected.is_set():
                 if auto_open:
-                    async with self._device_lock:
-                        if await self._ensure_connection():
-                            # error connecting!
-                            try:
-                                await asyncio.wait_for(self._stop_receiving.wait(), timeout=2)
-                                break
-                            except:
-                                pass
-                            continue
+                    async with self._recv_lock:
+                        async with self._send_lock:
+                            if await self._ensure_connection():
+                                # error connecting!
+                                try:
+                                    await asyncio.wait_for(self._stop_receiving.wait(), timeout=2)
+                                    break
+                                except:
+                                    pass
+                                continue
                 else:
                     try:
                         await asyncio.wait_for(self._stop_receiving.wait(), timeout=2)
@@ -1355,7 +1367,7 @@ class DeviceAsync(object):
                     continue
 
             if not recv_task:
-                recv_task = asyncio.create_task( self._send_receive_locked(None, getresponse=True, timeout=None, retry=False) )
+                recv_task = asyncio.create_task( self._send_receive(None, getresponse=True, timeout=None, retry=False) )
             aws = (stop_task, recv_task)
             done, pending = await asyncio.wait( aws, return_when=asyncio.FIRST_COMPLETED )
             for tsk in done:
@@ -1373,7 +1385,7 @@ class DeviceAsync(object):
 
     async def stop_receiving(self):
         self._stop_receiving.set()
-        async with self._device_lock:
+        async with self._send_lock:
             self._close()
 
     async def updatedps(self, index=None):
