@@ -36,7 +36,7 @@ async def test_device_async_send_nowait(monkeypatch):
     monkeypatch.setattr(dev, '_send_receive', fake_send_receive)
 
     # nowait path (getresponse False) via send()
-    result = await dev.send(b'rawpayload')
+    result = await dev._send(b'rawpayload')
     assert sent['called'] is True
     assert result is None
 
