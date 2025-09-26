@@ -944,7 +944,7 @@ class DeviceAsync(object):
         """
         return await self._send_receive(None, timeout=timeout)
 
-    async def send(self, payload):
+    async def _send(self, payload):
         """
         Send single buffer `payload`.
 
