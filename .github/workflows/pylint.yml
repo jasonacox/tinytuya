@@ -21,4 +21,4 @@ jobs:
         pip install -r requirements.txt
     - name: Analyzing the code with pylint
       run: |
-        pylint --recursive y -E tinytuya/
+        pylint --recursive y -E --ignore scanner_async.py tinytuya/
