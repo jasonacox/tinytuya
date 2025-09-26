@@ -120,10 +120,6 @@ class DeviceAsync(object):
         self._rcv2_lock = asyncio.Lock()
         self._conn_lock = asyncio.Lock()
         self.connected = asyncio.Event()
-        self._stop_heartbeats = asyncio.Event()
-        self._stop_heartbeats.set()
-        self._stop_receiving = asyncio.Event()
-        self._stop_receiving.set()
         self._close_task = None
 
         if self.parent:
@@ -155,15 +151,20 @@ class DeviceAsync(object):
     async def _defer_callbacks(self, delay=True, pause=False):
         if self._deferred_task and not self._deferred_task_running:
             if (not (delay or pause)) or self._deferred_task.done():
-                self._deferred_task.cancel()
-                await self._deferred_task
+                deferred = self._deferred_task
                 self._deferred_task = None
+                print('cancelling CB task')
+                deferred.cancel()
+                await deferred
+                print('CB task cancelled')
         if self._deferred_callbacks and (not self._deferred_task) and (not pause):
             if delay:
-                print('deferring cb for 100ms')
+                print('deferring cb for 100ms', len(self._deferred_callbacks))
                 self._deferred_task = asyncio.create_task( self._run_deferred_callbacks_later() )
             else:
-                print('scheduling cb immediately')
+                print('scheduling cb immediately', len(self._deferred_callbacks))
+                # run immediate task doe snto support cancelling, so mark as running
+                self._deferred_task_running = True
                 self._deferred_task = asyncio.create_task( self._run_deferred_callbacks() )
 
     async def _run_deferred_callbacks(self):
@@ -1321,72 +1322,45 @@ class DeviceAsync(object):
         log.debug("heartbeat received data=%r", data)
         return data
 
-    async def start_heartbeats(self, auto_open=False):
-        self._stop_heartbeats.clear()
-        while True:
-            try:
-                await asyncio.wait_for(self._stop_heartbeats.wait(), timeout=9)
-                break
-            except asyncio.TimeoutError:
-                pass
-            if not self.connected.is_set():
-                if not auto_open:
-                    # FIXME this will block stop_heartbeats()
-                    await self.connected.wait()
-                    continue
+    async def heartbeat_task(self, auto_open=False):
+        return await self._run_task(self._heartbeat_task_action, auto_open=auto_open)
+
+    async def _heartbeat_task_action(self):
+        await asyncio.sleep(9)
+        if self.connected.is_set():
             await self.heartbeat()
 
-    async def stop_heartbeats(self):
-        self._stop_heartbeats.set()
+    async def receive_task(self, auto_open=False):
+        return await self._run_task(self._receive_task_action, auto_open=auto_open)
 
-    async def start_receiving(self, auto_open=False):
-        self.socketPersistent = True
-        self._stop_receiving.clear()
-        recv_task = None
-        stop_task = asyncio.create_task( self._stop_receiving.wait() )
+    async def _receive_task_action(self):
+        msg = await self._send_receive(None, getresponse=True, timeout=None, retry=False)
 
-        while not self._stop_receiving.is_set():
-            if not self.connected.is_set():
-                if auto_open:
-                    async with self._recv_lock:
-                        async with self._send_lock:
-                            if await self._ensure_connection():
-                                # error connecting!
-                                try:
-                                    await asyncio.wait_for(self._stop_receiving.wait(), timeout=2)
-                                    break
-                                except:
-                                    pass
-                                continue
-                else:
-                    try:
-                        await asyncio.wait_for(self._stop_receiving.wait(), timeout=2)
-                        break
-                    except:
-                        pass
-                    continue
+    async def _run_task(self, task, auto_open=False):
+        if auto_open:
+            self.socketPersistent = True
 
-            if not recv_task:
-                recv_task = asyncio.create_task( self._send_receive(None, getresponse=True, timeout=None, retry=False) )
-            aws = (stop_task, recv_task)
-            done, pending = await asyncio.wait( aws, return_when=asyncio.FIRST_COMPLETED )
-            for tsk in done:
-                if tsk is recv_task:
-                    await recv_task
-                    recv_task = None
-                # else it's the stop_task and we'll break out of the loop
+        try:
+            while True:
+                if not self.connected.is_set():
+                    if auto_open:
+                        async with self._recv_lock:
+                            async with self._send_lock:
+                                if await self._ensure_connection():
+                                    # error connecting!
+                                    await asyncio.sleep(2)
+                                    continue
+                    else:
+                        try:
+                            await self.connected.wait()
+                        except Exception as e:
+                            print('got conn wait exception:', e)
+                        continue
 
-        if recv_task:
-            recv_task.cancel()
-            await recv_task
-        if stop_task:
-            stop_task.cancel()
-            await stop_task
-
-    async def stop_receiving(self):
-        self._stop_receiving.set()
-        async with self._send_lock:
-            self._close()
+                await task()
+        except asyncio.CancelledError as e:
+            print('got cancelled exception:', e)
+            pass
 
     async def updatedps(self, index=None):
         """
