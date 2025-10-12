@@ -12,9 +12,17 @@
 
  Functions
     CoverDevice:
-        open_cover(switch=1):
-        close_cover(switch=1):
-        stop_cover(switch=1):
+        open_cover(switch=1, nowait=False)   # Open the cover
+        close_cover(switch=1, nowait=False)  # Close the cover
+        stop_cover(switch=1, nowait=False)   # Stop the cover motion
+        set_cover_command_type(use_open_close=True)  # Manually set command type
+
+ Notes
+    CoverDevice will automatically detect the command type used by the device:
+    - Some devices use "open"/"close" commands
+    - Other devices use "on"/"off" commands  
+    Detection occurs on first open_cover() or close_cover() call by checking
+    the device status. Defaults to "on"/"off" for backward compatibility.
 
     Inherited
         json = status()                    # returns json payload
@@ -56,13 +64,59 @@ class CoverDevice(Device):
         "101": "backlight",
     }
 
+    def __init__(self, *args, **kwargs):
+        super(CoverDevice, self).__init__(*args, **kwargs)
+        self._cover_commands_detected = False
+        self._use_open_close = False  # Default to "on"/"off"
+
+    def _detect_cover_commands(self):
+        """
+        Lazy detection of cover command type by checking device status.
+        Some devices use "open"/"close", others use "on"/"off".
+        This method is called automatically on first open/close command.
+        """
+        if self._cover_commands_detected:
+            return
+
+        try:
+            result = self.status()
+            if result and 'dps' in result:
+                dps_value = result['dps'].get(self.DPS_INDEX_MOVE)
+                if dps_value in ['open', 'close']:
+                    self._use_open_close = True
+                # else: keep default False (use "on"/"off")
+        except Exception:
+            # If status check fails, stick with default "on"/"off"
+            pass
+        
+        self._cover_commands_detected = True
+
+    def set_cover_command_type(self, use_open_close=True):
+        """
+        Manually set the cover command type.
+        
+        Args:
+            use_open_close (bool): If True, uses "open"/"close" commands.
+                                   If False, uses "on"/"off" commands.
+        
+        Example:
+            cover.set_cover_command_type(True)   # Use "open"/"close"
+            cover.set_cover_command_type(False)  # Use "on"/"off"
+        """
+        self._use_open_close = use_open_close
+        self._cover_commands_detected = True  # Prevent auto-detection
+
     def open_cover(self, switch=1, nowait=False):
         """Open the cover"""
-        self.set_status("on", switch, nowait=nowait)
+        self._detect_cover_commands()
+        command = "open" if self._use_open_close else "on"
+        self.set_status(command, switch, nowait=nowait)
 
     def close_cover(self, switch=1, nowait=False):
         """Close the cover"""
-        self.set_status("off", switch, nowait=nowait)
+        self._detect_cover_commands()
+        command = "close" if self._use_open_close else "off"
+        self.set_status(command, switch, nowait=nowait)
 
     def stop_cover(self, switch=1, nowait=False):
         """Stop the motion of the cover"""

@@ -236,9 +236,14 @@ BulbDevice Additional Functions
     result = state():
 
 CoverDevice Additional Functions
-    open_cover(switch=1):
-    close_cover(switch=1):
-    stop_cover(switch=1):
+    open_cover(switch=1, nowait=False):
+    close_cover(switch=1, nowait=False):
+    stop_cover(switch=1, nowait=False):
+    set_cover_command_type(use_open_close=True):  # Manually set command type ("open"/"close" vs "on"/"off")
+    
+    Note: CoverDevice automatically detects whether the device uses "open"/"close" or 
+          "on"/"off" commands by checking the device status on first use. You can manually
+          override this detection using set_cover_command_type() if needed.
 
 Cloud Functions
     setregion(apiRegion)
@@ -348,6 +353,30 @@ d.set_mode('scene')
 
 # Scene Example: Set Color Rotation Scene
 d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+
+"""
+Cover Device (Window Shade)
+"""
+c = tinytuya.CoverDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+c.set_version(3.3)
+data = c.status()
+
+# Show status
+print('Dictionary %r' % data)
+
+# Open the cover
+c.open_cover()
+
+# Close the cover  
+c.close_cover()
+
+# Stop the cover
+c.stop_cover()
+
+# Manually set command type if auto-detection doesn't work
+# Some devices use "open"/"close", others use "on"/"off"
+c.set_cover_command_type(True)   # Use "open"/"close" commands
+c.set_cover_command_type(False)  # Use "on"/"off" commands
 
 ```
 ### Example Device Monitor

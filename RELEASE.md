@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.17.5 - CoverDevice Command Detection
+
+* CoverDevice: Add automatic detection of device command type ("open"/"close" vs "on"/"off") by lazy polling device status on first use. This allows CoverDevice to work with both device types without manual configuration. Defaults to "on"/"off" for backward compatibility.
+
 ## 1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
