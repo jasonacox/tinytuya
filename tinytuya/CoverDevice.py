@@ -12,15 +12,15 @@
 
  Functions
     CoverDevice:
-        open_cover(switch=1, nowait=False)   # Open the cover
-        close_cover(switch=1, nowait=False)  # Close the cover
-        stop_cover(switch=1, nowait=False)   # Stop the cover motion
-        set_cover_command_type(use_open_close=True)  # Manually set command type
+        open_cover(switch=None, nowait=False)       # Open the cover (switch defaults to DPS_INDEX_MOVE)
+        close_cover(switch=None, nowait=False)      # Close the cover (switch defaults to DPS_INDEX_MOVE)
+        stop_cover(switch=None, nowait=False)       # Stop the cover motion (switch defaults to DPS_INDEX_MOVE)
+        set_cover_command_type(use_open_close=True) # Manually set command type
 
  Notes
     CoverDevice will automatically detect the command type used by the device:
     - Some devices use "open"/"close" commands
-    - Other devices use "on"/"off" commands  
+    - Other devices use "on"/"off" commands
     Detection occurs on first open_cover() or close_cover() call by checking
     the device status. Defaults to "on"/"off" for backward compatibility.
 
@@ -69,26 +69,34 @@ class CoverDevice(Device):
         self._cover_commands_detected = False
         self._use_open_close = False  # Default to "on"/"off"
 
-    def _detect_cover_commands(self):
+    def _detect_cover_commands(self, switch=None):
         """
         Lazy detection of cover command type by checking device status.
         Some devices use "open"/"close", others use "on"/"off".
         This method is called automatically on first open/close command.
+        
+        Args:
+            switch (str/int): The DPS index to check for command type detection.
+                            Defaults to DPS_INDEX_MOVE if not specified.
         """
         if self._cover_commands_detected:
             return
 
+        if switch is None:
+            switch = self.DPS_INDEX_MOVE
+
         try:
             result = self.status()
             if result and 'dps' in result:
-                dps_value = result['dps'].get(self.DPS_INDEX_MOVE)
+                dps_key = str(switch)
+                dps_value = result['dps'].get(dps_key)
                 if dps_value in ['open', 'close']:
                     self._use_open_close = True
                 # else: keep default False (use "on"/"off")
         except Exception:
             # If status check fails, stick with default "on"/"off"
             pass
-        
+
         self._cover_commands_detected = True
 
     def set_cover_command_type(self, use_open_close=True):
@@ -106,18 +114,24 @@ class CoverDevice(Device):
         self._use_open_close = use_open_close
         self._cover_commands_detected = True  # Prevent auto-detection
 
-    def open_cover(self, switch=1, nowait=False):
+    def open_cover(self, switch=None, nowait=False):
         """Open the cover"""
-        self._detect_cover_commands()
+        if switch is None:
+            switch = self.DPS_INDEX_MOVE
+        self._detect_cover_commands(switch)
         command = "open" if self._use_open_close else "on"
         self.set_status(command, switch, nowait=nowait)
 
-    def close_cover(self, switch=1, nowait=False):
+    def close_cover(self, switch=None, nowait=False):
         """Close the cover"""
-        self._detect_cover_commands()
+        if switch is None:
+            switch = self.DPS_INDEX_MOVE
+        self._detect_cover_commands(switch)
         command = "close" if self._use_open_close else "off"
         self.set_status(command, switch, nowait=nowait)
 
-    def stop_cover(self, switch=1, nowait=False):
+    def stop_cover(self, switch=None, nowait=False):
         """Stop the motion of the cover"""
+        if switch is None:
+            switch = self.DPS_INDEX_MOVE
         self.set_status("stop", switch, nowait=nowait)
