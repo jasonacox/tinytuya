@@ -236,14 +236,23 @@ BulbDevice Additional Functions
     result = state():
 
 CoverDevice Additional Functions
-    open_cover(switch=1, nowait=False):
-    close_cover(switch=1, nowait=False):
-    stop_cover(switch=1, nowait=False):
-    set_cover_command_type(use_open_close=True):  # Manually set command type ("open"/"close" vs "on"/"off")
+    open_cover(switch=None, nowait=False):
+    close_cover(switch=None, nowait=False):
+    stop_cover(switch=None, nowait=False):
+    continue_cover(switch=None, nowait=False):
+    set_cover_type(cover_type):                  # Manually set cover type (1-8)
     
-    Note: CoverDevice automatically detects whether the device uses "open"/"close" or 
-          "on"/"off" commands by checking the device status on first use. You can manually
-          override this detection using set_cover_command_type() if needed.
+    CoverDevice automatically detects one of 8 device types by checking status:
+      Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades
+      Type 2: [true, false]                         - Simple relays, garage doors, locks
+      Type 3: ["0", "1", "2"]                       - String-numeric position/state
+      Type 4: [1, 2, 3]                             - Integer-numeric position/state
+      Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
+      Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close (default)
+      Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
+      Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style)
+    
+    You can manually override detection using set_cover_type(type_id) if needed.
 
 Cloud Functions
     setregion(apiRegion)
@@ -364,6 +373,9 @@ data = c.status()
 # Show status
 print('Dictionary %r' % data)
 
+# CoverDevice will automatically detect the device type (1-8)
+# and use the appropriate commands
+
 # Open the cover
 c.open_cover()
 
@@ -373,10 +385,11 @@ c.close_cover()
 # Stop the cover
 c.stop_cover()
 
-# Manually set command type if auto-detection doesn't work
-# Some devices use "open"/"close", others use "on"/"off"
-c.set_cover_command_type(True)   # Use "open"/"close" commands
-c.set_cover_command_type(False)  # Use "on"/"off" commands
+# Continue cover motion (if supported by device type)
+c.continue_cover()
+
+# Manually set cover type if auto-detection doesn't work
+c.set_cover_type(1)   # Force Type 1 (open/close/stop/continue)
 
 ```
 ### Example Device Monitor
