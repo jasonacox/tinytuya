@@ -21,7 +21,7 @@
  Notes
     CoverDevice automatically detects the device type (1-8) based on status response:
     
-    Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades
+    Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
     Type 2: [true, false]                         - Simple relays, garage doors, locks  
     Type 3: ["0", "1", "2"]                       - String-numeric position/state
     Type 4: [1, 2, 3]                             - Integer-numeric position/state
@@ -31,8 +31,9 @@
     Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style)
     
     Credit for discovery: @make-all in https://github.com/jasonacox/tinytuya/issues/653
-    Detection occurs on first command by checking device status. You can manually
-    override using set_cover_type(type_id) if needed.
+    Detection occurs on first command by checking device status. Uses priority ordering
+    to handle overlapping values (Type 1 has highest priority). Defaults to Type 1 if
+    detection fails. You can manually override using set_cover_type(type_id) if needed.
 
     Inherited
         json = status()                    # returns json payload
@@ -70,6 +71,7 @@ class CoverDevice(Device):
 
     DPS_INDEX_MOVE = "1"
     DPS_INDEX_BL = "101"
+    DEFAULT_COVER_TYPE = 1  # Default to Type 1 (most common)
 
     DPS_2_STATE = {
         "1": "movement",
@@ -144,6 +146,8 @@ class CoverDevice(Device):
     def _detect_cover_type(self, switch=None):
         """
         Automatically detect the cover device type (1-8) by checking device status.
+        Uses priority ordering to handle overlapping values (e.g., 'stop' appears in Types 1, 6, 7).
+        Type 1 has highest priority as it's the most comprehensive.
         
         Args:
             switch (str/int): The DPS index to check. Defaults to DPS_INDEX_MOVE.
@@ -154,8 +158,8 @@ class CoverDevice(Device):
         if switch is None:
             switch = self.DPS_INDEX_MOVE
 
-        # Set default to Type 6 (on/off/stop) before attempting detection
-        self._cover_type = 6
+        # Set default to Type 1 (most comprehensive) before attempting detection
+        self._cover_type = self.DEFAULT_COVER_TYPE
 
         try:
             result = self.status()
@@ -164,14 +168,17 @@ class CoverDevice(Device):
                 dps_value = result['dps'].get(dps_key)
                 
                 # Try to match the current value to a known cover type
+                # Priority order: 1, 8, 7, 5, 4, 3, 2, 6 (most specific to least specific)
                 if dps_value is not None:
-                    for type_id, type_info in self.COVER_TYPES.items():
+                    priority_order = [1, 8, 7, 5, 4, 3, 2, 6]
+                    for type_id in priority_order:
+                        type_info = self.COVER_TYPES[type_id]
                         if dps_value in type_info['detect_values']:
                             self._cover_type = type_id
                             break
                     
         except Exception:
-            # If status check fails, use default Type 6 (on/off/stop)
+            # If status check fails, use default Type 1
             pass
         
         self._cover_type_detected = True

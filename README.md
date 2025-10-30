@@ -243,16 +243,17 @@ CoverDevice Additional Functions
     set_cover_type(cover_type):                  # Manually set cover type (1-8)
     
     CoverDevice automatically detects one of 8 device types by checking status:
-      Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades
+      Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
       Type 2: [true, false]                         - Simple relays, garage doors, locks
       Type 3: ["0", "1", "2"]                       - String-numeric position/state
       Type 4: [1, 2, 3]                             - Integer-numeric position/state
       Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
-      Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close (default)
+      Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close
       Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
       Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style)
     
-    You can manually override detection using set_cover_type(type_id) if needed.
+    Detection uses priority ordering to handle overlapping values. Type 1 has highest priority.
+    Defaults to Type 1 if detection fails. Manual override: set_cover_type(type_id).
 
 Cloud Functions
     setregion(apiRegion)
