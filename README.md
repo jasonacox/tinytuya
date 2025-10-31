@@ -246,14 +246,15 @@ CoverDevice Additional Functions
       Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
       Type 2: [true, false]                         - Simple relays, garage doors, locks
       Type 3: ["0", "1", "2"]                       - String-numeric position/state
-      Type 4: [1, 2, 3]                             - Integer-numeric position/state
+      Type 4: ["00", "01", "02", "03"]              - Zero-prefixed numeric position/state
       Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
       Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close
       Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
-      Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style)
+      Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style, older standard)
     
-    Detection uses priority ordering to handle overlapping values. Type 1 has highest priority.
+    Detection uses priority ordering based on real-world frequency (Type 1 → Type 8 → Type 3 → others).
     Defaults to Type 1 if detection fails. Manual override: set_cover_type(type_id).
+    Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain).
 
 Cloud Functions
     setregion(apiRegion)

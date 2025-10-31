@@ -6,16 +6,17 @@
   * Type 1: `["open", "close", "stop", "continue"]` - Most curtains, blinds, roller shades (DEFAULT)
   * Type 2: `[true, false]` - Simple relays, garage doors, locks
   * Type 3: `["0", "1", "2"]` - String-numeric position/state
-  * Type 4: `[1, 2, 3]` - Integer-numeric position/state
+  * Type 4: `["00", "01", "02", "03"]` - Zero-prefixed numeric position/state
   * Type 5: `["fopen", "fclose"]` - Directional binary (no stop)
   * Type 6: `["on", "off", "stop"]` - Switch-lexicon
   * Type 7: `["up", "down", "stop"]` - Vertical-motion (lifts, hoists)
-  * Type 8: `["ZZ", "FZ", "STOP"]` - Vendor-specific (Abalon-style)
+  * Type 8: `["ZZ", "FZ", "STOP"]` - Vendor-specific (Abalon-style, older standard)
 * Added `continue_cover()` method for device types that support it (Types 1 and 4)
 * Added `set_cover_type(type_id)` method to manually override auto-detection
 * Added `DEFAULT_COVER_TYPE` constant set to Type 1 (most comprehensive)
-* Device type is automatically detected on first command using priority ordering to handle overlapping values
-* Type 1 has highest priority in detection to avoid misidentification
+* Device type is automatically detected on first command using priority ordering based on real-world frequency:
+  * Priority: Type 1 (most common) → Type 8 (second most common, older standard) → Type 3 → others
+  * Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain)
 * Defaults to Type 1 if detection fails for best compatibility
 
 ## 1.17.4 - Cloud Config

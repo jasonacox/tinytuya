@@ -24,16 +24,23 @@
     Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
     Type 2: [true, false]                         - Simple relays, garage doors, locks  
     Type 3: ["0", "1", "2"]                       - String-numeric position/state
-    Type 4: [1, 2, 3]                             - Integer-numeric position/state
+    Type 4: ["00", "01", "02", "03"]              - Zero-prefixed numeric position/state
     Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
     Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close
     Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
-    Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style)
+    Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style, older standard)
     
     Credit for discovery: @make-all in https://github.com/jasonacox/tinytuya/issues/653
     Detection occurs on first command by checking device status. Uses priority ordering
     to handle overlapping values (Type 1 has highest priority). Defaults to Type 1 if
     detection fails. You can manually override using set_cover_type(type_id) if needed.
+    
+    Common DPS IDs:
+    - DPS 1: Most common for cover control
+    - DPS 101: Second most common (often backlight or secondary function)
+    - DPS 4: Commonly used for second curtain in dual-curtain devices
+      (DPS 2 and 3 typically for position write/read, DPS 5 and 6 for second curtain,
+       with configuration and timers starting from DPS 7 onward)
 
     Inherited
         json = status()                    # returns json payload
@@ -101,12 +108,12 @@ class CoverDevice(Device):
             'continue': None,
             'detect_values': ['0', '1', '2']
         },
-        4: {  # Integer-numeric index class
-            'open': 1,
-            'close': 2,
-            'stop': 0,
-            'continue': 3,
-            'detect_values': [0, 1, 2, 3]
+        4: {  # Zero-prefixed numeric index class
+            'open': '01',
+            'close': '02',
+            'stop': '00',
+            'continue': '03',
+            'detect_values': ['00', '01', '02', '03']
         },
         5: {  # Directional binary class
             'open': 'fopen',
@@ -168,9 +175,13 @@ class CoverDevice(Device):
                 dps_value = result['dps'].get(dps_key)
                 
                 # Try to match the current value to a known cover type
-                # Priority order: 1, 8, 7, 5, 4, 3, 2, 6 (most specific to least specific)
+                # Priority order: 1, 8, 3, 4, 5, 7, 2, 6 (most common to least common)
+                # Type 1: Most common (comprehensive standard)
+                # Type 8: Second most common (older vendor standard)
+                # Type 3: Third most common (string-numeric)
+                # Others: Rare variations
                 if dps_value is not None:
-                    priority_order = [1, 8, 7, 5, 4, 3, 2, 6]
+                    priority_order = [1, 8, 3, 4, 5, 7, 2, 6]
                     for type_id in priority_order:
                         type_info = self.COVER_TYPES[type_id]
                         if dps_value in type_info['detect_values']:
