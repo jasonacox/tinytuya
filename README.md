@@ -956,6 +956,7 @@ wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
   * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
   * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
   * https://github.com/TradeFace/tuyaface - Python Async Tuya API
+  * https://github.com/sjhorn/tinytuya - Dart Flutter port of TinyTuya based on this code base
 
 ## TinyTuya Powered Projects
 
