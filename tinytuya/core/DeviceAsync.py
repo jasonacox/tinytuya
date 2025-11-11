@@ -610,7 +610,7 @@ class DeviceAsync(object):
                 dev_type,
                 self.dev_type,
             )
-
+            result = error_json(ERR_DEVTYPE)
             #log.debug("status() rebuilding payload for device22")
             #payload = self._generate_payload(query_type)
             #data = await self._send_receive(payload)
