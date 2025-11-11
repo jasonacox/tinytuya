@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # Modules
-from __future__ import print_function  # python 2.7 support
 import binascii
 from collections import namedtuple
 import base64
@@ -96,8 +95,6 @@ SUFFIX_6699_BIN = b"\x00\x00\x99\x66"
 
 NO_PROTOCOL_HEADER_CMDS = [DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, SESS_KEY_NEG_START, SESS_KEY_NEG_RESP, SESS_KEY_NEG_FINISH, LAN_EXT_STREAM ]
 
-# Python 2 Support
-IS_PY2 = sys.version_info[0] == 2
 
 # Tuya Packet Format
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
@@ -241,21 +238,11 @@ class AESCipher(object):
 
 # Misc Helpers
 def bin2hex(x, pretty=False):
-    if pretty:
-        space = " "
-    else:
-        space = ""
-    if IS_PY2:
-        result = "".join("%02X%s" % (ord(y), space) for y in x)
-    else:
-        result = "".join("%02X%s" % (y, space) for y in x)
-    return result
+    space = " " if pretty else ""
+    return "".join("%02X%s" % (y, space) for y in x)
 
 def hex2bin(x):
-    if IS_PY2:
-        return x.decode("hex")
-    else:
-        return bytes.fromhex(x)
+    return bytes.fromhex(x)
 
 def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""

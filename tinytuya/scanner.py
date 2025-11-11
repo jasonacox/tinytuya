@@ -13,7 +13,6 @@ Description
 
 """
 # Modules
-from __future__ import print_function
 from collections import namedtuple
 import ipaddress
 import json
@@ -42,11 +41,6 @@ HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 #except:
 #    SCANLIBS = False
 
-# Backward compatibility for python2
-try:
-    input = raw_input
-except NameError:
-    pass
 
 try:
     import netifaces # pylint: disable=E0401
@@ -379,8 +373,8 @@ class DeviceDetect(object):
                 r = self.sock.recv( 5000 )
                 if self.debug:
                     print('Debug sock', self.ip, 'closed but received data?? Received:', r)
-            # ugh, ConnectionResetError and ConnectionRefusedError are not available on python 2.7
-            #except ConnectionResetError:
+            # Connection retry logic
+            #except ConnectionResetError:  # Python 3 specific
             except OSError as e:
                 if self.initial_connect_retries and e.errno == errno.ECONNRESET:
                     # connected, but then closed
@@ -1060,8 +1054,6 @@ def scan(scantime=None, color=True, forcescan=False, discover=True, assume_yes=F
 
 def _generate_ip(networks, verbose, term):
     for netblock in networks:
-        if tinytuya.IS_PY2 and type(netblock) == str:
-            netblock = netblock.decode('latin1')
         try:
             network = ipaddress.ip_network(netblock, strict=False)
             log.debug("Starting brute force network scan %s", network)
