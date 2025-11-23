@@ -24,7 +24,7 @@ try:
 except:
     HAVE_ARGCOMPLETE = False
 
-from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
+from . import wizard, wizard2, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, CONFIGFILE2, RAWFILE, set_debug
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -38,7 +38,8 @@ parser.add_argument( '-v', '--version', help='Display version information', acti
 subparser = parser.add_subparsers( dest='command', title='commands (run <command> -h to see usage information)' )
 subparsers = {}
 cmd_list = {
-    'wizard': 'Launch Setup Wizard to get Device Local Keys',
+    'wizard': 'Launch Legacy Setup Wizard (API Key)',
+    'wizard2': 'Launch New Setup Wizard (QR Code)',
     'scan': 'Scan local network for Tuya devices',
     'devices': 'Scan all devices listed in device-file',
     'snapshot': 'Scan devices listed in snapshot-file',
@@ -59,10 +60,14 @@ for sp in cmd_list:
         if sp != 'scan':
             subparsers[sp].add_argument( '-no-poll', '-no', help='Answer "no" to "Poll?" (overrides -yes)', action='store_true' )
 
-    if sp == 'wizard':
-        help = 'JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE
-        subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
-        subparsers[sp].add_argument( '-raw-response-file', help='JSON file to save the raw server response to [Default: %s]' % RAWFILE, default=RAWFILE, metavar='FILE' )
+    if sp == 'wizard' or sp == 'wizard2':
+        help_text = 'JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE
+        if sp == 'wizard':
+            subparsers[sp].add_argument( '-raw-response-file', help='JSON file to save the raw server response to [Default: %s]' % RAWFILE, default=RAWFILE, metavar='FILE' )
+        if sp == 'wizard2':
+            subparsers[sp].add_argument( '-user-code', type=str, default="", help='User Code from SmartLife or Tuya App' )
+            subparsers[sp].add_argument( '-credentials-file', type=str, default=CONFIGFILE2, help='JSON file to load/save Cloud credentials from/to [Default: %s]' % CONFIGFILE2 )
+        subparsers[sp].add_argument( '-device-file', help=help_text, default=DEVICEFILE, metavar='FILE' )
     else:
         help = 'JSON file to load devices from [Default: %s]' % DEVICEFILE
         subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
@@ -140,6 +145,18 @@ elif args.command == 'wizard':
     if args.device:
         creds['apiDeviceID'] = ','.join(sum(args.device, []))
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
+elif args.command == 'wizard2':
+    wizard2.wizard2(
+        args.user_code,
+        color=(not args.nocolor),
+        retries=args.max_time,
+        forcescan=args.force,
+        assume_yes=args.yes,
+        skip_poll=args.no_poll,
+        DEVICEFILE=args.device_file,
+        SNAPSHOTFILE=args.snapshot_file,
+        CREDSFILE=args.credentials_file
+    )
 else:
     # No command selected - show help
     parser.print_help()

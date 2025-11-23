@@ -14,6 +14,7 @@ DEFAULT_NETWORK = '192.168.0.0/24'
 
 # Configuration Files
 CONFIGFILE = 'tinytuya.json'
+CONFIGFILE2 = 'tuyacreds.json'
 DEVICEFILE = 'devices.json'
 RAWFILE = 'tuya-raw.json'
 SNAPSHOTFILE = 'snapshot.json'
