@@ -968,7 +968,9 @@ Please feel free to submit a PR or open an issue to add your project.
 * https://github.com/teejo75/mtghs - Provides an HTTP service for Moonraker to control Tuya outlets.
 * https://github.com/Xenomes/Domoticz-TinyTUYA-Plugin - Plugin for Domoticz Home Automation
 * https://github.com/CmdrAvegan/AmbiTuya - Ambient lighting system for Tuya-based LED strips,
-
+* https://github.com/3735943886/tuya2mqtt - A TinyTuya-based bridge for connecting Tuya devices to MQTT
+* https://github.com/3735943886/tinytuya_wizard - An interactive wizard utilizing the new QR code-based authentication
+  
 ## Contributors
 
 <a href="https://github.com/jasonacox/tinytuya/graphs/contributors">
