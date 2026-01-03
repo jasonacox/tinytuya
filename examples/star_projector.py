@@ -5,6 +5,8 @@ from typing import Tuple, List
 """
     Works with the Star Projector:
     https://www.amazon.com.au/Anyuainiya-Projector-Christmas-Compatible-Adjustable/dp/B0BL9XTLMZ
+
+     Author: Andy Voigt
 """
 
 
