@@ -1,7 +1,3 @@
-import colorsys
-import tinytuya
-from typing import Tuple, List
-
 """
     Works with the Star Projector:
     https://www.amazon.com.au/Anyuainiya-Projector-Christmas-Compatible-Adjustable/dp/B0BL9XTLMZ
@@ -9,6 +5,9 @@ from typing import Tuple, List
      Author: Andy Voigt
 """
 
+import colorsys
+import tinytuya
+from typing import Tuple, List
 
 HSV = Tuple[float, float, float]
 MODES = ['manual', 'scene', 'music']
@@ -55,7 +54,7 @@ class GalaxyProjectorState:
 
     @property
     def rotation_speed_percent(self):
-        return self.dps['62']  # fan_speed is 1-100%
+        return self.dps['62']  # rotation_speed is 1-100%
 
     @property
     def nebula_hsv(self) -> HSV:
