@@ -7,7 +7,7 @@
 
 import colorsys
 import tinytuya
-from typing import Tuple, List
+from typing import Tuple
 
 HSV = Tuple[float, float, float]
 MODES = ['manual', 'scene', 'music']
