@@ -236,9 +236,25 @@ BulbDevice Additional Functions
     result = state():
 
 CoverDevice Additional Functions
-    open_cover(switch=1):
-    close_cover(switch=1):
-    stop_cover(switch=1):
+    open_cover(switch=None, nowait=False):
+    close_cover(switch=None, nowait=False):
+    stop_cover(switch=None, nowait=False):
+    continue_cover(switch=None, nowait=False):
+    set_cover_type(cover_type):                  # Manually set cover type (1-8)
+    
+    CoverDevice automatically detects one of 8 device types by checking status:
+      Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
+      Type 2: [true, false]                         - Simple relays, garage doors, locks
+      Type 3: ["0", "1", "2"]                       - String-numeric position/state
+      Type 4: ["00", "01", "02", "03"]              - Zero-prefixed numeric position/state
+      Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
+      Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close
+      Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
+      Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style, older standard)
+    
+    Detection uses priority ordering based on real-world frequency (Type 1 → Type 8 → Type 3 → others).
+    Defaults to Type 1 if detection fails. Manual override: set_cover_type(type_id).
+    Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain).
 
 Cloud Functions
     setregion(apiRegion)
@@ -348,6 +364,34 @@ d.set_mode('scene')
 
 # Scene Example: Set Color Rotation Scene
 d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
+
+"""
+Cover Device (Window Shade)
+"""
+c = tinytuya.CoverDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+c.set_version(3.3)
+data = c.status()
+
+# Show status
+print('Dictionary %r' % data)
+
+# CoverDevice will automatically detect the device type (1-8)
+# and use the appropriate commands
+
+# Open the cover
+c.open_cover()
+
+# Close the cover  
+c.close_cover()
+
+# Stop the cover
+c.stop_cover()
+
+# Continue cover motion (if supported by device type)
+c.continue_cover()
+
+# Manually set cover type if auto-detection doesn't work
+c.set_cover_type(1)   # Force Type 1 (open/close/stop/continue)
 
 ```
 ### Example Device Monitor
