@@ -1,7 +1,8 @@
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 """
- Python module to interface with Tuya WiFi smart devices
+ Python module to interface with Tuya WiFi smart devices.
+ (Python 3 only as of v2.0.0 – legacy Python 2 support removed.)
 
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
@@ -76,7 +77,6 @@
 """
 
 # Modules
-from __future__ import print_function  # python 2.7 support
 import logging
 import sys
 
@@ -90,45 +90,24 @@ HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
 from .crypto_helper import AESCipher
 
-# Backward compatibility for python2
-try:
-    input = raw_input
-except NameError:
-    pass
-
 
 # Colorama terminal color capability for all platforms
 if HAVE_COLORAMA:
     init()
 
-version_tuple = (1, 17, 4)  # Major, Minor, Patch
+version_tuple = (2, 0, 0)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
 log = logging.getLogger(__name__)
 
 
-# Python 2 Support
-IS_PY2 = sys.version_info[0] == 2
-
-
-# Misc Helpers
 def bin2hex(x, pretty=False):
-    if pretty:
-        space = " "
-    else:
-        space = ""
-    if IS_PY2:
-        result = "".join("%02X%s" % (ord(y), space) for y in x)
-    else:
-        result = "".join("%02X%s" % (y, space) for y in x)
-    return result
+    space = " " if pretty else ""
+    return "".join("%02X%s" % (b, space) for b in x)
 
 def hex2bin(x):
-    if IS_PY2:
-        return x.decode("hex")
-    else:
-        return bytes.fromhex(x)
+    return bytes.fromhex(x)
 
 def set_debug(toggle=True, color=True):
     """Enable tinytuya verbose logging"""
@@ -183,6 +162,28 @@ def assign_dp_mappings( tuyadevices, mappings ):
             log.debug( 'Device %s has no mapping!', devid )
             dev['mapping'] = None
 
+
+def merge_dps_results(dest, src):
+    """Merge multiple receive() responses into a single dict
+
+    `src` will be combined with and merged into `dest`
+    """
+    if src and isinstance(src, dict) and 'Error' not in src and 'Err' not in src:
+        for k in src:
+            if k == 'dps' and src[k] and isinstance(src[k], dict):
+                if 'dps' not in dest or not isinstance(dest['dps'], dict):
+                    dest['dps'] = {}
+                for dkey in src[k]:
+                    dest['dps'][dkey] = src[k][dkey]
+            elif k == 'data' and src[k] and isinstance(src[k], dict) and 'dps' in src[k] and isinstance(src[k]['dps'], dict):
+                if k not in dest or not isinstance(dest[k], dict):
+                    dest[k] = {'dps': {}}
+                if 'dps' not in dest[k] or not isinstance(dest[k]['dps'], dict):
+                    dest[k]['dps'] = {}
+                for dkey in src[k]['dps']:
+                    dest[k]['dps'][dkey] = src[k]['dps'][dkey]
+            else:
+                dest[k] = src[k]
 
 
 ########################################################

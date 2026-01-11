@@ -1,7 +1,6 @@
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function  # python 2.7 support
 import base64
 import logging
 import time
