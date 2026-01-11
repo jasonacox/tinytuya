@@ -493,14 +493,15 @@ class ForceScannedDevice(DeviceDetect):
                     self.step = FSCAN_NOT_STARTED
                     self.connect()
                     return
-                # closed thrice, probably a v3.4 device
+                # closed thrice, probably a v3.4 or v3.5 device
                 if self.debug:
-                    print('ForceScannedDevice: Retrying as v3.4')
+                    print('ForceScannedDevice: Retrying as v3.4/3.5')
+                self.message = "%s    Unable to determine version, likely v3.4 or v3.5 - trying key negotiation..." % (self.options['termcolors'].dim)
                 self.retries = 0
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
-                self.deviceinfo['version'] = 3.4
-                self.ver_found = True
+                self.deviceinfo['version'] = 3.4  # Assume 3.4 to start, but don't mark as confirmed
+                # Don't set ver_found = True here - only set it when we get actual response
                 self.keygen = (i for i in self.options['keylist'] if not i.used)
                 self.cur_key = next( self.keygen, None )
                 if self.debug:
@@ -519,7 +520,7 @@ class ForceScannedDevice(DeviceDetect):
                 else:
                     self.err_found = True
                     self.deviceinfo['version'] = 0.0
-                    self.message = "%s    Polling %s Failed: Device stopped responding before key was found" % (self.options['termcolors'].alertdim, self.ip)
+                    self.message = "%s    Polling %s Failed: Device stopped responding before key was found (likely v3.4 or v3.5)" % (self.options['termcolors'].alertdim, self.ip)
                     _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
                     self.displayed = True
                     self.close()
@@ -532,8 +533,9 @@ class ForceScannedDevice(DeviceDetect):
             self.v3x_brute_force_try_next_key()
         elif forced:
             self.err_found = True
-            self.message = "%s    Polling %s Failed: Unexpected close during read/write operation" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose']) 
+            hint = " (likely v3.4 or v3.5)" if self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE else ""
+            self.message = "%s    Polling %s Failed: Unexpected close during read/write operation%s" % (self.options['termcolors'].alertdim, self.ip, hint)
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
         elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
@@ -543,7 +545,8 @@ class ForceScannedDevice(DeviceDetect):
                 self.passive = True
         elif self.step == FSCAN_FINAL_POLL:
             if not self.message:
-                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
+                hint = " (likely v3.4 or v3.5)" if not self.ver_found else ""
+                self.message = "%s    Polling %s Failed: No response to poll request%s" % (self.options['termcolors'].alertdim, self.ip, hint)
             _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
@@ -661,11 +664,8 @@ class ForceScannedDevice(DeviceDetect):
                     if prefix_offset > 0:
                         data = data[prefix_offset:]
                 else:
-                    prefix_offset = data.find(tinytuya.PREFIX_BIN)
-                    if prefix_offset >= 0:
-                        data = data[prefix_offset:]
-                        self.try_v35_with_v34 = False
-                    elif self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
+                    # Check for v3.5 prefix FIRST when testing both protocols
+                    if self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
                         prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
                         if prefix_offset >= 0:
                             if self.debug:
@@ -675,6 +675,12 @@ class ForceScannedDevice(DeviceDetect):
                             self.deviceinfo['version'] = 3.5
                             self.device.set_version(3.5)
                             self.ver_found = True
+                    # Fall back to v3.4 prefix if v3.5 not found
+                    if self.deviceinfo['version'] != 3.5:
+                        prefix_offset = data.find(tinytuya.PREFIX_BIN)
+                        if prefix_offset >= 0:
+                            data = data[prefix_offset:]
+                            self.try_v35_with_v34 = False
                 hmac_key = self.device.local_key if self.deviceinfo['version'] >= 3.4 else None
                 msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
             except:
