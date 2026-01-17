@@ -1076,10 +1076,11 @@ class XenonDevice(object):
         """Return which datapoints are supported by the device."""
         # device22 devices need a sort of bruteforce querying in order to detect the
         # list of available dps experience shows that the dps available are usually
-        # in the ranges [1-25] and [100-110] need to split the bruteforcing in
-        # different steps due to request payload limitation (max. length = 255)
+        # in the ranges [1-25], [50-70], [100-110], and [111-140]
+        # need to split the bruteforcing in different steps due to request payload
+        # limitation (max. length = 255)
         self.dps_cache = {}
-        ranges = [(2, 11), (11, 21), (21, 31), (100, 111)]
+        ranges = [(2, 11), (11, 21), (21, 31), (50, 61), (61, 71), (100, 111), (111, 121), (121, 131), (131, 141)]
 
         for dps_range in ranges:
             # dps 1 must always be sent, otherwise it might fail in case no dps is found
