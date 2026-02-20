@@ -11,5 +11,6 @@ from .DoorbellDevice import DoorbellDevice
 from .ClimateDevice import ClimateDevice
 from .AtorchTemperatureControllerDevice import AtorchTemperatureControllerDevice
 from .InverterHeatPumpDevice import InverterHeatPumpDevice, TemperatureUnit, InverterHeatPumpMode, InverterHeatPumpFault
+from .SoriaInverterDevice import SoriaInverterDevice
 
-DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice"]
+DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice","SoriaInverterDevice"]
