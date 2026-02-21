@@ -250,7 +250,7 @@ class SoriaInverterDevice(Device):
 
             {
                 'W_PV':   int,   # active power in watts
-                'W_AC': int,   # apparent power in VA
+                'W_AC':   int,   # apparent power in VA
             }
         """
         return self._decoded.get(DPS_REALTIME)
