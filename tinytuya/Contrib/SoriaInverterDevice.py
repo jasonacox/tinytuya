@@ -122,7 +122,7 @@ class SoriaInverterDevice(Device):
         # set the default version to 3.5
         if 'version' not in kwargs or not kwargs['version']:
             kwargs['version'] = 3.5
-        # set persistant so we can receive sensor broadcasts
+        # set persistent so we can receive sensor broadcasts
         if 'persist' not in kwargs:
             kwargs['persist'] = True
         super().__init__(*args, **kwargs)
