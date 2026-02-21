@@ -120,7 +120,7 @@ for sp in control_cmds:
         subparsers[sp].add_argument('--dps', help='DPS index', required=True, type=int, metavar='N')
 
     if sp == 'set':
-        subparsers[sp].add_argument('--value', help='Value to set (always sent as a string; device handles coercion)', required=True, metavar='VALUE')
+        subparsers[sp].add_argument('--value', help='Value to set. Parsed as JSON if possible (e.g. true, 123, "text"), otherwise sent as a plain string.', required=True, metavar='VALUE')
 
 if HAVE_ARGCOMPLETE:
     argcomplete.autocomplete( parser )
@@ -231,7 +231,21 @@ def _run_device_command(args):
             dev_ip = devinfo.get('last_ip') or devinfo.get('ip') or None
         if dev_version is None:
             raw_ver = devinfo.get('version')
-            dev_version = float(raw_ver) if raw_ver else None
+            if raw_ver:
+                try:
+                    dev_version = float(raw_ver)
+                except (TypeError, ValueError):
+                    print(
+                        'Warning: invalid "version" value (%r) for device %s in %s; '
+                        'using default protocol version.' % (
+                            raw_ver,
+                            devinfo.get('id') or devinfo.get('name') or '<unknown>',
+                            device_file,
+                        )
+                    )
+                    dev_version = None
+            else:
+                dev_version = None
 
     # Validate
     if not dev_id:
@@ -264,7 +278,13 @@ def _run_device_command(args):
     elif args.command == 'off':
         result = d.turn_off(switch=args.dps)
     elif args.command == 'set':
-        result = d.set_value(args.dps, args.value)
+        # Attempt to parse the value as JSON so that "true", "123", etc.
+        # are sent with the correct type; fall back to a plain string.
+        try:
+            typed_value = json.loads(args.value)
+        except (ValueError, TypeError):
+            typed_value = args.value
+        result = d.set_value(args.dps, typed_value)
     elif args.command == 'get':
         result = d.status()
         if result and 'Err' not in result:
@@ -275,7 +295,7 @@ def _run_device_command(args):
             dps_str = str(args.dps)
             if 'dps' in result and dps_str in result['dps']:
                 # --dps given: print the plain value only
-                print(result['dps'][dps_str])
+                print(json.dumps(result['dps'][dps_str]))
                 return
             else:
                 available = list(result.get('dps', {}).keys())
