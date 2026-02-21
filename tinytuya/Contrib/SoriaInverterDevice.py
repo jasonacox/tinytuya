@@ -126,7 +126,7 @@ class SoriaInverterDevice(Device):
         # set persistent so we can receive sensor broadcasts
         if 'persist' not in kwargs:
             kwargs['persist'] = True
-        super().__init__(*args, **kwargs)
+        super(SoriaInverterDevice, self).__init__(*args, **kwargs)
         self._cached_dps = {}
         self._decoded    = {}   # decoded physical values, keyed by DPS id
 
