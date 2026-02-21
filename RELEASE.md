@@ -1,6 +1,17 @@
 # RELEASE NOTES
 
-## v1.17.5 - CoverDevice Enhanced Type Detection
+## v1.17.5 - CLI Device Control
+
+* Extended the command line interface with new device control and listing commands.
+  * `list` – List all devices from `devices.json` as a formatted table (default) or JSON (`--json`).
+  * `on` / `off` – Turn a device switch on or off, with optional `--dps N` to target a specific switch index (default: 1).
+  * `set` – Write a value to a DPS index (`--dps N --value VALUE`).
+  * `get` – Read device status; omit `--dps` for full status JSON or supply `--dps N` to retrieve a single plain scalar value.
+* All control commands (`on`, `off`, `set`, `get`) accept `--id ID` or `--name NAME` to identify the target device. When `--name` is used, the device ID is resolved via a case-insensitive lookup in `devices.json`.
+* Missing credentials (`--key`, `--ip`, `--version`) are automatically filled in from the matching `devices.json` entry.
+* Updated `API.md` and `README.md` to document all new commands and flags.
+
+* Contrib: Add `SoriaInverterDevice`, a new community-contributed module to support SORIA solar micro-inverters by @Markourai in https://github.com/jasonacox/tinytuya/pull/680
 
 * CoverDevice: Major rewrite to support 8 different device command types with automatic detection (credit for discovery: @make-all):
   * Type 1: `["open", "close", "stop", "continue"]` - Most curtains, blinds, roller shades (DEFAULT)
@@ -19,7 +30,7 @@
   * Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain)
 * Defaults to Type 1 if detection fails for best compatibility
 
-## 1.17.4 - Cloud Config
+## v1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
 

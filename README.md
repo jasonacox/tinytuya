@@ -493,7 +493,7 @@ Tuya devices use AES encryption which is not available in the Python standard li
 
 ### Command Line
 
-TinyTuya provides a built-in command line interface to get Local key, scan and poll devices.
+TinyTuya provides a built-in command line interface to get Local key, scan, poll, list and control devices.
 
 Installation
 
@@ -515,6 +515,11 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
   devices        Scan all devices listed in devices.json file.
   snapshot       Scan devices listed in snapshot.json file.
   json           Scan devices listed in snapshot.json file [JSON].
+  list           List devices from devices.json as a table (or --json).
+  on             Turn on a device switch.
+  off            Turn off a device switch.
+  set            Set a DPS value on a device.
+  get            Read a DPS value (or full status) from a device.
 
   Wizard
       tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
@@ -558,6 +563,39 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 
   JSON
       tinytuya json [-h] [-debug] [-device-file FILE] [-snapshot-file FILE]
+
+  List
+      tinytuya list [-h] [-debug] [--json] [-device-file FILE]
+
+        --json               Output as a JSON array instead of a table
+        -device-file FILE    JSON file to load devices from [Default: devices.json]
+
+  On / Off
+      tinytuya on  [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya off [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              Switch DPS index [Default: 1]
+        --id ID              Device ID
+        --name NAME          Device name – looked up in device-file (alternative to --id)
+        --key KEY            Device local encryption key
+        --ip IP              Device IP address (auto-discovered if omitted)
+        --version VER        Tuya protocol version [Default: 3.3]
+        -device-file FILE    JSON file to load devices from [Default: devices.json]
+
+  Set
+      tinytuya set [-h] [-debug] --dps N --value VALUE [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              DPS index to write (required)
+        --value VALUE        Value to set (sent as string; device handles type coercion)
+
+  Get
+      tinytuya get [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              DPS index to read; omit to return full device status JSON
+
+        Output:
+          No --dps  →  full status JSON, e.g. {"dps": {"1": true, "2": 500}}
+          --dps N   →  plain scalar value only, e.g. true
 
 ```
 
