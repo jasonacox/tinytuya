@@ -143,7 +143,7 @@ class SoriaInverterDevice(Device):
 
         Returns the raw tinytuya message dict, or None.
         """
-        data = self.receive()
+        data = self.receive(timeout=timeout)
         if data and 'dps' in data:
             self._cached_dps.update(data['dps'])
             for dp_id in [DPS_FULL, DPS_REALTIME, DPS_EVENT, DPS_STATUS, DPS_RAW]:
