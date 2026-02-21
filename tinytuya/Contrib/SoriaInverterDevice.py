@@ -63,6 +63,7 @@ def _detect_prefix(data):
     counts = Counter()
     for i in range(len(data) - 5):
         candidate = data[i:i+3]
+        # Ignore three null bytes, which are used as padding/noise and are not a valid TLV prefix for this device.
         if candidate != bytes(3):
             counts[candidate] += 1
     if not counts:
