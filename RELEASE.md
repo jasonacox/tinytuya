@@ -1,5 +1,16 @@
 # RELEASE NOTES
 
+## v1.17.5 - CLI Device Control
+
+* Extended the command line interface with new device control and listing commands.
+  * `list` – List all devices from `devices.json` as a formatted table (default) or JSON (`--json`).
+  * `on` / `off` – Turn a device switch on or off, with optional `--dps N` to target a specific switch index (default: 1).
+  * `set` – Write a value to a DPS index (`--dps N --value VALUE`).
+  * `get` – Read device status; omit `--dps` for full status JSON or supply `--dps N` to retrieve a single plain scalar value.
+* All control commands (`on`, `off`, `set`, `get`) accept `--id ID` or `--name NAME` to identify the target device. When `--name` is used, the device ID is resolved via a case-insensitive lookup in `devices.json`.
+* Missing credentials (`--key`, `--ip`, `--version`) are automatically filled in from the matching `devices.json` entry.
+* Updated `API.md` and `README.md` to document all new commands and flags.
+
 ## 1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640

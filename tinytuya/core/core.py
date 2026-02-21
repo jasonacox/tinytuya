@@ -101,7 +101,7 @@ except NameError:
 if HAVE_COLORAMA:
     init()
 
-version_tuple = (1, 17, 4)  # Major, Minor, Patch
+version_tuple = (1, 17, 5)  # Major, Minor, Patch
 version = __version__ = "%d.%d.%d" % version_tuple
 __author__ = "jasonacox"
 
