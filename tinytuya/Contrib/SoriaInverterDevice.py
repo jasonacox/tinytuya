@@ -99,7 +99,7 @@ def _decode_b64_tlv(value):
 # ---------------------------------------------------------------------------
 
 class SoriaInverterDevice(Device):
-    """Support for SORIA solar inverter (product ID: key7yfxx93hurn5c)
+    """Support for SORIA solar inverter (product ID: 5l1ht8jygsyr1wn1)
 
     Usage::
 
