@@ -11,7 +11,7 @@
 * Missing credentials (`--key`, `--ip`, `--version`) are automatically filled in from the matching `devices.json` entry.
 * Updated `API.md` and `README.md` to document all new commands and flags.
 
-* Contrib: Add `WiFiDualMeterDevice`, a new community-contributed module to support Tuya WiFi Dual Meter devices by @ggardet in https://github.com/jasonacox/tinytuya/pull/680
+* Contrib: Add `SoriaInverterDevice`, a new community-contributed module to support SORIA solar micro-inverters by @Markourai in https://github.com/jasonacox/tinytuya/pull/680
 
 * CoverDevice: Major rewrite to support 8 different device command types with automatic detection (credit for discovery: @make-all):
   * Type 1: `["open", "close", "stop", "continue"]` - Most curtains, blinds, roller shades (DEFAULT)
@@ -30,7 +30,7 @@
   * Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain)
 * Defaults to Type 1 if detection fails for best compatibility
 
-## 1.17.4 - Cloud Config
+## v1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
 
