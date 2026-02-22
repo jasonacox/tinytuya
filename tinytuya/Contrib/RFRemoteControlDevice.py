@@ -75,12 +75,26 @@ class RFRemoteControlDevice(IRRemoteControlDevice):
                 data['freq'] = '0'
             if 'ver' not in data or not data['ver']:
                 data['ver'] = '2'
-            command = { RFRemoteControlDevice.NSDP_CONTROL: mode, 'rf_type': data['rf_type'], 'study_feq': data['freq'], 'ver': data['ver'] }
             if mode == 'rfstudy_send':
+                # rfstudy_send uses a different payload schema than the study/exit commands:
+                #   - frequency field is 'feq' (int), not 'study_feq' (string)
+                #   - requires 'mode' and 'rate' fields
+                #   - each key dict must include 'ver'
+                if 'mode' not in data:
+                    data['mode'] = 0
+                if 'rate' not in data:
+                    data['rate'] = 0
+                ver = data['ver']
+                command = { RFRemoteControlDevice.NSDP_CONTROL: mode, 'rf_type': data['rf_type'], 'feq': int(data['freq']), 'mode': data['mode'], 'rate': data['rate'], 'ver': ver }
                 for i in range( 1, 10 ):
                     k = 'key%d' % i
                     if k in data:
-                        command[k] = data[k]
+                        key_data = dict(data[k])
+                        if 'ver' not in key_data:
+                            key_data['ver'] = ver
+                        command[k] = key_data
+            else:
+                command = { RFRemoteControlDevice.NSDP_CONTROL: mode, 'rf_type': data['rf_type'], 'study_feq': data['freq'], 'ver': data['ver'] }
             self.set_value( RFRemoteControlDevice.DP_SEND_IR, json.dumps(command), nowait=True )
         elif mode == 'send_cmd':
             data[RFRemoteControlDevice.NSDP_CONTROL] = mode
@@ -172,7 +186,8 @@ class RFRemoteControlDevice(IRRemoteControlDevice):
         key1 = { 'code': base64_code, 'times': times, 'delay': delay, 'intervals': intervals }
         data = { 'key1': key1 }
         if bdata:
-            if 'study_feq' in bdata: data['freq'] = bdata['study_feq']
+            # study_feq is intentionally NOT forwarded to feq.
+            # feq=0 tells the device to use the frequency embedded in the code itself.
             if 'ver' in bdata: data['ver'] = bdata['ver']
         return self.send_command( 'rfstudy_send', data )
 
@@ -255,7 +270,7 @@ class RFRemoteControlDevice(IRRemoteControlDevice):
     @staticmethod
     def rf_decode_button( base64_code ):
         try:
-            jstr = base64.b64decode
+            jstr = base64.b64decode( base64_code )
             jdata = json.loads( jstr )
             return jdata
         except:

@@ -16,7 +16,10 @@ logging.basicConfig()  # TODO include function name/line numbers in log
 log.setLevel(level=logging.INFO)
 log.setLevel(level=logging.DEBUG)  # Debug hack!
 
+import base64
+
 import tinytuya
+from tinytuya.Contrib.RFRemoteControlDevice import RFRemoteControlDevice
 
 LOCAL_KEY = '0123456789abcdef'
 
@@ -253,6 +256,60 @@ class TestXenonDevice(unittest.TestCase):
         # assert
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
+
+
+def build_mock_rf():
+    d = RFRemoteControlDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, control_type=1)
+    d.set_version(3.3)
+    d.set_value = MagicMock()
+    return d
+
+
+class TestRFRemoteControlDevice(unittest.TestCase):
+    def test_rf_decode_button_returns_dict(self):
+        # Bug 1: rf_decode_button was missing the () call on base64.b64decode,
+        # causing it to always return None instead of the decoded JSON dict.
+        sample = {"study_feq": "433", "ver": "2"}
+        encoded = base64.b64encode(json.dumps(sample).encode()).decode()
+
+        result = RFRemoteControlDevice.rf_decode_button(encoded)
+
+        self.assertIsNotNone(result, "rf_decode_button returned None — function was not called")
+        self.assertDictEqual(result, sample)
+
+    def test_rf_send_button_payload_structure(self):
+        # Bug 2: send_command('rfstudy_send', ...) was building the wrong payload:
+        #   - used 'study_feq' (string) instead of 'feq' (int)
+        #   - omitted 'mode' and 'rate' fields
+        #   - omitted 'ver' inside each key dict
+        # Bug 3: rf_send_button was forwarding study_feq from the decoded button into
+        #   feq, but feq must always be 0 so the device uses the frequency embedded in
+        #   the code. Passing the actual frequency value selects a different chip path.
+        d = build_mock_rf()
+
+        # Use a button that has study_feq set to a non-zero value to confirm it is
+        # NOT forwarded into the payload's feq field.
+        button_data = {"study_feq": "433", "ver": "2"}
+        base64_code = base64.b64encode(json.dumps(button_data).encode()).decode()
+
+        d.rf_send_button(base64_code)
+
+        call_args = d.set_value.call_args
+        dp = call_args[0][0]
+        payload = json.loads(call_args[0][1])
+
+        self.assertEqual(dp, RFRemoteControlDevice.DP_SEND_IR)
+        self.assertEqual(payload['control'], 'rfstudy_send')
+
+        self.assertIn('feq', payload, "payload missing 'feq' (was 'study_feq')")
+        self.assertNotIn('study_feq', payload, "payload must not contain 'study_feq' for rfstudy_send")
+        self.assertIsInstance(payload['feq'], int, "'feq' must be int, not string")
+        self.assertEqual(payload['feq'], 0, "feq must be 0 so the device uses the frequency embedded in the code")
+        self.assertIn('mode', payload, "payload missing 'mode'")
+        self.assertIn('rate', payload, "payload missing 'rate'")
+
+        self.assertIn('key1', payload)
+        self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
 if __name__ == '__main__':
