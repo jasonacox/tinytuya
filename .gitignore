@@ -130,3 +130,6 @@ mappings.json
 # test scripts
 server/r
 server/tinytuya
+
+# Local issue response archive
+issues/
