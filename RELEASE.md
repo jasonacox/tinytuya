@@ -1,5 +1,13 @@
 # RELEASE NOTES
 
+## v1.17.6 - RFRemoteControlDevice Bug Fixes
+
+* Contrib: Fix `RFRemoteControlDevice` - three bugs that each independently caused `rfstudy_send` commands to be silently ignored by the device by @kongo09 in https://github.com/jasonacox/tinytuya/pull/684:
+  * `rf_decode_button`: fix missing `()` on `base64.b64decode` call — previously always returned `None`.
+  * `send_command`: build correct `rfstudy_send` payload (`feq` as int instead of `study_feq` as string, add `mode`/`rate` fields, inject `ver` into each key dict); study/exit commands are unaffected.
+  * `rf_send_button`: do not forward `study_feq` into `feq`; `feq=0` tells the device to use the frequency embedded in the code itself.
+* Adds regression tests for all three fixes.
+
 ## v1.17.5 - CLI Device Control
 
 * Extended the command line interface with new device control and listing commands.
