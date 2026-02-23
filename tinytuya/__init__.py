@@ -8,8 +8,10 @@
 """
 
 from .core import *
-from .core import __version__
-from .core import __author__
+from .core.core import __version__
+from .core.core import __author__
+from .core.core import __copyright__
+from .core.core import __project__
 
 from .BasicDevices import *
 

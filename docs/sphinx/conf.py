@@ -8,13 +8,15 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
+import tinytuya
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'TinyTuya'
-copyright = '2026, Jason A. Cox'
-author = 'Jason A. Cox'
-release = '1.17.x'
+project = tinytuya.__project__
+copyright = tinytuya.__copyright__
+author = tinytuya.__author__
+release = tinytuya.__version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -101,9 +101,12 @@ except NameError:
 if HAVE_COLORAMA:
     init()
 
-version_tuple = (1, 17, 5)  # Major, Minor, Patch
-version = __version__ = "%d.%d.%d" % version_tuple
+version = __version__ = "1.17.7" # Major, Minor, Patch
+version_tuple = tuple(__version__.split("."))
 __author__ = "jasonacox"
+__copyright__ = '2026, Jason A. Cox'
+__project__ = 'TinyTuya'
+
 
 log = logging.getLogger(__name__)
 
