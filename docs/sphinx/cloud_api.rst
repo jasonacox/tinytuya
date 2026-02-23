@@ -1,7 +1,7 @@
 ﻿TinyTuya Cloud API
 =====================
 
-.. module:: tinytuya
+.. currentmodule:: tinytuya
 
 .. rubric:: Classes
 
@@ -10,10 +10,3 @@
    :template: full-autoclass.rst
 
    Cloud
-
-.. rubric:: Functions
-
-.. autosummary::
-   :toctree: generated
-
-   pack_message

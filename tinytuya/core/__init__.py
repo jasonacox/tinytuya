@@ -1,4 +1,3 @@
-
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 

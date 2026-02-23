@@ -5,50 +5,12 @@
 
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
-
- Local Control Classes
-    BulbDevice(...)
-        See OutletDevice() for constructor arguments
-
- Functions
-    BulbDevice Class methods
-        rgb_to_hexvalue(r, g, b, hexformat):
-        hsv_to_hexvalue(h, s, v, hexformat):
-        hexvalue_to_rgb(hexvalue, hexformat=None):
-        hexvalue_to_hsv(hexvalue, hexformat=None):
-
-    BulbDevice
-        set_mode(self, mode="white", nowait=False):
-        set_scene(self, scene, scene_data=None, nowait=False):
-        set_timer(self, num_secs, nowait=False):
-        set_musicmode(self, transition, modify_settings=True, nowait=False):
-        unset_musicmode( self ):
-        set_music_colour( self, red, green, blue, brightness=None, colourtemp=None, transition=None, nowait=False ):
-        set_colour(r, g, b, nowait):
-        set_hsv(h, s, v, nowait):
-        set_white_percentage(brightness=100, colourtemp=0, nowait):
-        set_brightness_percentage(brightness=100, nowait):
-        set_colourtemp_percentage(colourtemp=100, nowait):
-        result = get_value(self, feature, state=None, nowait=False):
-        result = get_mode(self, state=None, nowait=False):
-        result = get_brightness_percentage(self, state=None, nowait=False):
-        result = get_colourtemp_percentage(self, state=None, nowait=False):
-        (r, g, b) = colour_rgb():
-        (h,s,v) = colour_hsv()
-        result = state():
-        bool = bulb_has_capability( self, feature, nowait=False ):
-        detect_bulb(self, response=None, nowait=False):
-        set_bulb_type(self, bulb_type=None, mapping=None):
-        set_bulb_capabilities(self, mapping):
-
-    Inherited
-        Every device function from core.py
 """
 
 import colorsys
 
-from .core import Device, log
-from .core import error_json, ERR_JSON, ERR_FUNCTION # ERR_RANGE, ERR_STATE, ERR_TIMEOUT
+from ..core import Device, log
+from ..core import error_json, ERR_JSON, ERR_FUNCTION # ERR_RANGE, ERR_STATE, ERR_TIMEOUT
 
 # pylint: disable=R0904
 class BulbDevice(Device):
@@ -149,7 +111,9 @@ class BulbDevice(Device):
     DPS = "dps"
 
     def __init__(self, *args, **kwargs):
-        # Set Default Bulb Types
+        """
+        Set Default Bulb Types
+        """
         self.bulb_configured = False
         self.bulb_type = None
         self.has_brightness = None
@@ -176,6 +140,9 @@ class BulbDevice(Device):
             kwargs['version'] = None
         super(BulbDevice, self).__init__(*args, **kwargs)
 
+    # Monkey-patch the docstring so Sphinx gets a contatenation of parent+ours
+    __init__.__doc__ = Device.__init__.__doc__ + __init__.__doc__
+
     def status(self, nowait=False):
         result = super(BulbDevice, self).status(nowait=nowait)
         self.tried_status = True
@@ -191,8 +158,8 @@ class BulbDevice(Device):
         While r, g and b are just hexadecimal values of the corresponding
         Red, Green and Blue values, the h, s and v values (which are values
         between 0 and 1) are scaled:
-            hexformat="rgb8": 360 (h) and 255 (s and v)
-            hexformat="hsv16": 360 (h) and 1000 (s and v)
+        hexformat="rgb8": 360 (h) and 255 (s and v)
+        hexformat="hsv16": 360 (h) and 1000 (s and v)
 
         Args:
             r(int): Value for the colour red as int from 0-255.
