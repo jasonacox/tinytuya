@@ -8,6 +8,7 @@ build:
 python:
   install:
     - requirements: requirements.txt
+    - requirements: docs/rtd-requirements.txt
     # Install our python package before building the docs
     - method: pip
       path: .
