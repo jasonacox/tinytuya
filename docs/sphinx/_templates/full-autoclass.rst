@@ -6,8 +6,6 @@
    :show-inheritance:
    :undoc-members:
 
-   .. currentmodule:: {{ module }}
-
    {% block methods %}
    {% if methods %}
    .. rubric:: {{ _('Methods provided by this class') }}

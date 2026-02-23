@@ -15,4 +15,4 @@ from .core.core import __project__
 
 from .BasicDevices import *
 
-from .Cloud import Cloud
+from .tuyacloud.Cloud import Cloud

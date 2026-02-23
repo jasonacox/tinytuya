@@ -7,6 +7,7 @@ import time
 from .XenonDevice import XenonDevice, merge_dps_results
 from . import command_types as CT
 
+__name__ = 'tinytuya.Device'
 
 log = logging.getLogger(__name__)
 
