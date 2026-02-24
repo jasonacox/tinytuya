@@ -7,7 +7,7 @@
  For more information see https://github.com/jasonacox/tinytuya
 """
 
-from ..core import Device
+from .core import Device
 
 class OutletDevice(Device):
     """

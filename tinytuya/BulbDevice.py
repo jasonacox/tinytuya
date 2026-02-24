@@ -9,8 +9,8 @@
 
 import colorsys
 
-from ..core import Device, log
-from ..core import error_json, ERR_JSON, ERR_FUNCTION # ERR_RANGE, ERR_STATE, ERR_TIMEOUT
+from .core import Device, log
+from .core import error_json, ERR_JSON, ERR_FUNCTION # ERR_RANGE, ERR_STATE, ERR_TIMEOUT
 
 # pylint: disable=R0904
 class BulbDevice(Device):

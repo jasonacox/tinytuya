@@ -7,6 +7,6 @@
 
 .. autosummary::
    :toctree: generated
-   :template: full-autoclass.rst
+   :template: autoclass-fake-module.rst
 
    Cloud

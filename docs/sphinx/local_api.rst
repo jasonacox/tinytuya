@@ -7,9 +7,14 @@
 
 .. autosummary::
    :toctree: generated
-   :template: full-autoclass.rst
+   :template: autoclass-no-module.rst
 
    Device
+
+.. autosummary::
+   :toctree: generated
+   :template: autoclass-fake-module.rst
+
    BulbDevice
    OutletDevice
    CoverDevice

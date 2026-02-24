@@ -13,6 +13,8 @@ from .core.core import __author__
 from .core.core import __copyright__
 from .core.core import __project__
 
-from .BasicDevices import *
+from .BulbDevice import BulbDevice
+from .CoverDevice import CoverDevice
+from .OutletDevice import OutletDevice
 
-from .tuyacloud.Cloud import Cloud
+from .Cloud import Cloud

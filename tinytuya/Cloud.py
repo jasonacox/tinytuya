@@ -40,13 +40,11 @@ except ImportError as impErr:
     print("WARN: Check dependencies. See https://github.com/jasonacox/tinytuya/issues/377")
     print("WARN: Error: {}.".format(impErr.args[0]))
 
-from ..core import * # pylint: disable=W0401, W0614
+from .core import * # pylint: disable=W0401, W0614
 
 ########################################################
 #             Cloud Classes and Functions
 ########################################################
-
-__name__ = 'tinytuya.Cloud'
 
 class Cloud(object):
     """
