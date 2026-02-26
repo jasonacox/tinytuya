@@ -11,10 +11,9 @@ Welcome to TinyTuya's documentation!
    :caption: Contents:
 
    start
-   local_api
+   generated/tinytuya
    cloud_api
    contrib
-
 
 Indices and tables
 ==================

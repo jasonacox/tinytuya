@@ -249,7 +249,8 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
 
     Response:
         devices = Dictionary of all devices found
-
+    """
+    """
     To unpack data, you can do something like this:
 
         devices = tinytuya.deviceScan()

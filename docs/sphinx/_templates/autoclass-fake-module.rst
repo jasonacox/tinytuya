@@ -2,11 +2,21 @@
 
 .. currentmodule:: {{ module }}
 
+{%- set emit_module = namespace(emit=true) %}
+{%- for grp in tinytuya_parent_modules %}
+{%- for memb in grp['members'] %}
+{%- if memb.name == fullname %}
+{%- set emit_module.emit = memb.currentmodule %}
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+
 .. autoclass:: {{ objname }}
    :show-inheritance:
    :undoc-members:
-
+{% if emit_module.emit %}
    .. currentmodule:: {{ fullname }}
+{%- endif %}
 
    {% block methods %}
    {% if methods %}

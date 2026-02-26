@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-# TinyTuya Error Response Codes
+#: TinyTuya Error Response Codes
 ERR_JSON = 900
 ERR_CONNECT = 901
 ERR_TIMEOUT = 902
@@ -24,6 +24,7 @@ ERR_PARAMS = 912
 ERR_CLOUD = 913
 ERR_KEY_OR_VER = 914
 
+#: TinyTuya Error Response Descriptions
 error_codes = {
     ERR_JSON: "Invalid JSON Response from Device",
     ERR_CONNECT: "Network Error: Unable to Connect",

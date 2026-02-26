@@ -47,3 +47,49 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #html_theme = 'alabaster'
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+
+autosummary_context = {
+    'tinytuya_core_autodocument': tinytuya.document.sphinx_autodocument,
+    'tinytuya_core_extradocument': tinytuya.document.sphinx_extradocument,
+    'tinytuya_parent_modules': [
+        {
+            'group': 'Standard Device Modules',
+            'template': 'autoclass-fake-module.rst',
+            'members': [
+                { 'name': 'tinytuya.Device', 'currentmodule': False },
+                { 'name': 'tinytuya.BulbDevice', 'currentmodule': True },
+                { 'name': 'tinytuya.OutletDevice', 'currentmodule': True },
+                { 'name': 'tinytuya.CoverDevice', 'currentmodule': True },
+            ],
+        },
+        {
+            'group': 'Module Functions',
+            'template': 'automodule-tinytuya.rst',
+            'members': [
+                { 'name': 'tinytuya' },
+            ],
+        }
+    ]
+}
+
+#autosummary_skip_modules = ([ 'tinytuya.core.'+k for k in tinytuya.document.sphinx_autodocument.keys() ] +
+#autosummary_skip_modules = ([ k.split('.')[-1] for k in autosummary_context['tinytuya_parent_modules'].keys() ] +
+#                            ['Cloud'])
+autosummary_skip_modules = ['tinytuya.Cloud']
+for grp in autosummary_context['tinytuya_parent_modules']:
+    for gmemb in grp['members']:
+        autosummary_skip_modules.append( gmemb['name'] )
+
+#print(autosummary_skip_modules)
+
+def autodoc_skip_member_callback(app, what, name, obj, skip, options):
+    #if( what == 'module'):
+    #    print(what, name, getattr(obj, '__name__', ''), getattr(obj, '__module__', 'xz'))
+    # skip classes that are displayed separately
+    if( what == 'module' and getattr(obj, '__module__', '') in autosummary_skip_modules ):
+        #print('Skipping:', name, skip, obj)
+        return True  # Skip it
+    return None  # Use default skipping behavior otherwise
+
+def setup(app):
+    app.connect("autodoc-skip-member", autodoc_skip_member_callback)
