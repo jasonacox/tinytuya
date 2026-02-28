@@ -14,9 +14,9 @@ from . import header as H
 
 log = logging.getLogger(__name__)
 
-
-# Tuya Packet Format
+#: Named Tuple for TCP packet header
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
+
 MessagePayload = namedtuple("MessagePayload", "cmd payload")
 try:
     TuyaMessage = namedtuple("TuyaMessage", "seqno cmd retcode payload crc crc_good prefix iv", defaults=(True,0x55AA,None))
@@ -25,7 +25,22 @@ except:
 
 
 def pack_message(msg, hmac_key=None):
-    """Pack a TuyaMessage into bytes."""
+    """
+    Pack a TuyaMessage into bytes.
+
+    Args:
+        msg (TuyaMessage): The TuyaMessage to turn into a TCP packet payload
+        hmac_key (bytes, optional): The v3.4 / v3.5 encryption key to use
+
+    Returns:
+        bytes: The TCP packet payload
+
+    Raises:
+        TypeError: hmac_key not provided for v3.5
+        ValueError: unknown message type
+
+    :meta private:
+    """
     if msg.prefix == H.PREFIX_55AA_VALUE:
         header_fmt = H.MESSAGE_HEADER_FMT_55AA
         end_fmt = H.MESSAGE_END_FMT_HMAC if hmac_key else H.MESSAGE_END_FMT_55AA
@@ -67,6 +82,21 @@ def pack_message(msg, hmac_key=None):
 
 
 def parse_header(data):
+    """
+    Parses the initial Tuya protocol header out of a TCP packet payload
+
+    Args:
+        data (bytes): The TCP packet payload to parse
+
+    Returns:
+        TuyaHeader: The parsed header
+
+    Raises:
+        DecodeError: Packet too short
+        DecodeError: Packet corrupt or type unknown
+
+    :meta private:
+    """
     if( data[:4] == H.PREFIX_6699_BIN ):
         fmt = H.MESSAGE_HEADER_FMT_6699
     else:
@@ -99,7 +129,26 @@ def parse_header(data):
 
 
 def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
-    """Unpack bytes into a TuyaMessage."""
+    """
+    Unpacks a Tuya protocol message from a TCP packet payload
+
+    Args:
+        data (bytes): The TCP packet payload to parse
+        hmac_key (bytes, optional): The v3.4 / v3.5 encryption key to use
+        header (TuyaHeader, optional): The initial Tuya protocol header, if already parsed
+        no_retcode (bool, optional): When true, strips the 32-bit return code off the front of the payload
+
+    Returns:
+        TuyaMessage: The parsed Tuya protocol message
+
+    Raises:
+        TypeError: hmac_key not provided for v3.5
+        ValueError: Unknown message type
+        DecodeError: Packet too short
+        DecodeError: Packet corrupt or type unknown
+
+    :meta private:
+    """
     if header is None:
         header = parse_header(data)
 
@@ -172,7 +221,20 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
 
 
 def has_suffix(payload):
-    """Check to see if payload has valid Tuya suffix"""
+    """
+    *OBSOLETE.* Check if payload has valid v3.1-v3.4 suffix
+
+    Args:
+        payload (bytes): The TCP packet payload to parse
+
+    Returns:
+        bool
+
+    .. deprecated:: v3.4
+    .. versionremoved:: v3.5
+
+    :meta private:
+    """
     if len(payload) < 4:
         return False
     log.debug("buffer %r = %r", payload[-4:], H.SUFFIX_BIN)

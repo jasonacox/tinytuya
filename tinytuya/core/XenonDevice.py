@@ -18,6 +18,9 @@ from .exceptions import DecodeError
 from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_message, parse_header
 from . import command_types as CT, header as H
 
+# Fix the name so it's not tinytuya.core.XenonDevice
+__name__ = 'tinytuya.XenonDevice'
+
 log = logging.getLogger(__name__)
 
 # Python 2 Support
@@ -211,6 +214,11 @@ payload_dict = {
 }
 
 class XenonDevice(object):
+    """Low-level functions for devices.
+
+    .. deprecated:: 1.x Use :py:class:`tinytuya.Device` instead.
+    .. version-removed:: 2.0
+    """
     def __init__(
             self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
             version=3.1, # pylint: disable=W0621
@@ -223,11 +231,13 @@ class XenonDevice(object):
 
         Args:
             dev_id (str): The device id.
-            address (str): The network address.
+
+        Keyword Args:
+            address (str, optional): The network address.
             local_key (str, optional): The encryption key. Defaults to None.
-            cid (str: Optional sub device id. Default to None.
-            node_id (str: alias for cid)
-            parent (object: gateway device this device is a child of)
+            cid (str, optional): Optional sub-device id. Default to None.
+            node_id (str, optional): alias for cid
+            parent (XenonDevice, optional): gateway device this device is a child of)
 
         Attributes:
             port (int): The port to connect to.

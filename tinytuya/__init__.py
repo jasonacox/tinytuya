@@ -13,6 +13,8 @@ from .core.core import __author__
 from .core.core import __copyright__
 from .core.core import __project__
 
+from .core.crypto_helper import *
+
 from .BulbDevice import BulbDevice
 from .CoverDevice import CoverDevice
 from .OutletDevice import OutletDevice

@@ -5,7 +5,7 @@
 Global Network and File Settings
 """
 
-MAXCOUNT = 15       #: How many tries before stopping C
+MAXCOUNT = 15       #: How many tries before stopping
 SCANTIME = 18       #: How many seconds to wait before stopping device discovery
 UDPKEY = bytes.fromhex('6c1ec8e2bb9bb59ab50b0daf649b410a') #: UDP packet payload decryption - md5("yGAdlopoPVldABfn") - credit to tuya-convert
 UDPPORT = 6666      #: Tuya 3.1 UDP Port
@@ -14,7 +14,7 @@ UDPPORTAPP = 7000   #: Tuya app encrypted UDP Port
 TCPPORT = 6668      #: Tuya TCP Local Port
 TIMEOUT = 3.0       #: Seconds to wait for a broadcast
 TCPTIMEOUT = 0.4    #: Seconds to wait for socket open for scanning
-DEFAULT_NETWORK = '192.168.0.0/24' #: Default IP network to scan
+DEFAULT_NETWORK = '192.168.0.0/24' #: Default IP network to scan when force scanning
 
 # Configuration Files
 CONFIGFILE = 'tinytuya.json' #: File to save/load Cloud configuration from

@@ -6,25 +6,49 @@ import base64
 import logging
 import time
 
+__all__ = ['CRYPTOLIB', 'CRYPTOLIB_VER', 'CRYPTOLIB_HAS_GCM', 'AESCipher']
+
+CRYPTOLIB = None
+"""str: Name of the crypto library being used.
+
+Current possible values: pyca/cryptography, [Py]Crypto[dome[x]], or pyaes
+
+:meta hide-value:
+"""
+
+CRYPTOLIB_VER = None
+"""str: The version string of the crypto library in use
+
+:meta hide-value:
+"""
+
+CRYPTOLIB_HAS_GCM = False
+"""bool: Crypto library can do AES in GCM mode
+
+:meta hide-value:
+"""
+
+# AESCipher # Exported crypt class
+
 for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
-    Crypto = Crypto_modes = AES = CRYPTOLIB = None
+    CRYPTOLIB = _AES = _Crypto = _Crypto_modes = None
     try:
         if clib == 'pyca/cryptography': # https://cryptography.io/en/latest/
             from cryptography import __version__ as Crypto_version
             if (Crypto_version[:2] in ('0.', '1.', '2.')) or (Crypto_version == '3.0'):
                 # cryptography <= 3.0 requires a backend= parameter
                 continue
-            from cryptography.hazmat.primitives.ciphers import Cipher as Crypto
-            from cryptography.hazmat.primitives.ciphers import modes as Crypto_modes
-            from cryptography.hazmat.primitives.ciphers.algorithms import AES
+            from cryptography.hazmat.primitives.ciphers import Cipher as _Crypto
+            from cryptography.hazmat.primitives.ciphers import modes as _Crypto_modes
+            from cryptography.hazmat.primitives.ciphers.algorithms import AES as _AES
         elif clib == 'PyCryptodomex': # https://pycryptodome.readthedocs.io/en/latest/
             # PyCryptodome is installed as "Cryptodome" when installed by
             #  `apt install python3-pycryptodome` or `pip install pycryptodomex`
-            import Cryptodome as Crypto
-            from Cryptodome.Cipher import AES
+            import Cryptodome as _Crypto
+            from Cryptodome.Cipher import AES as _AES
         elif clib == 'PyCrypto': # https://www.pycrypto.org/
-            import Crypto
-            from Crypto.Cipher import AES
+            import Crypto as _Crypto
+            from Crypto.Cipher import AES as _AES
             # v1/v2 is PyCrypto, v3 is PyCryptodome
             clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
         elif clib == 'pyaes':
@@ -84,14 +108,14 @@ class _AESCipher_pyca(_AESCipher_Base):
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if iv: # initialization vector or nonce (number used once)
             iv = self.get_encryption_iv( iv )
-            encryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv) ).encryptor()
+            encryptor = _Crypto( _AES(self.key), _Crypto_modes.GCM(iv) ).encryptor()
             if header:
                 encryptor.authenticate_additional_data(header)
             crypted_text = encryptor.update(raw) + encryptor.finalize()
             crypted_text = iv + crypted_text + encryptor.tag
         else:
             if pad: raw = self._pad(raw, 16)
-            encryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).encryptor()
+            encryptor = _Crypto( _AES(self.key), _Crypto_modes.ECB() ).encryptor()
             crypted_text = encryptor.update(raw) + encryptor.finalize()
 
         return base64.b64encode(crypted_text) if use_base64 else crypted_text
@@ -105,14 +129,14 @@ class _AESCipher_pyca(_AESCipher_Base):
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
             if tag is None:
-                decryptor = Crypto( AES(self.key), Crypto_modes.CTR(iv + b'\x00\x00\x00\x02') ).decryptor()
+                decryptor = _Crypto( _AES(self.key), _Crypto_modes.CTR(iv + b'\x00\x00\x00\x02') ).decryptor()
             else:
-                decryptor = Crypto( AES(self.key), Crypto_modes.GCM(iv, tag) ).decryptor()
+                decryptor = _Crypto( _AES(self.key), _Crypto_modes.GCM(iv, tag) ).decryptor()
             if header and (tag is not None):
                 decryptor.authenticate_additional_data( header )
             raw = decryptor.update( enc ) + decryptor.finalize()
         else:
-            decryptor = Crypto( AES(self.key), Crypto_modes.ECB() ).decryptor()
+            decryptor = _Crypto( _AES(self.key), _Crypto_modes.ECB() ).decryptor()
             raw = decryptor.update( enc ) + decryptor.finalize()
             raw = self._unpad(raw, verify_padding)
         return raw.decode("utf-8") if decode_text else raw
@@ -121,14 +145,14 @@ class _AESCipher_PyCrypto(_AESCipher_Base):
     def encrypt(self, raw, use_base64=True, pad=True, iv=False, header=None): # pylint: disable=W0621
         if iv: # initialization vector or nonce (number used once)
             iv = self.get_encryption_iv( iv )
-            cipher = AES.new(self.key, mode=AES.MODE_GCM, nonce=iv)
+            cipher = _AES.new(self.key, mode=_AES.MODE_GCM, nonce=iv)
             if header:
                 cipher.update(header)
             crypted_text, tag = cipher.encrypt_and_digest(raw)
             crypted_text = cipher.nonce + crypted_text + tag
         else:
             if pad: raw = self._pad(raw, 16)
-            cipher = AES.new(self.key, mode=AES.MODE_ECB)
+            cipher = _AES.new(self.key, mode=_AES.MODE_ECB)
             crypted_text = cipher.encrypt(raw)
 
         return base64.b64encode(crypted_text) if use_base64 else crypted_text
@@ -141,7 +165,7 @@ class _AESCipher_PyCrypto(_AESCipher_Base):
                 raise ValueError("invalid length: %d" % len(enc))
         if iv:
             iv, enc = self.get_decryption_iv( iv, enc )
-            cipher = AES.new(self.key, AES.MODE_GCM, nonce=iv)
+            cipher = _AES.new(self.key, _AES.MODE_GCM, nonce=iv)
             if header:
                 cipher.update(header)
             if tag:
@@ -149,7 +173,7 @@ class _AESCipher_PyCrypto(_AESCipher_Base):
             else:
                 raw = cipher.decrypt(enc)
         else:
-            cipher = AES.new(self.key, AES.MODE_ECB)
+            cipher = _AES.new(self.key, _AES.MODE_ECB)
             raw = cipher.decrypt(enc)
             raw = self._unpad(raw, verify_padding)
         return raw.decode("utf-8") if decode_text else raw
@@ -194,15 +218,35 @@ class _AESCipher_pyaes(_AESCipher_Base):
 if CRYPTOLIB[:8] == 'PyCrypto': # PyCrypto, PyCryptodome, and PyCryptodomex
     class AESCipher(_AESCipher_PyCrypto):
         CRYPTOLIB = CRYPTOLIB
-        CRYPTOLIB_VER = '.'.join( [str(x) for x in Crypto.version_info] )
-        CRYPTOLIB_HAS_GCM = getattr( AES, 'MODE_GCM', False ) # only PyCryptodome supports GCM, PyCrypto does not
+        CRYPTOLIB_VER = '.'.join( [str(x) for x in _Crypto.version_info] )
+        CRYPTOLIB_HAS_GCM = bool( getattr( _AES, 'MODE_GCM', False ) ) # only PyCryptodome supports GCM, PyCrypto does not
 elif CRYPTOLIB == 'pyaes':
     class AESCipher(_AESCipher_pyaes):
         CRYPTOLIB = CRYPTOLIB
         CRYPTOLIB_VER = '.'.join( [str(x) for x in pyaes.VERSION] )
         CRYPTOLIB_HAS_GCM = False
 elif CRYPTOLIB == 'pyca/cryptography':
+    # We only need to document this one as it's the only one the RTD build process is going to see
     class AESCipher(_AESCipher_pyca):
+        """Wrapper for the imported crypto library
+        """
+
         CRYPTOLIB = CRYPTOLIB
+        """str: Name of the crypto library being used.
+
+        Current possible values: pyca/cryptography, [Py]Crypto[dome[x]], or pyaes
+
+        :meta hide-value:
+        """
+
         CRYPTOLIB_VER = Crypto_version
-        CRYPTOLIB_HAS_GCM = getattr( Crypto_modes, 'GCM', False )
+        """str: The version string of the crypto library in use
+
+        :meta hide-value:
+        """
+
+        CRYPTOLIB_HAS_GCM = bool( getattr( _Crypto_modes, 'GCM', False ) )
+        """bool: Crypto library can do AES in GCM mode
+
+        :meta hide-value:
+        """
