@@ -50,7 +50,7 @@ for clib in ('pyca/cryptography', 'PyCryptodomex', 'PyCrypto', 'pyaes'):
             import Crypto as _Crypto
             from Crypto.Cipher import AES as _AES
             # v1/v2 is PyCrypto, v3 is PyCryptodome
-            clib = 'PyCrypto' if Crypto.version_info[0] < 3 else 'PyCryptodome'
+            clib = 'PyCrypto' if _Crypto.version_info[0] < 3 else 'PyCryptodome'
         elif clib == 'pyaes':
             import pyaes  # https://github.com/ricmoo/pyaes
         else:
