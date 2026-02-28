@@ -1,2 +1,3 @@
 sphinx>=8.2
 sphinx-rtd-theme
+setuptools
