@@ -11,7 +11,7 @@ __all__ = ['CRYPTOLIB', 'CRYPTOLIB_VER', 'CRYPTOLIB_HAS_GCM', 'AESCipher']
 CRYPTOLIB = None
 """str: Name of the crypto library being used.
 
-Current possible values: pyca/cryptography, [Py]Crypto[dome[x]], or pyaes
+Current possible values: pyca/cryptography, PyCrypto[dome[x]], or pyaes
 
 :meta hide-value:
 """
@@ -234,7 +234,7 @@ elif CRYPTOLIB == 'pyca/cryptography':
         CRYPTOLIB = CRYPTOLIB
         """str: Name of the crypto library being used.
 
-        Current possible values: pyca/cryptography, [Py]Crypto[dome[x]], or pyaes
+        Current possible values: pyca/cryptography, PyCrypto[dome[x]], or pyaes
 
         :meta hide-value:
         """
