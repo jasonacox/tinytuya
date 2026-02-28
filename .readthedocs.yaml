@@ -1,0 +1,19 @@
+version: 2
+
+build:
+  os: "ubuntu-lts-latest"
+  tools:
+    python: "3.11"
+
+python:
+  install:
+    - requirements: requirements.txt
+    - requirements: docs/rtd-requirements.txt
+    # Install our python package before building the docs
+    - method: pip
+      path: .
+
+sphinx:
+  configuration: docs/sphinx/conf.py
+  # Fail on all warnings to avoid broken references
+  fail_on_warning: true

@@ -1,5 +1,9 @@
 import setuptools
-from pkg_resources import DistributionNotFound, get_distribution
+
+# Removed in setuptools 82.0
+#from pkg_resources import DistributionNotFound, get_distribution
+
+from importlib import import_module
 
 from tinytuya import __version__
 
@@ -20,12 +24,22 @@ CHOOSE_CRYPTO_LIB = [
 ]
 
 pref_lib = CHOOSE_CRYPTO_LIB[0]
+
+# setuptools removed pkg_resources in 82.0 and, with it, DistributionNotFound and get_distribution
+#for cryptolib in CHOOSE_CRYPTO_LIB:
+#    try:
+#        get_distribution(cryptolib)
+#        pref_lib = cryptolib
+#        break
+#    except DistributionNotFound:
+#        pass
+
 for cryptolib in CHOOSE_CRYPTO_LIB:
     try:
-        get_distribution(cryptolib)
+        import_module(cryptolib)
         pref_lib = cryptolib
         break
-    except DistributionNotFound:
+    except:
         pass
 
 INSTALL_REQUIRES.append( pref_lib )
