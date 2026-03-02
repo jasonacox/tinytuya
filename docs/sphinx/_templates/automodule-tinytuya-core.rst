@@ -4,7 +4,7 @@
    :show-inheritance:
    :undoc-members:
 
-   .. currentmodule:: {{ fullname }}
+   .. currentmodule:: tinytuya
 
    {% block attributes %}
    {%- if attributes %}
@@ -16,7 +16,7 @@
    {%- endfor %}
 
    {% for item in attributes %}
-   .. autodata:: {{ item }}
+   .. autodata:: tinytuya::{{ item }}
    {%- endfor %}
    {% endif %}
    {%- endblock %}

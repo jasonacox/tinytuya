@@ -9,6 +9,7 @@ from docutils.parsers.rst import Directive
 from docutils import nodes
 from sphinx import addnodes
 from sphinx.util import inspect
+import sphinx.pycode
 
 # Import from the local working directory
 import os
@@ -110,26 +111,37 @@ autosummary_context = {
     ]
 }
 
-#autosummary_skip_modules = ([ 'tinytuya.core.'+k for k in tinytuya.document.sphinx_autodocument.keys() ] +
-#autosummary_skip_modules = ([ k.split('.')[-1] for k in autosummary_context['tinytuya_parent_modules'].keys() ] +
-#                            ['Cloud'])
 autosummary_skip_modules = ['tinytuya.Cloud']
 for grp in autosummary_context['tinytuya_parent_modules']:
     for gmemb in grp['members']:
         autosummary_skip_modules.append( gmemb['name'] )
 
-#print(autosummary_skip_modules)
-
-def autodoc_skip_member_callback(app, what, name, obj, skip, options):
-    #if( what == 'module'):
-    #if 'Xenon' in name:
-    #    print(what, name, skip, getattr(obj, '__name__', '[no name]'), getattr(obj, '__module__', '[no module]'), obj, options)
-    # skip classes that are displayed separately
+def autodoc_skip_member_callback( app, what, name, obj, skip, options ):
     if( what == 'module' and getattr(obj, '__module__', '') in autosummary_skip_modules ):
-        #print('Skipping:', name, skip, obj)
         return True  # Skip it
     return None  # Use default skipping behavior otherwise
+
+saved_junk = {}
 
 def setup(app):
     app.connect( 'autodoc-skip-member', autodoc_skip_member_callback )
     app.add_directive( 'pprint', PrettyPrintDirective )
+
+    # Monkey-patch sphinx.ext.autodoc._dynamic._loader._get_docstring_lines so it actually finds our module
+    original_get_docstring_lines = sys.modules['sphinx.ext.autodoc._dynamic._loader']._get_docstring_lines
+    def new_get_docstring_lines( props, *args, **kwargs ):
+        if props.obj_type == 'module':
+            # Save the last-used module
+            saved_junk['module'] = props.module_name
+        elif props.obj_type == 'data' and props.module_name == 'tinytuya':
+            #if 'MAXCOUNT' in props.parts:
+            old_module = props.module_name
+            # Set module_name to the actual name
+            props.module_name = saved_junk['module']
+            #print('!!!!', props.obj_type, props.module_name, props.parts )
+            ret = original_get_docstring_lines( props, *args, **kwargs )
+            # Restore it so it doesn't clobber the text
+            props.module_name = old_module
+            return ret
+        return original_get_docstring_lines( props, *args, **kwargs )
+    sys.modules['sphinx.ext.autodoc._dynamic._loader']._get_docstring_lines = new_get_docstring_lines
