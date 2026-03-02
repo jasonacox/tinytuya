@@ -1841,8 +1841,8 @@ def _display_status( item, dps, term ):
         name = item['gwId']
     ip = item['ip']
     if not ip:
-        print("    %s[%-25.25s] %sError: No IP found%s" %
-              (term.subbold, name, term.alert, term.normal))
+        print("    %s[%-25.25s] %sNo IP found - Battery-powered or offline%s" %
+              (term.subbold, name, term.alertdim, term.normal))
     elif not dps:
         print("    %s[%-25.25s] %s%-18s - %sNo Response" %
               (term.subbold, name, term.dim, ip, term.alert))

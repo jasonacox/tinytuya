@@ -637,6 +637,8 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 ## Troubleshooting
 
 * Tuya devices only allow one TCP connection at a time.  Make sure you close the TuyaSmart or SmartLife app before using *TinyTuya* to connect.
+* **Battery-powered devices** (sensors, door/window contacts, etc.) are asleep most of the time and do not maintain a local network connection. They will not appear in scans and cannot be controlled locally — they only push data to the cloud when triggered. This is expected behaviour, not a TinyTuya bug.
+* **Polling too aggressively can cause devices to drop or reset their connection.** Avoid polling faster than once per second for most devices. For energy-monitoring plugs and other data-heavy devices, a 5–10 second interval is safer. Use `set_socketPersistent(True)` with a heartbeat loop rather than opening a new connection on every poll.
 * Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
 * The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed. 
 * Devices running protocol version 3.1 (e.g. below Firmware 1.0.5) do not require a device *Local_Key* to read the status. All devices will require a device *Local_Key* to control the device.

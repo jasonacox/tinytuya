@@ -1,5 +1,11 @@
 # RELEASE NOTES
 
+## v1.17.7 - UX Improvements
+
+* Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found".
+* Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com.
+* README: Added troubleshooting notes clarifying battery-powered device limitations and warning against aggressive polling intervals that can cause devices to drop or reset their connection.
+
 ## v1.17.6 - RFRemoteControlDevice Bug Fixes
 
 * Contrib: Fix `RFRemoteControlDevice` - three bugs that each independently caused `rfstudy_send` commands to be silently ignored by the device by @kongo09 in https://github.com/jasonacox/tinytuya/pull/684:
