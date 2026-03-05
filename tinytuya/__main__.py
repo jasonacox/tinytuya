@@ -108,7 +108,7 @@ for sp in control_cmds:
     dev_group = subparsers[sp].add_argument_group('Device', '--id (or --name) and --key are required if the --device-file lookup fails')
     dev_group.add_argument('--id',      help='Device ID', metavar='ID')
     dev_group.add_argument('--name',    help='Device name (looked up in device-file)', metavar='NAME')
-    dev_group.add_argument('--key',     help='Device local encryption key', metavar='KEY')
+    dev_group.add_argument('--key',     help='Device local encryption key (prompted if omitted and not in device-file)', metavar='KEY')
     dev_group.add_argument('--ip',      help='Device IP address (auto-discovered if omitted)', metavar='IP')
     dev_group.add_argument('--version', help='Tuya protocol version [Default: 3.3]', default=None, type=float, metavar='VER', dest='dev_version')
 
@@ -252,10 +252,35 @@ def _run_device_command(args):
         print('Error: --id or --name is required.')
         sys.exit(1)
     if not dev_key:
+        # Interactive prompt as last resort — avoids shell-escaping issues
+        # entirely for keys that contain $, #, =, :, etc.
+        try:
+            dev_key = input('Enter device local key (16 chars): ').strip()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            sys.exit(1)
+        if not dev_key:
+            print(
+                'Error: device local key not found. Provide --key, add the device to %s, '
+                'or enter it when prompted.' % device_file
+            )
+            sys.exit(1)
+
+    # Validate key length — Tuya local keys are always exactly 16 characters.
+    # A wrong length is the most common cause of error 914 and is usually a
+    # shell-escaping problem (e.g. $, #, = being interpreted by the shell).
+    if len(dev_key) != 16:
         print(
-            'Error: device local key not found. Provide --key or ensure '
-            'the device entry in %s has a "key" field.' % device_file
+            'Error: device key must be exactly 16 characters (got %d).' % len(dev_key)
         )
+        print('  This is often a shell-escaping issue when the key contains')
+        print('  special characters such as $, #, =, :, or !.')
+        print('  Tips:')
+        print("    Linux/Mac - wrap the key in single quotes:  --key '$y123c5...'")
+        print('    Windows CMD - wrap in double quotes and escape ^ before each')
+        print('                  special char, e.g.  --key "$y123^=c5..."')
+        print('    Any platform - omit --key entirely and enter it at the prompt')
+        print('                   (safest option for tricky keys).')
         sys.exit(1)
     if dev_version is None:
         dev_version = 3.3
