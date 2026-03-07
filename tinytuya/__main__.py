@@ -16,6 +16,7 @@
 """
 
 # Modules
+import getpass
 import json
 import sys
 import argparse
@@ -251,11 +252,25 @@ def _run_device_command(args):
     if not dev_id:
         print('Error: --id or --name is required.')
         sys.exit(1)
+    # Strip any accidental whitespace (e.g. trailing newline from copy-paste)
+    # from every key source before validation.
+    if dev_key:
+        dev_key = dev_key.strip()
+
     if not dev_key:
         # Interactive prompt as last resort — avoids shell-escaping issues
         # entirely for keys that contain $, #, =, :, etc.
+        # Only prompt when attached to a real terminal; in piped/CI contexts
+        # there is no user to answer, so exit with a clear error instead.
+        if not sys.stdin.isatty():
+            print(
+                'Error: device local key not found. Provide --key or add the device '
+                'to %s.' % device_file
+            )
+            sys.exit(1)
         try:
-            dev_key = input('Enter device local key (16 chars): ').strip()
+            # Use getpass so the key is not echoed to the terminal or logs.
+            dev_key = getpass.getpass('Enter device local key (16 chars, input hidden): ').strip()
         except (KeyboardInterrupt, EOFError):
             print()
             sys.exit(1)
