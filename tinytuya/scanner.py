@@ -1269,6 +1269,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     connect_next_round = []
     ip_wantips = bool(wantips)
     ip_wantids = bool(wantids)
+    can_end_early = ip_wantips or ip_wantids
     ip_force_wants_end = False
     ip_scan = False
     ip_scan_running = False
@@ -1797,7 +1798,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if scanned_devices[ip].found and dkey not in devices:
             devices[dkey] = dev
 
-    if verbose:
+    if verbose and not can_end_early:
         # Save polling data into snapshot format
         devicesarray = list(devices.values())
         # Add devices from devices.json even if they didn't poll
@@ -1841,8 +1842,8 @@ def _display_status( item, dps, term ):
         name = item['gwId']
     ip = item['ip']
     if not ip:
-        print("    %s[%-25.25s] %sError: No IP found%s" %
-              (term.subbold, name, term.alert, term.normal))
+        print("    %s[%-25.25s] %sNo IP found - Battery-powered or offline%s" %
+              (term.subbold, name, term.alertdim, term.normal))
     elif not dps:
         print("    %s[%-25.25s] %s%-18s - %sNo Response" %
               (term.subbold, name, term.dim, ip, term.alert))
