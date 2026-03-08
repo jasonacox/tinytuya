@@ -154,16 +154,21 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
                                       "    Enter " + bold + "any Device ID" + subbold +
                                       " currently registered in Tuya App (used to pull full list) or 'scan' to scan for one: " + normal)
         # TO DO - Determine apiRegion based on Device - for now, ask
-        print("\n      " + subbold + "Region List" + dim +
-              "\n        cn\tChina Data Center (alias: AY)" +
-              "\n        us\tUS - Western America Data Center (alias: AZ)" +
-              "\n        us-e\tUS - Eastern America Data Center (alias: UE)" +
-              "\n        eu\tCentral Europe Data Center" +
-              "\n        eu-w\tWestern Europe Data Center (alias: WE)" +
-              "\n        in\tIndia Data Center" +
-              "\n        sg\tSingapore Data Center\n")
-        config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
-                                    " (Options: cn, us, us-e, eu, eu-w, in, or sg): " + normal)
+        print("\n      " + subbold + "Region List" + dim)
+        has_aliases = {value: key for key, value in tinytuya.Cloud.API_REGION_ALIASES.items()}
+        for k in tinytuya.Cloud.API_REGIONS:
+            if k in tinytuya.Cloud.API_REGION_ALIASES:
+                continue
+            ln = '        %s\t%s' % (k, tinytuya.Cloud.API_REGIONS[k])
+            if k in has_aliases:
+                ln += ' (alias: %s)' % has_aliases[k]
+            print(ln)
+        while True:
+            config['apiRegion'] = input(subbold + "    Enter " + bold + "Your Region" + subbold +
+                                        " (Options: " + ', '.join(tinytuya.Cloud.API_REGIONS.keys()) + "): " + normal).lower()
+            if config['apiRegion'] in tinytuya.Cloud.API_REGIONS:
+                break
+            print("\n%sERROR:%s Bad Region Entered. Try again\n" % (bold, subbold))
         # Write Config
         json_object = json.dumps(config, indent=4)
         with open(config_file, "w") as outfile:

@@ -54,6 +54,8 @@ class Cloud(object):
     """Interface with Tuya's Cloud IoT Platform
     """
 
+    # The description will be generated from the key values by Sphinx's 'autodoc-process-docstring' hook
+    # This dict isn't used by the Cloud class, it exists just for user convenience
     API_REGIONS = {
         'cn': 'China Data Center',
         'us': 'Western America Data Center',
@@ -66,7 +68,19 @@ class Cloud(object):
         'in': 'India Datacenter',
         'sg': 'Singapore Data Center',
     }
-    """The description will be generated from the key values by Sphinx's 'autodoc-process-docstring' hook
+    """List of API Regions
+
+    API Regions:
+    """
+
+    API_REGION_ALIASES = {
+        'az': 'us',
+        'ue': 'us-e',
+        'we': 'eu-w',
+    }
+    """List of API Region aliases
+
+    Aliases:
     """
 
     #: :meta private:
@@ -179,7 +193,7 @@ class Cloud(object):
         if apiRegion is None:
             apiRegion = self.apiRegion
         self.apiRegion = apiRegion.lower()
-        self.urlhost = API_REGION_HOSTS[apiRegion]
+        self.urlhost = self.API_REGION_HOSTS[apiRegion]
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type=None):
         """

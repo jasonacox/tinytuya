@@ -135,14 +135,12 @@ def autodoc_process_docstring_callback( app, obj_type, name, obj, options, lines
         lines[0] = tinytuya.error_codes[obj]
 
     if obj_type == 'attribute' and isinstance( obj, dict ) and name.startswith( 'tinytuya.Cloud.' ):
+        print(obj_type, name, obj, options, lines)
         if name not in saved_junk['objs']:
             saved_junk['objs'][name] = obj.copy()
-        lines.clear()
+        #lines.clear()
         obj.clear()
-        lines.append('List of API Regions')
-        lines.append('')
-        lines.append('API Regions:')
-        lines.append('')
+        lines.append( '' )
         for k in saved_junk['objs'][name]:
             lines.append( '* **' + k + '** - ' + saved_junk['objs'][name][k] )
         lines.append('')
