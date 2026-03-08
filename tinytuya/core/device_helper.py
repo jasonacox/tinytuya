@@ -17,7 +17,7 @@ def find_device(dev_id=None, address=None):
       address (str, optional): The IP address you are tring to find the Device ID for
 
     Returns:
-      dict: `{'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}`
+      dict or None: `{'ip':<ip>, 'version':<version>, 'id':<id>, 'product_id':<product_id>, 'data':<broadcast data>}`
     """
     if dev_id is None and address is None:
         return {'ip':None, 'version':None, 'id':None, 'product_id':None, 'data':{}}
@@ -54,7 +54,7 @@ def device_info( dev_id ):
       dev_id (str): The specific Device ID you are looking for
 
     Returns:
-      dict: Device dict containing the the device info, or None if not found
+      dict or None: Device dict containing the the device info, or None if not found
     """
     devinfo = None
     try:
