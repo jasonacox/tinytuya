@@ -528,13 +528,16 @@ class Cloud(object):
                             dev['mapping'] = mappings[productid]
 
             # Fallback: restore old mapping for changed devices that got no mapping back
-            # (API failure, rate limit, etc.) — use the mapping from oldlist if available
+            # (API failure, rate limit, etc.) — use the mapping from oldlist if available.
+            # Only fallback when the mapping is missing or explicitly None, so that an
+            # intentionally empty mapping {} (e.g. device with no DPs, cloud code 2009)
+            # is preserved rather than replaced with a potentially stale old mapping.
             for dev in changed_devices:
-                if not dev.get('mapping'):
+                if 'mapping' not in dev or dev['mapping'] is None:
                     dev_id = dev.get('id')
                     if dev_id and dev_id in old_devices:
                         old_mapping = old_devices[dev_id].get('mapping')
-                        if old_mapping:
+                        if old_mapping is not None:
                             dev['mapping'] = old_mapping
 
         log.debug( 'changed: %d', len(changed_devices) )
