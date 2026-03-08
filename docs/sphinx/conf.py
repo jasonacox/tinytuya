@@ -119,6 +119,9 @@ for grp in autosummary_context['tinytuya_parent_modules']:
         autosummary_skip_modules.append( gmemb['name'] )
 
 def autodoc_skip_member_callback( app, what, name, obj, skip, options ):
+    if name in ('namedtuple', 'md5', 'sha256', 'init'):
+        # imported libs, ignore
+        return True
     if( what == 'module' and getattr(obj, '__module__', '') in autosummary_skip_modules ):
         return True  # Skip it
     if( what == 'attribute' and name in ('API_REGION_HOSTS',) ):
