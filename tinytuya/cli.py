@@ -258,8 +258,9 @@ def _run_device_command(args):
 def _monitor_device(args):
     """Connect to device, get status, and monitor for async updates."""
     d = build_device(args)
-    debug = bool(args.debug or args.debug2)
+    d.set_socketPersistent(True)
 
+    debug = bool(args.debug or args.debug2)
     STATUS_TIMER = 30
     KEEPALIVE_TIMER = 12
 

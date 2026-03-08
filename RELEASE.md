@@ -5,7 +5,8 @@
 * Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found".
 * Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com.
 * README: Added troubleshooting notes clarifying battery-powered device limitations and warning against aggressive polling intervals that can cause devices to drop or reset their connection.
-* CLI (`on`, `off`, `set`, `get`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688):
+* CLI: New `monitor` command added: Connects to device and waits for async status updates.
+* CLI (`on`, `off`, `set`, `get`, `monitor`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688):
   * If `--key` is omitted and the key is not found in `devices.json`, the CLI now **prompts interactively** for the key. Input at a terminal prompt bypasses shell interpretation entirely, so no quoting or escaping is needed.
   * Added **key length validation** — Tuya local keys are always exactly 16 characters. If the resolved key is the wrong length (the most common symptom of a shell-escaping problem), a clear error is printed with platform-specific quoting tips for Linux/Mac and Windows CMD.
 
