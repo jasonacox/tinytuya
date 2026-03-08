@@ -1269,6 +1269,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     connect_next_round = []
     ip_wantips = bool(wantips)
     ip_wantids = bool(wantids)
+    can_end_early = ip_wantips or ip_wantids
     ip_force_wants_end = False
     ip_scan = False
     ip_scan_running = False
@@ -1797,7 +1798,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if scanned_devices[ip].found and dkey not in devices:
             devices[dkey] = dev
 
-    if verbose:
+    if verbose and not can_end_early:
         # Save polling data into snapshot format
         devicesarray = list(devices.values())
         # Add devices from devices.json even if they didn't poll
