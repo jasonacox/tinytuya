@@ -73,7 +73,7 @@ def _run_list_command(args):
     print(sep)
 
 
-def build_device(args):
+def _build_device(args):
     """Build a Device() object from args, using device file if needed."""
     dev_id      = args.id
     dev_key     = args.key
@@ -185,7 +185,7 @@ def build_device(args):
         print('                   (safest option for tricky keys).')
         sys.exit(1)
 
-    if (not dev_ip) or (dev_ip.lower() == 'Auto') or (not dev_version):
+    if (not dev_ip) or (dev_ip.lower().strip() == 'auto') or (not dev_version):
         # Call the scanner here so we can pass args to it
         all_results = scanner.devices(
             verbose=bool(args.debug or args.debug2), scantime=args.max_time, color=(not args.nocolor), poll=False,
@@ -212,7 +212,7 @@ def build_device(args):
 
 def _run_device_command(args):
     """Handle on / off / set / get device control commands."""
-    d = build_device(args)
+    d = _build_device(args)
 
     # Execute command
     if args.command == 'on':
@@ -261,7 +261,7 @@ def _run_device_command(args):
 
 def _monitor_device(args):
     """Connect to device, get status, and monitor for async updates."""
-    d = build_device(args)
+    d = _build_device(args)
     d.set_socketPersistent(True)
 
     debug = bool(args.debug or args.debug2)
