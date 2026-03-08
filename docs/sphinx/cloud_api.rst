@@ -1,4 +1,4 @@
-﻿TinyTuya Cloud API
+TinyTuya Cloud API
 =====================
 
 .. currentmodule:: tinytuya

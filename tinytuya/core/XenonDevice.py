@@ -19,7 +19,9 @@ from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_me
 from . import command_types as CT, header as H
 
 # Fix the name so it's not tinytuya.core.XenonDevice
-__name__ = 'tinytuya.XenonDevice'
+if __name__ == 'tinytuya.core.XenonDevice':
+    __name__ = 'tinytuya.XenonDevice'
+
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +239,7 @@ class XenonDevice(object):
             local_key (str, optional): The encryption key. Defaults to None.
             cid (str, optional): Optional sub-device id. Default to None.
             node_id (str, optional): alias for cid
-            parent (XenonDevice, optional): gateway device this device is a child of)
+            parent (XenonDevice, optional): gateway device this device is a child of
 
         Attributes:
             port (int): The port to connect to.

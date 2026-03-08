@@ -17,9 +17,9 @@ TCPTIMEOUT = 0.4    #: Seconds to wait for socket open for scanning
 DEFAULT_NETWORK = '192.168.0.0/24' #: Default IP network to scan when force scanning
 
 # Configuration Files
-CONFIGFILE = 'tinytuya.json' #: File to save/load Cloud configuration from
 DEVICEFILE = 'devices.json'  #: File to save/load device list from
-RAWFILE = 'tuya-raw.json'    #: File to
+CONFIGFILE = 'tinytuya.json' #: File to save/load Cloud configuration from
+RAWFILE = 'tuya-raw.json'    #: File to save raw Cloud responses to
 SNAPSHOTFILE = 'snapshot.json' #: File to save device snapshots to
 
 #: List of additional device properties to save in device list file

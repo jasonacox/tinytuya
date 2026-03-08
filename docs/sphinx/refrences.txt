@@ -1,0 +1,16 @@
+
+Note call-outs, deprecated warnings, etc:
+  https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html#directive-version-deprecated
+
+Auto-summary:
+  https://www.sphinx-doc.org/en/master/usage/extensions/autosummary.html
+
+Auto-doc:
+  https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
+
+Templating engine variables / control structures:
+  https://jinja.palletsprojects.com/en/stable/templates/
+
+Python markup:
+  https://www.sphinx-doc.org/en/master/usage/domains/python.html#info-field-lists
+

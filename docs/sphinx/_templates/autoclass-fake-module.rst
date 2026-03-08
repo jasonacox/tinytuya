@@ -37,11 +37,6 @@
       ~{{ name }}.{{ item }}
    {%- endif %}
    {%- endfor %}
-
-   {% for item in methods %}
-
-   .. automethod:: {{ item }}
-   {%- endfor %}
    {% endif %}
    {% endblock %}
 
@@ -55,3 +50,18 @@
    {%- endfor %}
    {% endif %}
    {% endblock %}
+
+
+   {% if methods %}
+   {% for item in methods %}
+
+   .. automethod:: {{ item }}
+   {%- endfor %}
+   {% endif %}
+
+   {% if attributes %}
+   {% for item in attributes %}
+
+   .. autoattribute:: {{ item }}
+   {%- endfor %}
+   {% endif %}

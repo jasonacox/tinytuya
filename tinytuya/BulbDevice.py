@@ -140,7 +140,7 @@ class BulbDevice(Device):
             kwargs['version'] = None
         super(BulbDevice, self).__init__(*args, **kwargs)
 
-    # Monkey-patch the docstring so Sphinx gets a contatenation of parent+ours
+    # Monkey-patch the docstring so Sphinx gets a concatenation of parent+ours
     __init__.__doc__ = Device.__init__.__doc__ + __init__.__doc__
 
     def status(self, nowait=False):

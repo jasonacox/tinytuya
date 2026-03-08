@@ -1,4 +1,4 @@
-﻿:orphan:
+:orphan:
 
 TinyTuya Local API
 =====================

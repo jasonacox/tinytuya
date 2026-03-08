@@ -8,7 +8,8 @@ from .XenonDevice import XenonDevice, merge_dps_results
 from . import command_types as CT
 
 # Fix the name so it's not tinytuya.core.Device
-__name__ = 'tinytuya.Device'
+if __name__ == 'tinytuya.core.Device':
+    __name__ = 'tinytuya.Device'
 
 log = logging.getLogger(__name__)
 

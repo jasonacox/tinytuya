@@ -39,7 +39,7 @@ for cryptolib in CHOOSE_CRYPTO_LIB:
         import_module(cryptolib)
         pref_lib = cryptolib
         break
-    except:
+    except ImportError:
         pass
 
 INSTALL_REQUIRES.append( pref_lib )

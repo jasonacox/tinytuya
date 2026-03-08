@@ -42,18 +42,53 @@ except ImportError as impErr:
 
 from .core import * # pylint: disable=W0401, W0614
 
+#if __name__ == 'tinytuya.Cloud':
+#    __name__ == 'tinytuya'
+
+
 ########################################################
 #             Cloud Classes and Functions
 ########################################################
 
 class Cloud(object):
-    """
-    placeholder
+    """Interface with Tuya's Cloud IoT Platform
     """
 
-    def __init__(self, apiRegion=None, apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None, configFile=CONFIGFILE, **extrakw):
-        """
-        Tuya Cloud IoT Platform Access
+    API_REGIONS = {
+        'cn': 'China Data Center',
+        'us': 'Western America Data Center',
+        'az': 'Alias for `us`',
+        'us-e': 'Eastern America Data Center',
+        'ue': 'Alias for `us-e`',
+        'eu': 'Central Europe Data Center',
+        'eu-w': 'Western Europe Data Center',
+        'we': 'Alias for `eu-w`',
+        'in': 'India Datacenter',
+        'sg': 'Singapore Data Center',
+    }
+    """The description will be generated from the key values by Sphinx's 'autodoc-process-docstring' hook
+    """
+
+    #: :meta private:
+    API_REGION_HOSTS = {
+        'cn': 'openapi.tuyacn.com',
+        'us': 'openapi.tuyaus.com',
+        'az': 'openapi.tuyaus.com',
+        'us-e': 'openapi-ueaz.tuyaus.com',
+        'ue': 'openapi-ueaz.tuyaus.com',
+        'eu': 'openapi.tuyaeu.com',
+        'eu-w': 'openapi-weaz.tuyaeu.com',
+        'we': 'openapi-weaz.tuyaeu.com',
+        'in': 'openapi.tuyain.com',
+        'sg': 'openapi-sg.iotbing.com',
+    }
+    """
+    :meta private:
+    """
+
+
+    def __init__(self, apiRegion='cn', apiKey=None, apiSecret=None, apiDeviceID=None, new_sign_algorithm=True, initial_token=None, configFile=CONFIGFILE, **extrakw):
+        """Tuya Cloud IoT Platform Access
 
         Args:
             apiRegion (str, optional): Tuya API region code (e.g., 'us', 'eu', 'cn', 'in').
@@ -65,15 +100,16 @@ class Cloud(object):
             configFile (str, optional): Path to the config file to use for credentials. Default: 'tinytuya.json'.
             **extrakw: Additional keyword arguments for future compatibility.
 
-        If apiKey or apiSecret are not provided, credentials will be loaded from the config file.
-
+        If apiKey or apiSecret are not provided, credentials will be loaded from the :py:data:`tinytuya.CONFIGFILE` config file.
+        """
+        """
         Playload Construction - Header Data:
-            Parameter 	  Type    Required	Description
-            client_id	  String     Yes	client_id
-            signature     String     Yes	HMAC-SHA256 Signature (see below)
-            sign_method	  String	 Yes	Message-Digest Algorithm of the signature: HMAC-SHA256.
-            t	          Long	     Yes	13-bit standard timestamp (now in milliseconds).
-            lang	      String	 No	    Language. It is zh by default in China and en in other areas.
+            Parameter      Type    Required Description
+            client_id     String     Yes client_id
+            signature     String     Yes HMAC-SHA256 Signature (see below)
+            sign_method   String  Yes Message-Digest Algorithm of the signature: HMAC-SHA256.
+            t             Long      Yes 13-bit standard timestamp (now in milliseconds).
+            lang          String  No     Language. It is zh by default in China and en in other areas.
             access_token  String     *      Required for service management calls
 
         Signature Details:
@@ -130,23 +166,20 @@ class Cloud(object):
             self._gettoken()
 
     def setregion(self, apiRegion=None):
-        # Set hostname based on apiRegion
+        """Change the region of an existing Cloud object
+
+        Sets the hostname based on the given `apiRegion`
+
+        Args:
+          apiRegion (str): The region code of the new region as found in :py:data:`~tinytuya.Cloud.Cloud.API_REGIONS`
+
+        Raises:
+          KeyError: Region code not found in :py:data:`~tinytuya.Cloud.Cloud.API_REGIONS`
+        """
         if apiRegion is None:
             apiRegion = self.apiRegion
         self.apiRegion = apiRegion.lower()
-        self.urlhost = "openapi.tuyacn.com"          # China Data Center
-        if self.apiRegion == "us" or self.apiRegion == "az":
-            self.urlhost = "openapi.tuyaus.com"      # Western America Data Center
-        elif self.apiRegion == "us-e" or self.apiRegion == "ue":
-            self.urlhost = "openapi-ueaz.tuyaus.com" # Eastern America Data Center
-        elif self.apiRegion == "eu":
-            self.urlhost = "openapi.tuyaeu.com"      # Central Europe Data Center
-        elif self.apiRegion == "eu-w" or self.apiRegion == "we":
-            self.urlhost = "openapi-weaz.tuyaeu.com" # Western Europe Data Center
-        elif self.apiRegion == "in":
-            self.urlhost = "openapi.tuyain.com"      # India Datacenter
-        elif self.apiRegion == "sg":
-            self.urlhost = "openapi-sg.iotbing.com"  # Singapore Data Center
+        self.urlhost = API_REGION_HOSTS[apiRegion]
 
     def _tuyaplatform(self, uri, action='GET', post=None, ver='v1.0', recursive=False, query=None, content_type=None):
         """
@@ -246,18 +279,22 @@ class Cloud(object):
         if "token invalid" in response.text:
             if recursive is True:
                 log.debug("Failed 2nd attempt to renew token - Aborting")
+                self.error = error_json(
+                    ERR_CLOUDKEY,
+                    "Cloud _tuyaplatform() got invalid token after attempting to renew: %r" % response.content,
+                )
                 return None
             log.debug("Token Expired - Try to renew")
             self._gettoken()
             if not self.token:
                 log.debug("Failed to renew token")
+                # self.error set by _gettoken()
                 return None
             else:
                 return self._tuyaplatform(uri, action, post, ver, True)
 
         try:
             response_dict = json.loads(response.content.decode())
-            self.error = None
         except:
             try:
                 response_dict = json.loads(response.content)
@@ -267,7 +304,8 @@ class Cloud(object):
                     "Cloud _tuyaplatform() invalid response: %r" % response.content,
                 )
                 return self.error
-        # Check to see if token is expired
+
+        self.error = None
         return response_dict
 
     def _gettoken(self):
@@ -324,10 +362,13 @@ class Cloud(object):
         Make a generic cloud request and return the results.
 
         Args:
-          url:    Required.  The URL to fetch, i.e. "/v1.0/devices/0011223344556677/logs"
-          action: Optional.  GET, POST, DELETE, or PUT.  Defaults to GET, unless POST data is supplied.
-          post:   Optional.  POST body data.  Will be fed into json.dumps() before posting.
-          query:  Optional.  A dict containing query string key/value pairs.
+          url (str):  The URL to fetch, i.e. "/v1.0/devices/0011223344556677/logs"
+          action (str, optional):  GET, POST, DELETE, or PUT.  Defaults to GET, unless POST data is supplied.
+          post (any, optional):  POST body data.  Will be fed into json.dumps() before posting.
+          query (dict, optional):  A dict containing query string key/value pairs.
+
+        Returns:
+          dict or None: Returns server response as a dict on success, or an error_json error dict or None on error
         """
         if not self.token:
             return self.error
@@ -413,9 +454,12 @@ class Cloud(object):
         Return dictionary of all devices.
 
         Args: 
-            verbose - Returns raw JSON data from Tuya Cloud
-            oldlist - List of devices from previous run
-            include_map - Include the DPS mapping in the device list
+          verbose (bool): Returns raw JSON data from Tuya Cloud when True
+          oldlist (list or None): List of devices from previous run
+          include_map (bool): Include the DPS mapping in the device list
+
+        Returns:
+          dict: raw server response if `verbose`, err_json if error, or list of devices
         """
         old_devices = {}
         if oldlist:
@@ -549,6 +593,15 @@ class Cloud(object):
             devices = devices[50:]
 
     def filter_devices( self, devs, ip_list=None ):
+        """Filters extraneous keys out of device dicts
+
+        Args:
+          devs (list of dicts): list of device dicts to filter
+          ip_list (dict, optional): dict containing MAC Address -> IP Address mappings to add to 'ip' key
+
+        Returns:
+          list of dicts: filtered device dict list
+        """
         json_mac_data = {}
         # mutable json_mac_data will be modified
         self._get_hw_addresses( json_mac_data, [i['id'] for i in devs] )
@@ -606,26 +659,46 @@ class Cloud(object):
         return response_dict
 
     def getstatus(self, deviceid=None):
-        """
-        Get the status of the device.
+        """Get the status of the device.
+
+        Args:
+          deviceid (str): Device ID to get the status of
+
+        Returns:
+          dict: Server response
         """
         return self._getdevice('status', deviceid)
 
     def getfunctions(self, deviceid=None):
-        """
-        Get the functions of the device.
+        """Get the functions of the device.
+
+        Args:
+          deviceid (str): Device ID to get the function list for
+
+        Returns:
+          dict: Server response
         """
         return self._getdevice('functions', deviceid)
 
     def getproperties(self, deviceid=None):
-        """
-        Get the properties of the device.
+        """Get the properties of the device.
+
+        Args:
+          deviceid (str): Device ID to get the properties for
+
+        Returns:
+          dict: Server response
         """
         return self._getdevice('specification', deviceid)
 
     def getdps(self, deviceid=None):
-        """
-        Get the specifications including DPS IDs of the device.
+        """Get the specifications including DPS IDs of the device.
+
+        Args:
+          deviceid (str): Device ID to get the DPs for
+
+        Returns:
+          dict: Server response
         """
         if not self.token:
             return self.error
@@ -644,8 +717,15 @@ class Cloud(object):
         return response_dict
 
     def sendcommand(self, deviceid=None, commands=None, uri='iot-03/devices/'):
-        """
-        Send a command to the device
+        """Send a command to the device
+
+        Args:
+          deviceid (str): Device ID to send the command to
+          commands (any): Commands to send (Will be fed into json.dumps() before posting)
+          uri (str, optional): Endpoint URI fragment to post command to
+
+        Returns:
+          dict: Server response
         """
         if not self.token:
             return self.error
@@ -664,8 +744,13 @@ class Cloud(object):
         return response_dict
 
     def getconnectstatus(self, deviceid=None):
-        """
-        Get the device Cloud connect status.
+        """Get the device Cloud connect status.
+
+        Args:
+          deviceid (str): Device ID
+
+        Returns:
+          dict: Server response
         """
         if not self.token:
             return self.error
@@ -682,8 +767,7 @@ class Cloud(object):
         return(response_dict["result"]["online"])
 
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):
-        """
-        Get the logs for a device.
+        """Get the logs for a device.
         https://developer.tuya.com/en/docs/cloud/0a30fc557f?id=Ka7kjybdo0jse
 
         Note: The cloud only returns logs for DPs in the "official" DPS list.
@@ -691,19 +775,17 @@ class Cloud(object):
           This is a limitation of Tuya's servers and there is nothing we can do about it.
 
         Args:
-          devid:  Required.  Device ID
-          start:  Optional.  Get logs starting from this time.  Defaults to yesterday
-          end:    Optional.  Get logs until this time.  Defaults to the current time
-          evtype: Optional.  Limit to events of this type.  1 = Online, 7 = DP Reports.  Defaults to all events.
-          size:   Optional.  Target number of log entries to return.  Defaults to 0 (all, up to max_fetches*100).
-                               Actual number of log entries returned will be between "0" and "size * 2 - 1"
-          max_fetches: Optional. Maximum number of queries to send to the server.  Tuya's server has a hard limit
-                               of 100 records per query, so the maximum number of logs returned is "max_fetches * 100"
-          start_row_key: Optional. The "next_row_key" from a previous run.
-          params: Optional.  Additional values to include in the query string.  Defaults to an empty dict.
+          devid (str):  Device ID
+          start (int, optional):  Get logs starting from this time.  Defaults to yesterday.  Negative is number of days ago, positive should be a UNIX timestamp.
+          end (int, optional):  Get logs until this time.  Defaults to the current time.  Negative is number of days ago, positive should be a UNIX timestamp.
+          evtype (int or str or bytes or list or tuple, optional):  Limit to events of this type.  1 = Online, 7 = DP Reports.  Defaults to all events.  Can be an `int` (single event), string (comma-separated list of `int`s), or `list`/`tuple`.
+          size (int, optional):  Target number of log entries to return.  Defaults to 0 (all, up to max_fetches*100).  Actual number of log entries returned will be between "0" and "size * 2 - 1"
+          max_fetches (int, optional):  Maximum number of queries to send to the server.  Tuya's server has a hard limit of 100 records per query, so the maximum number of logs returned will be "max_fetches * 100"
+          start_row_key (any, optional):  The "next_row_key" from a previous run.
+          params (dict, optional):  Additional values to include in the query string.  Defaults to an empty dict.
 
         Returns:
-          Response from server
+          dict: Response from server
         """
         if not deviceid:
             return error_json(
@@ -807,6 +889,9 @@ class Cloud(object):
 
     @staticmethod
     def format_timestamp( ts ):
+        """
+        :meta private:
+        """
         # converts a 10-digit unix timestamp to the 13-digit stamp the servers expect
         if type(ts) != int:
             if len(str(int(ts))) == 10:
@@ -849,8 +934,15 @@ class Cloud(object):
                 log.debug( 'Parse mapping item failed!', exc_info=True )
 
     def getmapping( self, productid, deviceid=None ):
-        # return a mapping for the given product id, or download it from the cloud using a device id
-        # Return value: None on failure, or a dict on success (may be an empty dict if device does not have DPs)
+        """ Returns a cached mapping for the given product id, or downloads it from the Cloud using a device id
+
+        Args:
+          productid (str):  Product ID mapping to return
+          deviceid (str, optional):  Device ID to download the mapping for if Product ID is not cached.
+
+        Returns:
+          dict or None: None on failure, or a dict on success (may be an empty dict if device does not have DPs)
+        """
         if not self.mappings:
             self.mappings = {} #load_mappings()
 
@@ -885,13 +977,23 @@ class Cloud(object):
         return None
 
     def setmappings( self, mappings ):
-        # sets an initial mapping set so we do not need to download everything
+        """Sets initial mapping cache so we do not need to download everything.
+
+        Args:
+          mappings (dict): Initial mapping cache to use
+        """
         if type(mappings) == dict:
             self.mappings = mappings
 
     def getmappings( self, devices ):
-        # get all mappings for all tuya devices
-        # returns a dict with product ids as keys
+        """Returns the cache for all known Product IDs
+
+        Args:
+          devices (list of dicts): List of all devices to read Product IDs from
+
+        Returns:
+          dict: A dict with Product IDs as keys and their mappings as values
+        """
         if not self.mappings:
             self.mappings = {}
 

@@ -72,7 +72,7 @@ autosummary_imported_members = True
 toc_object_entries = True
 
 napoleon_numpy_docstring = False
-
+#napoleon_use_ivar = True
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
@@ -111,6 +111,8 @@ autosummary_context = {
     ]
 }
 
+saved_junk = { 'objs': {} }
+
 autosummary_skip_modules = ['tinytuya.Cloud']
 for grp in autosummary_context['tinytuya_parent_modules']:
     for gmemb in grp['members']:
@@ -119,12 +121,41 @@ for grp in autosummary_context['tinytuya_parent_modules']:
 def autodoc_skip_member_callback( app, what, name, obj, skip, options ):
     if( what == 'module' and getattr(obj, '__module__', '') in autosummary_skip_modules ):
         return True  # Skip it
+    if( what == 'attribute' and name in ('API_REGION_HOSTS',) ):
+        return True
+    doc = getattr(obj, '__doc__', '')
+    if doc and ':meta private:\n' in doc:
+        return True
+    elif doc and ':meta public:\n' in doc:
+        return False
     return None  # Use default skipping behavior otherwise
 
-saved_junk = {}
+def autodoc_process_docstring_callback( app, obj_type, name, obj, options, lines ):
+    if obj_type == 'data' and name.startswith( 'tinytuya.ERR_' ) and isinstance( obj, int ) and obj in tinytuya.error_codes:
+        lines[0] = tinytuya.error_codes[obj]
+
+    if obj_type == 'attribute' and isinstance( obj, dict ) and name.startswith( 'tinytuya.Cloud.' ):
+        if name not in saved_junk['objs']:
+            saved_junk['objs'][name] = obj.copy()
+        lines.clear()
+        obj.clear()
+        lines.append('List of API Regions')
+        lines.append('')
+        lines.append('API Regions:')
+        lines.append('')
+        for k in saved_junk['objs'][name]:
+            lines.append( '* **' + k + '** - ' + saved_junk['objs'][name][k] )
+        lines.append('')
+
+def autodoc_process_signature_callback( app, obj_type, name, obj, options, signature, return_annotation ):
+    if obj_type == 'attribute' and isinstance( obj, dict ) and name.startswith( 'tinytuya.Cloud.' ):
+        return ('{...}', '')
+    return None
 
 def setup(app):
     app.connect( 'autodoc-skip-member', autodoc_skip_member_callback )
+    app.connect( 'autodoc-process-docstring', autodoc_process_docstring_callback )
+    #app.connect( 'autodoc-process-signature', autodoc_process_signature_callback )
     app.add_directive( 'pprint', PrettyPrintDirective )
 
     # Monkey-patch sphinx.ext.autodoc._dynamic._loader._get_docstring_lines so it actually finds our module
@@ -143,5 +174,7 @@ def setup(app):
             # Restore it so it doesn't clobber the text
             props.module_name = old_module
             return ret
+        #elif props.module_name == 'tinytuya.Cloud':
+        #    props.module_name = 'tinytuya'
         return original_get_docstring_lines( props, *args, **kwargs )
     sys.modules['sphinx.ext.autodoc._dynamic._loader']._get_docstring_lines = new_get_docstring_lines
