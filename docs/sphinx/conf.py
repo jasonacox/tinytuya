@@ -92,7 +92,7 @@ autosummary_context = {
     'tinytuya_parent_modules': [
         {
             'group': 'Standard Device Modules',
-            'template': 'autoclass-fake-module.rst',
+            'template': 'autoclass-module.rst',
             'members': [
                 { 'name': 'tinytuya.XenonDevice', 'currentmodule': False },
                 { 'name': 'tinytuya.Device', 'currentmodule': False },
@@ -136,7 +136,6 @@ def autodoc_process_docstring_callback( app, obj_type, name, obj, options, lines
 
     if obj_type in ('attribute', 'data'):
         if isinstance( obj, dict ) or isinstance( obj, list ) or isinstance( obj, tuple ): # and name.startswith( 'tinytuya.Cloud.' ):
-            print('DSTR', obj_type, name, obj)
             if name not in saved_junk['objs']:
                 if isinstance( obj, tuple ):
                     saved_junk['objs'][name] = obj

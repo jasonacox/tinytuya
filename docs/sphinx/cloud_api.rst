@@ -7,6 +7,6 @@ TinyTuya Cloud API
 
 .. autosummary::
    :toctree: generated
-   :template: autoclass-fake-module.rst
+   :template: autoclass-module.rst
 
    Cloud

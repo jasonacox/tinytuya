@@ -8,6 +8,7 @@ from .const import *
 from .udp_helper import *
 from .command_types import *
 from .header import *
+from .device_helper import *
 from .XenonDevice import *
 from .Device import *
 
