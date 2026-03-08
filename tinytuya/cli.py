@@ -176,7 +176,7 @@ def build_device(args):
             'Error: device key must be exactly 16 characters (got %d).' % len(dev_key)
         )
         print('  This is often a shell-escaping issue when the key contains')
-        print('  special characters such as $, #, =, :, or !.')
+        print("  special characters such as $, #, =, :, ', or !.")
         print('  Tips:')
         print("    Linux/Mac - wrap the key in single quotes:  --key '$y123c5...'")
         print('    Windows CMD - wrap in double quotes and escape ^ before each')
@@ -193,6 +193,10 @@ def build_device(args):
         if all_results and dev_id in all_results:
             dev_ip = all_results[dev_id]['ip']
             dev_version = all_results[dev_id]['version']
+
+    if not dev_version:
+        # Uh oh, scan did not find it!
+        dev_version = 3.3
 
     # Create device handle
     try:
