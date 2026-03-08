@@ -17,7 +17,7 @@ from .error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ER
 from .exceptions import DecodeError
 from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_message, parse_header
 from . import command_types as CT, header as H
-from .device_helper import payload_dict, find_device, merge_dps_results
+from .device_helper import payload_dict, device_info, find_device, merge_dps_results
 
 # Fix the name so it's not tinytuya.core.XenonDevice
 if __name__ == 'tinytuya.core.XenonDevice':
