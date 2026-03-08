@@ -134,16 +134,27 @@ def autodoc_process_docstring_callback( app, obj_type, name, obj, options, lines
     if obj_type == 'data' and name.startswith( 'tinytuya.ERR_' ) and isinstance( obj, int ) and obj in tinytuya.error_codes:
         lines[0] = tinytuya.error_codes[obj]
 
-    if obj_type == 'attribute' and isinstance( obj, dict ) and name.startswith( 'tinytuya.Cloud.' ):
-        print(obj_type, name, obj, options, lines)
-        if name not in saved_junk['objs']:
-            saved_junk['objs'][name] = obj.copy()
-        #lines.clear()
-        obj.clear()
-        lines.append( '' )
-        for k in saved_junk['objs'][name]:
-            lines.append( '* **' + k + '** - ' + saved_junk['objs'][name][k] )
-        lines.append('')
+    if obj_type in ('attribute', 'data'):
+        if isinstance( obj, dict ) or isinstance( obj, list ) or isinstance( obj, tuple ): # and name.startswith( 'tinytuya.Cloud.' ):
+            print('DSTR', obj_type, name, obj)
+            if name not in saved_junk['objs']:
+                if isinstance( obj, tuple ):
+                    saved_junk['objs'][name] = obj
+                else:
+                    saved_junk['objs'][name] = obj.copy()
+            #lines.clear()
+            lines.append( '' )
+            if not isinstance( obj, tuple ):
+                obj.clear()
+            lines.append( '' )
+            if isinstance( obj, dict ):
+                for k in saved_junk['objs'][name]:
+                    lines.append( '* **' + str(k) + '** - ' + saved_junk['objs'][name][k] )
+            else:
+                for k in saved_junk['objs'][name]:
+                    lines.append( '* ' + str(k) )
+            lines.append('')
+
 
 def autodoc_process_signature_callback( app, obj_type, name, obj, options, signature, return_annotation ):
     if obj_type == 'attribute' and isinstance( obj, dict ) and name.startswith( 'tinytuya.Cloud.' ):
