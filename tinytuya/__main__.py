@@ -115,7 +115,7 @@ for sp in control_cmds:
     name_id_group.add_argument('--id',      help='Device ID', metavar='ID')
     name_id_group.add_argument('--name',    help='Device name (looked up in device-file)', metavar='NAME')
     dev_group.add_argument('--key',     help='Device local encryption key (prompted if omitted and not in device-file)', metavar='KEY')
-    dev_group.add_argument('--ip',      help='Device IP address (auto-discovered if omitted)', metavar='IP')
+    dev_group.add_argument('--ip',      help='Device IP address (loaded from device-file if omitted or auto-discovered if set to "Auto")', metavar='IP')
     dev_group.add_argument('--version', help='Tuya protocol version (auto-discovered if omitted, defaults to 3.3 if not found)', default=None, type=float, metavar='VER', dest='dev_version')
 
     if sp in ('on', 'off'):
