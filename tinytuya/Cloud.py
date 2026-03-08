@@ -519,10 +519,23 @@ class Cloud(object):
                 for dev in changed_devices:
                     if 'product_id' in dev and dev['product_id'] == productid:
                         dev['mapping'] = mappings[productid]
-                # also set unchanged devices just in case the mapping changed
-                for dev in unchanged_devices:
-                    if 'product_id' in dev and dev['product_id'] == productid:
-                        dev['mapping'] = mappings[productid]
+                # also set unchanged devices just in case the mapping changed,
+                # but only if the new mapping is non-empty (guard against overwriting
+                # a good cached mapping with an empty result from a transient API failure)
+                if mappings[productid]:
+                    for dev in unchanged_devices:
+                        if 'product_id' in dev and dev['product_id'] == productid:
+                            dev['mapping'] = mappings[productid]
+
+            # Fallback: restore old mapping for changed devices that got no mapping back
+            # (API failure, rate limit, etc.) — use the mapping from oldlist if available
+            for dev in changed_devices:
+                if not dev.get('mapping'):
+                    dev_id = dev.get('id')
+                    if dev_id and dev_id in old_devices:
+                        old_mapping = old_devices[dev_id].get('mapping')
+                        if old_mapping:
+                            dev['mapping'] = old_mapping
 
         log.debug( 'changed: %d', len(changed_devices) )
         log.debug( 'unchanged: %d', len(unchanged_devices) )
