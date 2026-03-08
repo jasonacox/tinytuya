@@ -58,6 +58,8 @@ def bin2hex(x, pretty=False):
 
     Returns:
         str
+
+    :meta private:
     """
     if pretty:
         space = " "
@@ -77,6 +79,8 @@ def hex2bin(x):
 
     Returns:
         bytes
+
+    :meta private:
     """
     if IS_PY2:
         return x.decode("hex")
@@ -111,14 +115,16 @@ def set_debug(toggle=True, color=True):
 
 
 def assign_dp_mappings( tuyadevices, mappings ):
-    """ Adds mappings to all the devices in the tuyadevices list
+    """ Adds DP mappings based on the Product ID
+
+    The tuyadevices list is searched and all devices with a Product ID in the mappings dict get those mappings assigned.
 
     Args:
         tuyadevices (list or tuple): list of devices
         mappings (dict) = dict containing the mappings
 
     Returns:
-        Nothing, modifies tuyadevices in place
+        None: Nothing, modifies tuyadevices in place
     """
     if type(mappings) != dict:
         raise ValueError( '\'mappings\' must be a dict' )
@@ -242,12 +248,10 @@ def scan(maxretry=None, color=True, forcescan=False):
     Args:
         maxretry (float or int or None): When a number, stop scanning after that many seconds
         color (bool): Display output in color if color support is detected
-        forcescan (bool): Brute force scan the :py:data:`~tinytuya.core.const.DEFAULT_NETWORK` network
+        forcescan (bool): Brute force scan the :py:data:`~tinytuya.DEFAULT_NETWORK` network
 
     Returns:
-        Nothing, the scan result is displayed
-
-    :meta private:
+        None: Nothing, the scan result is displayed
     """
     from .. import scanner
     scanner.scan(scantime=maxretry, color=color, forcescan=forcescan)
@@ -264,7 +268,7 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=Fa
         maxretry (float or int or None): When a number, stop scanning after that many seconds
         color (bool): Display output in color if color support is detected
         poll (bool): True or False, poll dps status for devices
-        forcescan (bool): Brute force scan the :py:data:`~tinytuya.core.const.DEFAULT_NETWORK` network
+        forcescan (bool): Brute force scan the :py:data:`~tinytuya.DEFAULT_NETWORK` network
         byID (bool): Returned dict keys are the Device ID (`True`) or IP address (`False`)
 
     Returns:
