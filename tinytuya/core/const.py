@@ -8,6 +8,7 @@ Global Network and File Settings
 MAXCOUNT = 15       #: How many tries before stopping
 SCANTIME = 18       #: How many seconds to wait before stopping device discovery
 UDPKEY = bytes.fromhex('6c1ec8e2bb9bb59ab50b0daf649b410a') #: UDP packet payload decryption - md5("yGAdlopoPVldABfn") - credit to tuya-convert
+UDPKEY_AP = bytes.fromhex('c6f23aef1cafb170b8d812d7509c8e6d') #: UDP packet decryption for AP mode - md5("OXLvslCvUxcTPLGO")
 UDPPORT = 6666      #: Tuya 3.1 UDP Port
 UDPPORTS = 6667     #: Tuya 3.3 encrypted UDP Port
 UDPPORTAPP = 7000   #: Tuya app encrypted UDP Port

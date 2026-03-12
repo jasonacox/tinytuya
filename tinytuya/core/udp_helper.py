@@ -17,13 +17,21 @@ def decrypt(msg, key):
 #    nonce = msg[:12]
 #    return AES.new(key, AES.MODE_GCM, nonce=nonce).decrypt(msg[12:]).decode()
 
-def decrypt_udp(msg):
+# keep the old name in case someone is using it elsewhere
+udpkey = UDPKEY
+
+def decrypt_udp(msg, key=None):
+    if (key is None) or (key == 'UDPKEY'):
+        key = UDPKEY
+    elif key == 'UDPKEY_AP':
+        key = UDPKEY_AP
+
     try:
         header = parse_header(msg)
     except:
         header = None
     if not header:
-        return decrypt(msg, UDPKEY)
+        return decrypt(msg, key)
     if header.prefix == H.PREFIX_55AA_VALUE:
         payload = unpack_message(msg).payload
         try:
@@ -31,12 +39,12 @@ def decrypt_udp(msg):
                 return payload.decode()
         except:
             pass
-        return decrypt(payload, UDPKEY)
+        return decrypt(payload, key)
     if header.prefix == H.PREFIX_6699_VALUE:
-        unpacked = unpack_message(msg, hmac_key=UDPKEY, no_retcode=None)
+        unpacked = unpack_message(msg, hmac_key=key, no_retcode=None)
         payload = unpacked.payload.decode()
         # app sometimes has extra bytes at the end
         while payload[-1] == chr(0):
             payload = payload[:-1]
         return payload
-    return decrypt(msg, UDPKEY)
+    return decrypt(msg, key)
