@@ -16,16 +16,17 @@ class CoverDevice(Device):
     Supports 8 different command types with automatic detection.
     """
 
-    DPS_INDEX_MOVE = "1"
-    DPS_INDEX_BL = "101"
-    DEFAULT_COVER_TYPE = 1  # Default to Type 1 (most common)
+    DPS_INDEX_MOVE = "1"    #: :meta private:
+    DPS_INDEX_BL = "101"    #: :meta private:
+    DEFAULT_COVER_TYPE = 1  #: :meta private: # Default to Type 1 (most common)
 
+    #: :meta private:
     DPS_2_STATE = {
         "1": "movement",
         "101": "backlight",
     }
 
-    # Cover type command mappings
+    #: Cover type command mappings
     COVER_TYPES = {
         1: {  # Comprehensive movement class
             'open': 'open',
@@ -91,8 +92,7 @@ class CoverDevice(Device):
         self._cover_type = None  # Will be set to 1-8 after detection
 
     def _detect_cover_type(self, switch=None):
-        """
-        Automatically detect the cover device type (1-8) by checking device status.
+        """Automatically detect the cover device type (1-8) by checking device status.
         Uses priority ordering to handle overlapping values (e.g., 'stop' appears in Types 1, 6, 7).
         Type 1 has highest priority as it's the most comprehensive.
         
@@ -135,8 +135,7 @@ class CoverDevice(Device):
         self._cover_type_detected = True
 
     def set_cover_type(self, cover_type):
-        """
-        Manually set the cover device type.
+        """Manually set the cover device type.
         
         Args:
             cover_type (int): Cover type ID (1-8).
@@ -155,8 +154,7 @@ class CoverDevice(Device):
         self._cover_type_detected = True
 
     def _get_command(self, action, switch=None):
-        """
-        Get the appropriate command for the detected cover type.
+        """Get the appropriate command for the detected cover type.
         
         Args:
             action (str): The action to perform ('open', 'close', 'stop', 'continue').
@@ -174,8 +172,7 @@ class CoverDevice(Device):
         return None
 
     def open_cover(self, switch=None, nowait=False):
-        """
-        Open the cover.
+        """Open the cover.
         
         Args:
             switch (str/int): The DPS index. Defaults to DPS_INDEX_MOVE.

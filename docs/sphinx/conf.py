@@ -151,7 +151,7 @@ def autodoc_process_docstring_callback( app, obj_type, name, obj, options, lines
             lines.append( '' )
             if isinstance( obj, dict ):
                 for k in saved_junk['objs'][name]:
-                    lines.append( '* **' + str(k) + '** - ' + saved_junk['objs'][name][k] )
+                    lines.append( '* **' + str(k) + '** - ' + repr(saved_junk['objs'][name][k]) )
             else:
                 for k in saved_junk['objs'][name]:
                     lines.append( '* ' + str(k) )

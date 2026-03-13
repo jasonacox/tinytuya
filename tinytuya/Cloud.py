@@ -6,24 +6,6 @@
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
 
- Local Control Classes
-    Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
-
- Functions
-    Cloud
-        setregion(apiRegion)
-        cloudrequest(url, action=[POST if post else GET], post={}, query={})
-        getdevices(verbose=False)
-        getstatus(deviceid)
-        getfunctions(deviceid)
-        getproperties(deviceid)
-        getdps(deviceid)
-        sendcommand(deviceid, commands [, uri])
-        getconnectstatus(deviceid)
-        getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
-          -> when start or end are negative, they are the number of days before "right now"
-             i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
-
  Reference
     * https://developer.tuya.com/en/docs/cloud/device-connection-service?id=Kb0b8geg6o761
 
