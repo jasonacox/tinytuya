@@ -333,7 +333,7 @@ RGB Bulb Device
 import time
 
 d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)  # IMPORTANT to set this regardless of version
+d.set_version(3.3)  # IMPORTANT: Set the correct version for your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
 data = d.status()
 
@@ -369,7 +369,7 @@ d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f
 Cover Device (Window Shade)
 """
 c = tinytuya.CoverDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-c.set_version(3.3)
+c.set_version(3.3)  # Set correct version for your device (3.1 through 3.5)
 data = c.status()
 
 # Show status
