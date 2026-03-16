@@ -17,7 +17,7 @@
         dev_type (str, optional): Device type for payload options (see below)
         connection_timeout (float, optional): The default socket connect and data timeout
         version (float, optional): The API version to use. Defaults to 3.1
-        persist (bool, optional): Make a persistant connection to the device
+        persist (bool, optional): Make a persistent connection to the device
     Cloud(apiRegion, apiKey, apiSecret, apiDeviceID, new_sign_algorithm)
 
   Functions
@@ -43,57 +43,4 @@
         detect_available_dps()             # Return list of DPS available from device
         generate_payload(command, data)    # Generate TuyaMessage payload for command with data
         send(payload)                      # Send payload to device (do not wait for response)
-        receive()                          # Receive payload from device
-
-    OutletDevice:
-        set_dimmer(percentage):
-
-    CoverDevice:
-        open_cover(switch=1):
-        close_cover(switch=1):
-        stop_cover(switch=1):
-
-    BulbDevice
-        set_colour(r, g, b, nowait):
-        set_hsv(h, s, v, nowait):
-        set_white(brightness, colourtemp, nowait):
-        set_white_percentage(brightness=100, colourtemp=0, nowait):
-        set_brightness(brightness, nowait):
-        set_brightness_percentage(brightness=100, nowait):
-        set_colourtemp(colourtemp, nowait):
-        set_colourtemp_percentage(colourtemp=100, nowait):
-        set_scene(scene, nowait):             # 1=nature, 3=rave, 4=rainbow
-        set_mode(mode='white', nowait):       # white, colour, scene, music
-        result = brightness():
-        result = colourtemp():
-        (r, g, b) = colour_rgb():
-        (h,s,v) = colour_hsv()
-        result = state():
-
-    Cloud
-        setregion(apiRegion)
-        getdevices(verbose=False)
-        getstatus(deviceid)
-        getfunctions(deviceid)
-        getproperties(deviceid)
-        getdps(deviceid)
-        sendcommand(deviceid, commands)
-
- Credits
-  * TuyaAPI https://github.com/codetheweb/tuyapi by codetheweb and blackrozes
-    For protocol reverse engineering
-  * PyTuya https://github.com/clach04/python-tuya by clach04
-    The origin of this python module (now abandoned)
-  * LocalTuya https://github.com/rospogrigio/localtuya-homeassistant by rospogrigio
-    Updated pytuya to support devices with Device IDs of 22 characters
-
 """
-
-from .core import *
-from .core import __version__
-from .core import __author__
-
-from .OutletDevice import OutletDevice
-from .CoverDevice import CoverDevice
-from .BulbDevice import BulbDevice
-from .Cloud import Cloud
