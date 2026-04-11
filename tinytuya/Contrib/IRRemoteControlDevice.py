@@ -193,13 +193,26 @@ class IRRemoteControlDevice(Device):
             elif self.DP_MODE in status['dps']:
                 log.debug( 'Detected control type 2' )
                 self.control_type = 2
+            # Some devices (e.g. Aubess IR PRO) return an empty dps {} on status()
+            # but still respond to DPS 201 commands.  Fall back to control_type 1.
+            elif not status['dps']:
+                log.debug( 'Empty DPS in status response — falling back to control type 1 (DPS 201)' )
+                self.control_type = 1
             status = self._send_receive(None)
         if not self.control_type:
-            log.warning( 'Detect control type failed! control_type= must be set manually' )
+            log.warning( 'Detect control type failed! Defaulting to control_type=1 (DPS 201). '
+                         'Override with control_type=1 or control_type=2 if needed.' )
+            self.control_type = 1
         self.set_socketTimeout( old_timeout )
         self.set_socketPersistent( old_persist )
 
     def send_command( self, mode, data={} ):
+        if not self.control_type:
+            raise RuntimeError(
+                'IRRemoteControlDevice: control_type has not been detected. '
+                'Pass control_type=1 (DPS 201/202) or control_type=2 (DPS 1-13) '
+                'to the constructor, or call detect_control_type() first.'
+            )
         if mode == 'send':
             if self.control_type == 1:
                 command = {
