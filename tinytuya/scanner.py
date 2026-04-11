@@ -241,7 +241,7 @@ def send_discovery_request( iface_list=None ):
         if 'payload' not in iface:
             bcast = json.dumps( {"from":"app","ip":address} ).encode()
             bcast_msg = tinytuya.TuyaMessage( 0, tinytuya.REQ_DEVINFO, None, bcast, 0, True, tinytuya.PREFIX_6699_VALUE, True )
-            iface['payload'] = tinytuya.pack_message( bcast_msg, hmac_key=tinytuya.udpkey )
+            iface['payload'] = tinytuya.pack_message( bcast_msg, hmac_key=tinytuya.UDPKEY )
 
         if 'port' not in iface:
             iface['port'] = 7000
