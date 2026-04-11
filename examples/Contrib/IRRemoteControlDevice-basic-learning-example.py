@@ -1,7 +1,7 @@
 # TinyTuya IRRemoteControlDevice Example
 # -*- coding: utf-8 -*-
 """
- Example script using the community-contributed Python module for Tuya WiFi smart universal remote control simulators
+ Example button-learning script using the community-contributed Python module for Tuya WiFi smart universal remote control simulators
 
  Author: Alexey 'Cluster' Avdyukhin (https://github.com/clusterm)
  Rewritten by: uzlonewolf (https://github.com/uzlonewolf)

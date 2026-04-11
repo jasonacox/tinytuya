@@ -1,7 +1,7 @@
 # TinyTuya IRRemoteControlDevice Example
 # -*- coding: utf-8 -*-
 """
- Example script using the community-contributed Python module for Tuya WiFi smart universal remote control simulators
+ Example IR code conversion script using the community-contributed Python module for Tuya WiFi smart universal remote control simulators
 
  Author: uzlonewolf (https://github.com/uzlonewolf)
  For more information see https://github.com/jasonacox/tinytuya
