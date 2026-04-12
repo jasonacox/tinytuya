@@ -72,7 +72,7 @@ except:
 import tinytuya
 from tinytuya import scanner
 
-BUILD = "p15"
+BUILD = "p16"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
@@ -169,6 +169,19 @@ def tuyaLookup(deviceid):
                 return (i["name"], i["key"], "")
     return ("", "", "")
 
+def isRegistered(deviceid):
+    # Check if a device ID exists in the registered devices list (tuyadevices)
+    for i in tuyadevices:
+        if isinstance(i, dict) and i.get("id") == deviceid:
+            return True
+    return False
+
+def deviceError(deviceid):
+    # Return appropriate error dict: "Device offline" if registered, "Device ID not found" otherwise
+    if isRegistered(deviceid):
+        return {"Error": "Device offline - registered but not discovered on the network.", "id": deviceid}
+    return {"Error": "Device ID not found.", "id": deviceid}
+
 def appenddevice(newdevice, devices):
     if newdevice["id"] in devices:
         return True
@@ -224,17 +237,7 @@ def get_static(web_root, fpath):
 
 def tuyaLoadJson():
     # Check to see if we have additional Device info
-    tdevices = []
-    try:
-        # Load defaults
-        with open(DEVICEFILE) as f:
-            tdevices = json.load(f)
-        log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tdevices))
-    except:
-        # No Device info
-        log.debug("Device file %s could not be loaded", DEVICEFILE)
-
-    return tdevices
+    return tinytuya.load_devicefile(DEVICEFILE)
 
 def tuyaSaveJson():
     if not SAVEDEVICEFILE:
@@ -479,8 +482,8 @@ class handler(BaseHTTPRequestHandler):
                     message = formatreturn(d.set_value(dpsKey,dpsValue,nowait=True))
                     d.close()
                 else:
-                    message = json.dumps({"Error": "Device ID not found.", "id": id})
-                    log.debug("Device ID not found: %s" % id)
+                    message = json.dumps(deviceError(id))
+                    log.debug("Device not available: %s" % id)
             except:
                 message = json.dumps({"Error": "Syntax error in set command URL.", "url": self.path})
                 log.debug("Syntax error in set command URL: %s" % self.path)
@@ -500,8 +503,8 @@ class handler(BaseHTTPRequestHandler):
                     jout["id"] = id
                     message = json.dumps(jout)
                 else:
-                    message = json.dumps({"Error": "Device ID not found.", "id": id})
-                    log.debug("Device ID not found: %s" % id)
+                    message = json.dumps(deviceError(id))
+                    log.debug("Device not available: %s" % id)
         elif self.path.startswith('/turnoff/'):
             id = self.path.split('/turnoff/')[1]
             sw = 1
@@ -524,8 +527,8 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
                     log.debug("Error sending command to device: %s" % id)
             elif id != "":
-                message = json.dumps({"Error": "Device ID not found.", "id": id})      
-                log.debug("Device ID not found: %s" % id)      
+                message = json.dumps(deviceError(id))
+                log.debug("Device not available: %s" % id)
         elif self.path.startswith('/delayoff/'):
             id = self.path.split('/delayoff/')[1]
             sw = 1
@@ -552,8 +555,8 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
                     log.debug("Error sending command to device %s" % id)
             elif id != "":
-                message = json.dumps({"Error": "Device ID not found.", "id": id})
-                log.debug("Device ID not found: %s" % id)
+                message = json.dumps(deviceError(id))
+                log.debug("Device not available: %s" % id)
         elif self.path.startswith('/turnon/'):
             id = self.path.split('/turnon/')[1]
             sw = 1
@@ -576,8 +579,8 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error sending command to device.", "id": id})
                     log.debug("Error sending command to device %s" % id)
             elif id != "":
-                message = json.dumps({"Error": "Device ID not found.", "id": id})     
-                log.debug("Device ID not found: %s" % id)        
+                message = json.dumps(deviceError(id))
+                log.debug("Device not available: %s" % id)
         elif self.path == '/numdevices':
             jout = {}
             jout["found"] = len(deviceslist)
@@ -610,8 +613,8 @@ class handler(BaseHTTPRequestHandler):
                     message = json.dumps({"Error": "Error polling device.", "id": id})
                     log.debug("Error polling device %s" % id)
             else:
-                message = json.dumps({"Error": "Device ID not found.", "id": id})
-                log.debug("Device ID not found: %s" % id)  
+                message = json.dumps(deviceError(id))
+                log.debug("Device not available: %s" % id)
         elif self.path == '/sync':
             if cloudconfig['apiKey'] == '' or cloudconfig['apiSecret'] == '' or cloudconfig['apiRegion'] == '' or cloudconfig['apiDeviceID'] == '':
                 message = json.dumps({"Error": "Cloud API config missing."})

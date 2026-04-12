@@ -61,6 +61,32 @@ def find_device(dev_id=None, address=None):
     log.debug( 'find() is returning: %r', ret )
     return ret
 
+def load_devicefile(fname=None):
+    """Load devices from a devices.json file.
+
+    Handles both flat list and {"devices": [...]} dict formats.
+
+    Parameters:
+        fname = Path to the device file (default: DEVICEFILE)
+
+    Response:
+        list of device dicts, or empty list on failure
+    """
+    if not fname:
+        fname = DEVICEFILE
+    try:
+        with open(fname, 'r') as f:
+            data = json.load(f)
+        if isinstance(data, dict) and 'devices' in data:
+            data = data['devices']
+        if not isinstance(data, list):
+            data = []
+        log.debug("loaded=%s [%d devices]", fname, len(data))
+        return data
+    except Exception:
+        log.debug("Device file %s could not be loaded", fname, exc_info=True)
+        return []
+
 def device_info( dev_id ):
     """Searches the devices.json file for devices with ID = dev_id
 
@@ -72,15 +98,12 @@ def device_info( dev_id ):
     """
     devinfo = None
     try:
-        # Load defaults
-        with open(DEVICEFILE, 'r') as f:
-            tuyadevices = json.load(f)
-            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-            for dev in tuyadevices:
-                if 'id' in dev and dev['id'] == dev_id:
-                    log.debug("Device %r found in %s", dev_id, DEVICEFILE)
-                    devinfo = dev
-                    break
+        tuyadevices = load_devicefile()
+        for dev in tuyadevices:
+            if 'id' in dev and dev['id'] == dev_id:
+                log.debug("Device %r found in %s", dev_id, DEVICEFILE)
+                devinfo = dev
+                break
     except:
         # No DEVICEFILE
         pass
