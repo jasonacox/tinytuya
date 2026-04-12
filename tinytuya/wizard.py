@@ -118,7 +118,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
 
     old_devices = tinytuya.load_devicefile(DEVICEFILE)
     if not old_devices:
-        old_devices = {}
+        old_devices = []
 
     color = color and HAVE_COLOR
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)

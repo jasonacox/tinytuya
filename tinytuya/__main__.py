@@ -146,7 +146,7 @@ def _run_list_command(args):
         if not os.path.exists(device_file):
             print('Error: device file "%s" not found.' % device_file)
         else:
-            print('Error reading device file: %s' % device_file)
+            print('Error: device file "%s" contains no valid devices (check JSON syntax and format).' % device_file)
         sys.exit(1)
 
     FIELDS = ('name', 'id', 'key', 'ip', 'version')

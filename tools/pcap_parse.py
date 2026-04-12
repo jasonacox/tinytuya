@@ -414,20 +414,17 @@ if __name__ == '__main__':
     args = arg_parser.parse_args()
 
     if not args.devices:
-        try:
-            devices = tinytuya.load_devicefile('devices.json')
+        devices = tinytuya.load_devicefile('devices.json')
+        if devices:
+            if not args.sortable:
+                print( 'Using \'devices.json\' for device keys' )
+        else:
+            devices = tinytuya.load_devicefile('../devices.json')
             if devices:
                 if not args.sortable:
-                    print( 'Using \'devices.json\' for device keys' )
+                    print( 'Using \'../devices.json\' for device keys' )
             else:
-                devices = tinytuya.load_devicefile('../devices.json')
-                if devices:
-                    if not args.sortable:
-                        print( 'Using \'../devices.json\' for device keys' )
-                else:
-                    raise FileNotFoundError('No devices.json found')
-        except Exception as e:
-            raise e
+                raise FileNotFoundError('No devices.json found')
     else:
         devices = tinytuya.load_devicefile(args.devices)
 

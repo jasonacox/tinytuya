@@ -176,11 +176,11 @@ def isRegistered(deviceid):
             return True
     return False
 
-def deviceError(id):
+def deviceError(deviceid):
     # Return appropriate error dict: "Device offline" if registered, "Device ID not found" otherwise
-    if isRegistered(id):
-        return {"Error": "Device offline - registered but not discovered on the network.", "id": id}
-    return {"Error": "Device ID not found.", "id": id}
+    if isRegistered(deviceid):
+        return {"Error": "Device offline - registered but not discovered on the network.", "id": deviceid}
+    return {"Error": "Device ID not found.", "id": deviceid}
 
 def appenddevice(newdevice, devices):
     if newdevice["id"] in devices:

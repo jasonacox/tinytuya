@@ -83,8 +83,8 @@ def load_devicefile(fname=None):
             data = []
         log.debug("loaded=%s [%d devices]", fname, len(data))
         return data
-    except:
-        log.debug("Device file %s could not be loaded", fname)
+    except Exception:
+        log.debug("Device file %s could not be loaded", fname, exc_info=True)
         return []
 
 def device_info( dev_id ):
