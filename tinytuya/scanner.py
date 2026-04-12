@@ -1184,6 +1184,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             with open(DEVICEFILE) as f:
                 tuyadevices = json.load(f)
                 havekeys = True
+                if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
+                    tuyadevices = tuyadevices['devices']
                 log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
         except:
             # No Device info
@@ -2026,6 +2028,8 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
         # Load defaults
         with open(DEVICEFILE) as f:
             tuyadevices = json.load(f)
+            if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
+                tuyadevices = tuyadevices['devices']
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
     except:
         print("%s ERROR: Missing %s file\n" % (term.alert, DEVICEFILE))

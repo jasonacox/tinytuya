@@ -142,6 +142,8 @@ def _run_list_command(args):
     try:
         with open(device_file, 'r') as f:
             tuyadevices = json.load(f)
+        if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
+            tuyadevices = tuyadevices['devices']
     except FileNotFoundError:
         print('Error: device file "%s" not found.' % device_file)
         sys.exit(1)
@@ -199,6 +201,8 @@ def _run_device_command(args):
     try:
         with open(device_file, 'r') as f:
             tuyadevices = json.load(f)
+        if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
+            tuyadevices = tuyadevices['devices']
     except Exception:
         pass
 

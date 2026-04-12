@@ -229,6 +229,8 @@ def tuyaLoadJson():
         # Load defaults
         with open(DEVICEFILE) as f:
             tdevices = json.load(f)
+        if isinstance(tdevices, dict) and 'devices' in tdevices:
+            tdevices = tdevices['devices']
         log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tdevices))
     except:
         # No Device info

@@ -75,6 +75,8 @@ def device_info( dev_id ):
         # Load defaults
         with open(DEVICEFILE, 'r') as f:
             tuyadevices = json.load(f)
+            if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
+                tuyadevices = tuyadevices['devices']
             log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
             for dev in tuyadevices:
                 if 'id' in dev and dev['id'] == dev_id:

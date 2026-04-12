@@ -120,6 +120,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
         # Load the old device list, if available
         with open(DEVICEFILE, "r") as infile:
             old_devices = json.load( infile )
+            if isinstance(old_devices, dict) and 'devices' in old_devices:
+                old_devices = old_devices['devices']
     except:
         old_devices = {}
 
