@@ -312,5 +312,77 @@ class TestRFRemoteControlDevice(unittest.TestCase):
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
+class TestLoadDeviceFile(unittest.TestCase):
+    """Tests for the load_devicefile() helper."""
+
+    def setUp(self):
+        import tempfile
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def _write_json(self, data, fname='devices.json'):
+        import os
+        path = os.path.join(self.tmpdir, fname)
+        with open(path, 'w') as f:
+            json.dump(data, f)
+        return path
+
+    def test_flat_list(self):
+        """Flat list format should be returned as-is."""
+        devices = [{'id': 'dev1', 'key': 'abc'}]
+        path = self._write_json(devices)
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, devices)
+
+    def test_wrapped_dict(self):
+        """Wrapped {"devices": [...]} format should return the inner list."""
+        devices = [{'id': 'dev2', 'key': 'xyz'}]
+        path = self._write_json({'devices': devices})
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, devices)
+
+    def test_missing_file(self):
+        """Missing file should return empty list, not raise."""
+        result = tinytuya.load_devicefile('/nonexistent_path/devices.json')
+        self.assertEqual(result, [])
+
+    def test_empty_list(self):
+        """Empty list should return empty list."""
+        path = self._write_json([])
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, [])
+
+    def test_invalid_json(self):
+        """Invalid JSON should return empty list, not raise."""
+        import os
+        path = os.path.join(self.tmpdir, 'bad.json')
+        with open(path, 'w') as f:
+            f.write('{not valid json')
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, [])
+
+    def test_non_list_non_dict(self):
+        """A JSON file containing a scalar should return empty list."""
+        path = self._write_json("just a string")
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, [])
+
+    def test_dict_without_devices_key(self):
+        """A dict without a 'devices' key should return empty list."""
+        path = self._write_json({'other_key': [{'id': 'x'}]})
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result, [])
+
+    def test_special_chars_in_key(self):
+        """Keys with special characters should be preserved."""
+        devices = [{'id': 'dev3', 'key': ":|S'vf<MT6xhr{1~"}]
+        path = self._write_json(devices)
+        result = tinytuya.load_devicefile(path)
+        self.assertEqual(result[0]['key'], ":|S'vf<MT6xhr{1~")
+
+
 if __name__ == '__main__':
     unittest.main()

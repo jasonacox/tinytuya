@@ -23,7 +23,7 @@ TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to
 # Example Usage of TinyTuya
 import tinytuya
 
-d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 data = d.status() 
 print('Device status: %r' % data)
 ```
@@ -131,7 +131,7 @@ d = tinytuya.OutletDevice(
     dev_id='DEVICE_ID_HERE',
     address='IP_ADDRESS_HERE',      # Or set to 'Auto' to auto-discover IP address
     local_key='LOCAL_KEY_HERE', 
-    version=3.3)
+    version=3.3)                    # Set to your device's actual version (3.1, 3.2, 3.3, 3.4, or 3.5)
 
 # Get Status
 data = d.status() 
@@ -308,7 +308,7 @@ import tinytuya
 """
 OUTLET Device
 """
-d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 data = d.status()  
 
 # Show status and state of first controlled switch on device
@@ -333,7 +333,7 @@ RGB Bulb Device
 import time
 
 d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)  # IMPORTANT to set this regardless of version
+d.set_version(3.3)  # IMPORTANT: Set the correct version for your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
 data = d.status()
 
@@ -369,7 +369,7 @@ d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f
 Cover Device (Window Shade)
 """
 c = tinytuya.CoverDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-c.set_version(3.3)
+c.set_version(3.3)  # Set correct version for your device (3.1 through 3.5)
 data = c.status()
 
 # Show status
@@ -401,7 +401,7 @@ You can set up a persistent connection to a device and then monitor the state ch
 ```python
 import tinytuya
 
-d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)
+d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 
 print(" > Send Request for Status < ")
 d.status(nowait=True)
@@ -645,7 +645,7 @@ By default, the scan functions will retry 15 times to find new devices. If you a
 * Some devices with 22 character IDs will require additional setting to poll correctly. TinyTuya will attempt to detect and accomodate for this, but it can be specified directly:
   ```python
   a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
-  a.set_version(3.3)
+  a.set_version(3.3)  # Replace 3.3 with your device's actual version
   a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
   data =  a.status()
   print(data)

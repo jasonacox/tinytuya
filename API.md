@@ -8,6 +8,7 @@ Developer reference for all public classes, methods, and functions in TinyTuya.
 
 - [Class Hierarchy](#class-hierarchy)
 - [Module-Level Functions](#module-level-functions)
+- [File Formats](#file-formats)
 - [XenonDevice (Base Class)](#xenondevice-base-class)
 - [Device](#device)
 - [OutletDevice](#outletdevice)
@@ -92,6 +93,74 @@ Enable or disable verbose debug logging.
 ```python
 tinytuya.set_debug(True)
 ```
+
+### `load_devicefile(fname=None)`
+Load devices from a `devices.json` file, handling both accepted formats (flat list and wrapped dict).
+Returns a list of device dicts, or an empty list on failure.
+
+```python
+devices = tinytuya.load_devicefile()                  # uses default devices.json
+devices = tinytuya.load_devicefile('my_devices.json')  # custom path
+```
+
+---
+
+## File Formats
+
+### `devices.json`
+
+The `devices.json` file stores device metadata (ID, local key, name, IP, version, etc.) used by the library, the API server, and the CLI. TinyTuya accepts two formats:
+
+**Flat list** (written by the wizard and API server):
+
+```json
+[
+  {
+    "name": "Smart Plug",
+    "id": "ebfda...",
+    "key": "ab12cd34ef56gh78",
+    "ip": "192.168.1.50",
+    "version": "3.3"
+  }
+]
+```
+
+**Wrapped dict** (produced by some external tools):
+
+```json
+{
+  "devices": [
+    {
+      "name": "Smart Plug",
+      "id": "ebfda...",
+      "key": "ab12cd34ef56gh78",
+      "ip": "192.168.1.50",
+      "version": "3.3"
+    }
+  ]
+}
+```
+
+Both formats are accepted everywhere TinyTuya loads a device file — the library, CLI, scanner, wizard, and API server all normalise the input via `load_devicefile()`.
+
+**Required fields per device:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Tuya device ID (gwId) |
+| `key` | string | Local encryption key (may contain any printable characters including `'`, `` ` ``, `<`, `>`, etc.) |
+
+**Common optional fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Human-readable device name |
+| `ip` | string | Device IP address on the local network |
+| `version` | string | Protocol version (`"3.1"`, `"3.3"`, `"3.4"`, `"3.5"`) |
+| `mac` | string | Device MAC address |
+| `mapping` | object | DP code-to-ID mappings (from Cloud API) |
+
+> **Note:** The `key` field is a raw string — do not escape special characters. If editing `devices.json` by hand, use double-quoted JSON strings (JSON requires double quotes for string values, so characters like `'` are safe as-is inside them).
 
 ---
 

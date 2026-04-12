@@ -1179,15 +1179,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     havekeys = False
     if not tuyadevices:
         # Check to see if we have additional Device info
-        try:
-            # Load defaults
-            with open(DEVICEFILE) as f:
-                tuyadevices = json.load(f)
-                havekeys = True
-                log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-        except:
-            # No Device info
-            pass
+        tuyadevices = tinytuya.load_devicefile(DEVICEFILE)
+        if tuyadevices:
+            havekeys = True
 
     if forcescan and len(tuyadevices) == 0:
         if discover:
@@ -2023,13 +2017,9 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
         % (term.bold, term.normal, term.dim, tinytuya.__version__)
     )
     # Check to see if we have additional Device info
-    try:
-        # Load defaults
-        with open(DEVICEFILE) as f:
-            tuyadevices = json.load(f)
-            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-    except:
-        print("%s ERROR: Missing %s file\n" % (term.alert, DEVICEFILE))
+    tuyadevices = tinytuya.load_devicefile(DEVICEFILE)
+    if not tuyadevices:
+        print("%s ERROR: Missing or empty %s file\n" % (term.alert, DEVICEFILE))
         return
 
     print("%sLoaded %s - %d devices:" % (term.dim, DEVICEFILE, len(tuyadevices)))
