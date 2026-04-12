@@ -184,7 +184,8 @@ def _build_device(args):
         # Call the scanner here so we can pass args to it
         all_results = scanner.devices(
             verbose=bool(args.debug or args.debug2), scantime=args.max_time, color=(not args.nocolor), poll=False,
-            forcescan=args.force, byID=True, discover=(not args.no_broadcasts), wantids=(dev_id,), assume_yes=args.yes)
+            forcescan=args.force, byID=True, discover=(not args.no_broadcasts), wantids=(dev_id,), assume_yes=args.yes,
+            tuyadevices=tuyadevices)
         if all_results and dev_id in all_results:
             dev_ip = all_results[dev_id]['ip']
             dev_version = all_results[dev_id]['version']
@@ -259,6 +260,7 @@ def _monitor_device(args):
     d = _build_device(args)
     d.set_socketPersistent(True)
 
+    # check to see if debug is in args
     debug = bool(args.debug or args.debug2)
     STATUS_TIMER = 30
     KEEPALIVE_TIMER = 12
@@ -268,41 +270,31 @@ def _monitor_device(args):
 
     print(" > Beginning Monitor Loop, <CTRL>-c To Exit <")
     heartbeat_time = time.time() + KEEPALIVE_TIMER
-    status_time =  None
+    status_time = time.time() + STATUS_TIMER
 
-    while(True):
-        if status_time and time.time() >= status_time:
-            # Uncomment if your device provides power monitoring data but it is not updating
-            # Some devices require a UPDATEDPS command to force measurements of power.
-            # print(" > Send DPS Update Request < ")
-            # Most devices send power data on DPS indexes 18, 19 and 20
-            # d.updatedps(['18','19','20'], nowait=True)
-            # Some Tuya devices will not accept the DPS index values for UPDATEDPS - try:
-            # payload = d.generate_payload(tinytuya.UPDATEDPS)
-            # d.send(payload)
-
-            # poll for status
-            if debug:
-                print(" > Send Request for Status < ")
-            data = d.status()
-            status_time = time.time() + STATUS_TIMER
-            heartbeat_time = time.time() + KEEPALIVE_TIMER
-        elif time.time() >= heartbeat_time:
-            # send a keep-alive
-            data = d.heartbeat(nowait=False)
-            heartbeat_time = time.time() + KEEPALIVE_TIMER
-        else:
-            # no need to send anything, just listen for an asynchronous update
-            try:
+    try:
+        while True:
+            if status_time and time.time() >= status_time:
+                # some devices require a UPDATEDPS command to force measurements of power
+                if debug:
+                    print(" > Send Request for Status < ")
+                data = d.status()
+                status_time = time.time() + STATUS_TIMER
+                heartbeat_time = time.time() + KEEPALIVE_TIMER
+            elif time.time() >= heartbeat_time:
+                # send a keep-alive
+                data = d.heartbeat(nowait=False)
+                heartbeat_time = time.time() + KEEPALIVE_TIMER
+            else:
+                # no need to send anything, just listen for an asynchronous update
                 data = d.receive()
-            except KeyboardInterrupt:
-                print(" > Keyboard Interrupt, Exiting! < ")
-                break
 
-        if data or debug:
-            print('Received Payload: %r' % data)
+            if data or debug:
+                print('Received Payload: %r' % data)
 
-        if data and 'Err' in data:
-            print("Received error!  Sleeping for 5 seconds...")
-            # rate limit retries so we don't hammer the device
-            time.sleep(5)
+            if data and 'Err' in data:
+                print("Received error!  Sleeping for 5 seconds...")
+                # rate limit retries so we don't hammer the device
+                time.sleep(5)
+    except KeyboardInterrupt:
+        print("\n > Keyboard Interrupt, Exiting! < ")

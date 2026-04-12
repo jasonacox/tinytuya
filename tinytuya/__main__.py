@@ -26,7 +26,6 @@ except:
 
 from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
 from .cli import _run_list_command, _run_device_command, _monitor_device
-from .core import Device
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -113,7 +112,7 @@ subparsers['list'].add_argument('--json', help='Display as JSON instead of a tab
 
 # control commands
 for sp in control_cmds:
-    dev_group = subparsers[sp].add_argument_group('Device', '--id or --name are required.  --id and --key are required if the -device-file lookup fails')
+    dev_group = subparsers[sp].add_argument_group('Device', '--id or --name are required.  --id and --key are required if the --device-file/-device-file lookup fails')
     name_id_group = dev_group.add_mutually_exclusive_group(required=True)
     name_id_group.add_argument('--id',      help='Device ID', metavar='ID')
     name_id_group.add_argument('--name',    help='Device name (looked up in device-file)', metavar='NAME')
