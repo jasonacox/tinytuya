@@ -116,13 +116,8 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
             if not config[k]:
                 needconfigs = True
 
-    try:
-        # Load the old device list, if available
-        with open(DEVICEFILE, "r") as infile:
-            old_devices = json.load( infile )
-            if isinstance(old_devices, dict) and 'devices' in old_devices:
-                old_devices = old_devices['devices']
-    except:
+    old_devices = tinytuya.load_devicefile(DEVICEFILE)
+    if not old_devices:
         old_devices = {}
 
     color = color and HAVE_COLOR

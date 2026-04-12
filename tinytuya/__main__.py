@@ -27,6 +27,7 @@ except:
 
 from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
 from .core import Device
+from .core.XenonDevice import load_devicefile
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -139,16 +140,13 @@ if args.debug:
 def _run_list_command(args):
     """Handle the list command."""
     device_file = getattr(args, 'device_file', DEVICEFILE)
-    try:
-        with open(device_file, 'r') as f:
-            tuyadevices = json.load(f)
-        if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
-            tuyadevices = tuyadevices['devices']
-    except FileNotFoundError:
-        print('Error: device file "%s" not found.' % device_file)
-        sys.exit(1)
-    except Exception as e:
-        print('Error reading device file: %s' % e)
+    tuyadevices = load_devicefile(device_file)
+    if not tuyadevices:
+        import os
+        if not os.path.exists(device_file):
+            print('Error: device file "%s" not found.' % device_file)
+        else:
+            print('Error reading device file: %s' % device_file)
         sys.exit(1)
 
     FIELDS = ('name', 'id', 'key', 'ip', 'version')
@@ -197,14 +195,7 @@ def _run_device_command(args):
     dev_name    = getattr(args, 'name', None)
 
     # Load devices.json once (best-effort; missing file is fine)
-    tuyadevices = []
-    try:
-        with open(device_file, 'r') as f:
-            tuyadevices = json.load(f)
-        if isinstance(tuyadevices, dict) and 'devices' in tuyadevices:
-            tuyadevices = tuyadevices['devices']
-    except Exception:
-        pass
+    tuyadevices = load_devicefile(device_file)
 
     # Resolve --name to an ID
     if dev_name and not dev_id:
