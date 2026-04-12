@@ -72,7 +72,7 @@ except:
 import tinytuya
 from tinytuya import scanner
 
-BUILD = "p15"
+BUILD = "p16"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
