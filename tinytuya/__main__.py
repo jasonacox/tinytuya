@@ -27,7 +27,6 @@ except:
 from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
 from .cli import _run_list_command, _run_device_command, _monitor_device
 from .core import Device
-from .core.XenonDevice import load_devicefile
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -47,6 +46,8 @@ cmd_list = {
     'snapshot': 'Scan devices listed in snapshot-file',
     'json': 'Scan devices listed in snapshot-file and display the result as JSON',
     'list': 'List devices from device-file',
+    'version': 'Display version information',
+    'help': 'Show detailed help and usage examples',
 }
 
 # Device control commands: on, off, set, get
@@ -131,6 +132,70 @@ for sp in control_cmds:
 if HAVE_ARGCOMPLETE:
     argcomplete.autocomplete( parser )
 
+
+def _print_help():
+    print("""
+TinyTuya %s - Python module to interface with Tuya WiFi smart devices
+https://github.com/jasonacox/tinytuya
+
+Usage: python -m tinytuya <command> [options]
+
+Setup & Discovery Commands:
+  wizard       Launch Setup Wizard to get Device Local Keys from Tuya Cloud
+                 python -m tinytuya wizard
+  scan         Scan local network for Tuya devices (UDP broadcast)
+                 python -m tinytuya scan
+                 python -m tinytuya scan 30               # scan for 30 seconds
+  devices      Scan all devices listed in devices.json and show status
+                 python -m tinytuya devices
+  snapshot     Scan devices listed in snapshot.json and show status
+                 python -m tinytuya snapshot
+  json         Scan snapshot devices and return results as JSON
+                 python -m tinytuya json
+  list         List all devices from devices.json as a table
+                 python -m tinytuya list
+                 python -m tinytuya list --json           # output as JSON
+
+Device Control Commands (require --id or --name):
+  on           Turn on a device switch
+                 python -m tinytuya on --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya on --name "Kitchen Light"
+  off          Turn off a device switch
+                 python -m tinytuya off --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya off --name "Kitchen Light" --dps 2
+  set          Set a DPS value on a device
+                 python -m tinytuya set --id <DeviceID> --key <LocalKey> --dps 1 --value true
+                 python -m tinytuya set --name "Fan" --dps 3 --value 50
+  get          Read device status (or a single DPS value)
+                 python -m tinytuya get --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya get --name "Sensor" --dps 8
+  monitor      Connect to device and monitor for live status updates
+                 python -m tinytuya monitor --id <DeviceID> --key <LocalKey>
+
+Info Commands:
+  version      Display the TinyTuya version
+                 python -m tinytuya version
+  help         Show this help message
+                 python -m tinytuya help
+
+Global Options:
+  -d, -debug   Enable debug output
+  -v           Display version and exit
+
+Device Control Options:
+  --id ID      Device ID (from devices.json)
+  --name NAME  Device name (case-insensitive lookup in devices.json)
+  --key KEY    Device local encryption key (16 chars)
+  --ip IP      Device IP address (auto-discovered if omitted)
+  --version N  Tuya protocol version (e.g. 3.3, 3.4, 3.5)
+  --dps N      DPS index for on/off/set/get (default: 1)
+  --value V    Value to set (parsed as JSON: true, false, 0-100, "text")
+
+Note: --key, --ip, and --version are loaded automatically from devices.json
+      if the device is found by --id or --name.
+""" % version)
+
+
 args = parser.parse_args()
 
 if args.version:
@@ -142,188 +207,13 @@ if args.debug:
     set_debug(True)
 
 
-def _run_list_command(args):
-    """Handle the list command."""
-    device_file = getattr(args, 'device_file', DEVICEFILE)
-    tuyadevices = load_devicefile(device_file)
-    if not tuyadevices:
-        import os
-        if not os.path.exists(device_file):
-            print('Error: device file "%s" not found.' % device_file)
-        else:
-            print('Error: device file "%s" contains no valid devices (check JSON syntax and format).' % device_file)
-        sys.exit(1)
-
-    FIELDS = ('name', 'id', 'key', 'ip', 'version')
-
-    # Normalise rows — prefer last_ip over ip
-    rows = []
-    for dev in tuyadevices:
-        if not isinstance(dev, dict):
-            continue
-        rows.append({
-            'name':    dev.get('name', ''),
-            'id':      dev.get('id', ''),
-            'key':     dev.get('key', ''),
-            'ip':      dev.get('last_ip') or dev.get('ip', ''),
-            'version': str(dev.get('version', '')),
-        })
-
-    if args.json:
-        print(json.dumps(rows, indent=2))
-        return
-
-    # Table output
-    col_w = {f: len(f) for f in FIELDS}
-    for row in rows:
-        for f in FIELDS:
-            col_w[f] = max(col_w[f], len(str(row[f])))
-
-    sep = '+' + '+'.join('-' * (col_w[f] + 2) for f in FIELDS) + '+'
-    header = '|' + '|'.join(' %-*s ' % (col_w[f], f.upper()) for f in FIELDS) + '|'
-    print(sep)
-    print(header)
-    print(sep)
-    for row in rows:
-        line = '|' + '|'.join(' %-*s ' % (col_w[f], row[f]) for f in FIELDS) + '|'
-        print(line)
-    print(sep)
-
-
-def _run_device_command(args):
-    """Handle on / off / set / get device control commands."""
-    dev_id      = args.id
-    dev_key     = args.key
-    dev_ip      = args.ip
-    dev_version = args.dev_version
-    device_file = getattr(args, 'device_file', DEVICEFILE)
-    dev_name    = getattr(args, 'name', None)
-
-    # Load devices.json once (best-effort; missing file is fine)
-    tuyadevices = load_devicefile(device_file)
-
-    # Resolve --name to an ID
-    if dev_name and not dev_id:
-        match = next(
-            (dev for dev in tuyadevices
-             if isinstance(dev, dict) and dev.get('name', '').lower() == dev_name.lower()),
-            None
-        )
-        if not match:
-            print('Error: no device named "%s" found in %s.' % (dev_name, device_file))
-            sys.exit(1)
-        dev_id = match.get('id')
-
-    # Look up remaining fields by ID
-    devinfo = None
-    if dev_id:
-        devinfo = next(
-            (dev for dev in tuyadevices
-             if isinstance(dev, dict) and dev.get('id') == dev_id),
-            None
-        )
-
-    if devinfo:
-        if not dev_key:
-            dev_key = devinfo.get('key') or ''
-        if not dev_ip:
-            # devices.json may carry last_ip from a previous scan
-            dev_ip = devinfo.get('last_ip') or devinfo.get('ip') or None
-        if dev_version is None:
-            raw_ver = devinfo.get('version')
-            if raw_ver:
-                try:
-                    dev_version = float(raw_ver)
-                except (TypeError, ValueError):
-                    print(
-                        'Warning: invalid "version" value (%r) for device %s in %s; '
-                        'using default protocol version.' % (
-                            raw_ver,
-                            devinfo.get('id') or devinfo.get('name') or '<unknown>',
-                            device_file,
-                        )
-                    )
-                    dev_version = None
-            else:
-                dev_version = None
-
-    # Validate
-    if not dev_id:
-        print('Error: --id or --name is required.')
-        sys.exit(1)
-    if not dev_key:
-        print(
-            'Error: device local key not found. Provide --key or ensure '
-            'the device entry in %s has a "key" field.' % device_file
-        )
-        sys.exit(1)
-    if dev_version is None:
-        dev_version = 3.3
-    if not dev_ip:
-        dev_ip = 'Auto'
-
-    # Create device handle
-    try:
-        d = Device(dev_id, address=dev_ip, local_key=dev_key, version=dev_version)
-    except RuntimeError as e:
-        print('Error: %s' % e)
-        sys.exit(1)
-    except Exception as e:
-        print('Error creating device: %s' % e)
-        sys.exit(1)
-
-    # Execute command
-    if args.command == 'on':
-        result = d.turn_on(switch=args.dps)
-    elif args.command == 'off':
-        result = d.turn_off(switch=args.dps)
-    elif args.command == 'set':
-        # Attempt to parse the value as JSON so that "true", "123", etc.
-        # are sent with the correct type; fall back to a plain string.
-        try:
-            typed_value = json.loads(args.value)
-        except (ValueError, TypeError):
-            typed_value = args.value
-        result = d.set_value(args.dps, typed_value)
-    elif args.command == 'get':
-        result = d.status()
-        if result and 'Err' not in result:
-            if args.dps is None:
-                # No --dps given: print full status
-                print(json.dumps(result))
-                return
-            dps_str = str(args.dps)
-            if 'dps' in result and dps_str in result['dps']:
-                # --dps given: print the plain value only
-                print(json.dumps(result['dps'][dps_str]))
-                return
-            else:
-                available = list(result.get('dps', {}).keys())
-                print('Error: DPS %d not found in device response.' % args.dps)
-                print('Available DPS keys:', available)
-                sys.exit(1)
-        # fall through to error check below
-    else:
-        result = None
-
-    # Shared error check for on/off/set (and get error path)
-    if result and 'Err' in result:
-        print('Error %s: %s' % (result['Err'], result['Error']))
-        sys.exit(1)
-
-    if result:
-        print(json.dumps(result))
-    else:
-        print('OK')
-
-
 if args.command:
     if args.debug2 and not args.debug:
         print('Parsed args:', args)
         set_debug(True)
 
-    # Scanner / wizard file setup – skip for device control commands and list
-    if args.command not in control_cmds and args.command != 'list':
+    # Scanner / wizard file setup – skip for device control commands, list, version, and help
+    if args.command not in control_cmds and args.command not in ('list', 'version', 'help'):
         if args.command == 'wizard' and args.raw_response_file:
             wizard.RAWFILE = args.raw_response_file
 
@@ -364,13 +254,17 @@ elif args.command == 'wizard':
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
 elif args.command == 'list':
     _run_list_command(args)
+elif args.command == 'version':
+    print('TinyTuya version:', version)
+elif args.command == 'help':
+    _print_help()
 elif args.command == 'monitor':
     _monitor_device(args)
 elif args.command in control_cmds:
     _run_device_command(args)
 else:
-    # No command selected - show help
-    parser.print_help()
+    # No command selected - show detailed help
+    _print_help()
 
 # Entry_points/console_scripts endpoints require a function to be called
 def dummy():

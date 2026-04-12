@@ -17,24 +17,24 @@
 # Modules
 import getpass
 import json
+import os
 import sys
 import time
 
 from . import scanner, DEVICEFILE
 from .core import Device
+from .core.XenonDevice import load_devicefile
 
 
 def _run_list_command(args):
     """Handle the list command."""
     device_file = getattr(args, 'device_file', DEVICEFILE)
-    try:
-        with open(device_file, 'r') as f:
-            tuyadevices = json.load(f)
-    except FileNotFoundError:
-        print('Error: device file "%s" not found.' % device_file)
-        sys.exit(1)
-    except Exception as e:
-        print('Error reading device file: %s' % e)
+    tuyadevices = load_devicefile(device_file)
+    if not tuyadevices:
+        if not os.path.exists(device_file):
+            print('Error: device file "%s" not found.' % device_file)
+        else:
+            print('Error: device file "%s" contains no valid devices (check JSON syntax and format).' % device_file)
         sys.exit(1)
 
     FIELDS = ('name', 'id', 'key', 'ip', 'version')
@@ -83,12 +83,7 @@ def _build_device(args):
     dev_name    = getattr(args, 'name', None)
 
     # Load devices.json once (best-effort; missing file is fine)
-    tuyadevices = []
-    try:
-        with open(device_file, 'r') as f:
-            tuyadevices = json.load(f)
-    except Exception:
-        pass
+    tuyadevices = load_devicefile(device_file)
 
     # Resolve --name to an ID
     if dev_name and not dev_id:
