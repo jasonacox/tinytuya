@@ -510,16 +510,24 @@ Command Line Usage
 ```
 tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE] [-snapshot-file FILE]
 
-  wizard         Launch Setup Wizard to get Tuya Local KEYs.
+  Setup & Discovery
+  wizard         Launch Setup Wizard to get Tuya Local Keys from Tuya Cloud.
   scan           Scan local network for Tuya devices.
   devices        Scan all devices listed in devices.json file.
   snapshot       Scan devices listed in snapshot.json file.
-  json           Scan devices listed in snapshot.json file [JSON].
+  json           Scan devices listed in snapshot.json file [JSON output].
   list           List devices from devices.json as a table (or --json).
+
+  Device Control  (require --id or --name)
   on             Turn on a device switch.
   off            Turn off a device switch.
   set            Set a DPS value on a device.
   get            Read a DPS value (or full status) from a device.
+  monitor        Connect to a device and monitor for live status updates.
+
+  Info
+  version        Display the TinyTuya version.
+  help           Show detailed help and usage examples.
 
   Wizard
       tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
@@ -570,32 +578,62 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
         --json               Output as a JSON array instead of a table
         -device-file FILE    JSON file to load devices from [Default: devices.json]
 
+  Device Control Options (on / off / set / get / monitor)
+      --id and --name are mutually exclusive; one is required.
+      --key, --ip, and --version are loaded automatically from devices.json if found.
+      If --key is omitted and not in devices.json, the CLI will prompt for it interactively
+      (input is hidden, avoiding shell-escaping issues with special characters like $, #, =).
+      Tuya local keys are always exactly 16 characters — a wrong length usually means a
+      shell-escaping problem (try wrapping with single quotes or omitting --key entirely).
+
   On / Off
-      tinytuya on  [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
-      tinytuya off [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya on  [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya off [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
 
         --dps N              Switch DPS index [Default: 1]
-        --id ID              Device ID
-        --name NAME          Device name – looked up in device-file (alternative to --id)
-        --key KEY            Device local encryption key
-        --ip IP              Device IP address (auto-discovered if omitted)
-        --version VER        Tuya protocol version [Default: 3.3]
+        --id ID              Device ID (mutually exclusive with --name)
+        --name NAME          Device name – looked up in device-file (mutually exclusive with --id)
+        --key KEY            Device local encryption key (prompted if omitted and not in device-file)
+        --ip IP              Device IP address (auto-discovered if omitted or set to "Auto")
+        --version VER        Tuya protocol version (auto-discovered if omitted, defaults to 3.3)
         -device-file FILE    JSON file to load devices from [Default: devices.json]
 
   Set
-      tinytuya set [-h] [-debug] --dps N --value VALUE [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya set [-h] [-debug] --dps N --value VALUE (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
 
         --dps N              DPS index to write (required)
-        --value VALUE        Value to set (sent as string; device handles type coercion)
+        --value VALUE        Value to set – parsed as JSON if possible (true, false, 123, "text"),
+                             otherwise sent as a plain string
 
   Get
-      tinytuya get [-h] [-debug] [--dps N] [--id ID] [--name NAME] [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya get [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
 
         --dps N              DPS index to read; omit to return full device status JSON
 
         Output:
           No --dps  →  full status JSON, e.g. {"dps": {"1": true, "2": 500}}
           --dps N   →  plain scalar value only, e.g. true
+
+  Monitor
+      tinytuya monitor [-h] [-debug] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        Connects to the device, prints the initial status, then enters a persistent
+        loop that listens for asynchronous updates, sends a heartbeat every 12 seconds,
+        and polls for a full status refresh every 30 seconds. Press Ctrl-C to exit.
+
+        Example:
+          tinytuya monitor --name "Kitchen Light"
+          tinytuya monitor --id $DEVICE_ID --key $KEY --ip 192.168.1.50
+
+  Version
+      tinytuya version
+
+        Prints the installed TinyTuya version, e.g.:  TinyTuya version: 1.18.0
+
+  Help
+      tinytuya help
+
+        Prints a detailed usage summary with examples for all commands.
 
 ```
 
@@ -617,6 +655,20 @@ You can run the scanner from the command line using these interactive commands:
   # List all register devices discovered from Wizard and poll them
   python -m tinytuya devices
 
+  # List devices from devices.json as a table
+  python -m tinytuya list
+
+  # Control devices by name or ID (key and IP are loaded from devices.json)
+  python -m tinytuya on  --name "Kitchen Light"
+  python -m tinytuya off --name "Kitchen Light"
+  python -m tinytuya set --name "Fan" --dps 3 --value 50
+  python -m tinytuya get --name "Sensor"
+
+  # Monitor a device for live async updates (Ctrl-C to exit)
+  python -m tinytuya monitor --name "Kitchen Light"
+
+  # Display version
+  python -m tinytuya version
   ```
 
 By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
