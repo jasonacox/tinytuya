@@ -1,5 +1,22 @@
 # RELEASE NOTES
 
+## v1.18.0 - Format Handling and UX Improvements
+
+* `devices.json` format: All loading paths (library, CLI, scanner, wizard, API server) now support both a flat `[{...}]` list and the `{"devices": [{...}]}` wrapped-dict format via a new centralized `load_devicefile()` helper. Fixes [#532](https://github.com/jasonacox/tinytuya/issues/532) via [#700](https://github.com/jasonacox/tinytuya/pull/700) by @uzlonewolf and @jasonacox.
+* API server: Added `isRegistered()` / `deviceError()` helpers to distinguish "Device offline" from "Device ID not found" in error responses.
+* Cloud: Preserve device mappings on transient Cloud API failure in `getdevices()` so a temporary outage no longer wipes the local device map by @jasonacox in [#692](https://github.com/jasonacox/tinytuya/pull/692).
+* IRRemoteControlDevice: Raise `RuntimeError` on undetected `control_type` in `send_command()` instead of silently failing by @jasonacox-sam in [#698](https://github.com/jasonacox/tinytuya/pull/698).
+* Contrib: New examples for `IRRemoteControlDevice` by @uzlonewolf in [#699](https://github.com/jasonacox/tinytuya/pull/699).
+* Contrib: Revert deprecated `Contrib/__init__.py` by @uzlonewolf in [#686](https://github.com/jasonacox/tinytuya/pull/686).
+* Docs: Clarify `set_version()` example — 3.3 is not the required version by @jasonacox-sam in [#695](https://github.com/jasonacox/tinytuya/pull/695).
+* Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found".
+* Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com.
+* README: Added troubleshooting notes clarifying battery-powered device limitations and warning against aggressive polling intervals that can cause devices to drop or reset their connection.
+* CLI: New `monitor` command added: Connects to device and waits for async status updates.
+* CLI (`on`, `off`, `set`, `get`, `monitor`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688):
+  * If `--key` is omitted and the key is not found in `devices.json`, the CLI now **prompts interactively** for the key. Input at a terminal prompt bypasses shell interpretation entirely, so no quoting or escaping is needed.
+  * Added **key length validation** — Tuya local keys are always exactly 16 characters. If the resolved key is the wrong length (the most common symptom of a shell-escaping problem), a clear error is printed with platform-specific quoting tips for Linux/Mac and Windows CMD.
+
 ## v1.17.6 - RFRemoteControlDevice Bug Fixes
 
 * Contrib: Fix `RFRemoteControlDevice` - three bugs that each independently caused `rfstudy_send` commands to be silently ignored by the device by @kongo09 in https://github.com/jasonacox/tinytuya/pull/684:
