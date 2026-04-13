@@ -133,3 +133,4 @@ server/tinytuya
 
 # Local issue response archive
 issues/
+server/.beta_build

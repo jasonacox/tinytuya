@@ -1,5 +1,11 @@
 import setuptools
-from pkg_resources import DistributionNotFound, get_distribution
+try:
+    from importlib.metadata import version as _pkg_version, PackageNotFoundError as DistributionNotFound
+    def get_distribution(name):
+        _pkg_version(name)  # raises DistributionNotFound if not installed
+        return name
+except ImportError:
+    from pkg_resources import DistributionNotFound, get_distribution
 
 from tinytuya import __version__
 
