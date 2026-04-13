@@ -9,11 +9,15 @@
 * Contrib: New examples for `IRRemoteControlDevice` by @uzlonewolf in [#699](https://github.com/jasonacox/tinytuya/pull/699).
 * Contrib: Revert deprecated `Contrib/__init__.py` by @uzlonewolf in [#686](https://github.com/jasonacox/tinytuya/pull/686).
 * Docs: Clarify `set_version()` example — 3.3 is not the required version by @jasonacox-sam in [#695](https://github.com/jasonacox/tinytuya/pull/695).
-* Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found".
-* Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com.
+* Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found" by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689).
 * README: Added troubleshooting notes clarifying battery-powered device limitations and warning against aggressive polling intervals that can cause devices to drop or reset their connection.
-* CLI: New `monitor` command added: Connects to device and waits for async status updates.
-* CLI (`on`, `off`, `set`, `get`, `monitor`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688):
+* CLI: Refactored device-control functions into a new `cli.py` module to keep `__main__.py` focused on argument parsing and dispatch by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI: New `monitor` command — connects to a device with a persistent socket, prints the initial status, then listens for async updates with a heartbeat every 12 s and a full status refresh every 30 s by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI: New `version` subcommand — `tinytuya version` prints the installed TinyTuya version.
+* CLI: New `help` subcommand — `tinytuya help` prints a detailed usage summary with examples for all commands. Running `tinytuya` with no arguments also shows the full help.
+* CLI (`on`, `off`, `set`, `get`, `monitor`): `--id` and `--name` are now mutually exclusive and one is **required** (previously both were optional). `--version` omitted now triggers an auto-scan instead of silently defaulting to v3.3 by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI (`on`, `off`, `set`, `get`, `monitor`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688) by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689):
   * If `--key` is omitted and the key is not found in `devices.json`, the CLI now **prompts interactively** for the key. Input at a terminal prompt bypasses shell interpretation entirely, so no quoting or escaping is needed.
   * Added **key length validation** — Tuya local keys are always exactly 16 characters. If the resolved key is the wrong length (the most common symptom of a shell-escaping problem), a clear error is printed with platform-specific quoting tips for Linux/Mac and Windows CMD.
 
