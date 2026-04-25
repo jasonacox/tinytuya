@@ -17,8 +17,8 @@ from tinytuya.core import Device
         get_operating_mode()
         set_operating_mode()
         get_current_state()
-        get_timer()
-        set_timer()
+        get_timer()                        # returns number of minutes
+        set_timer()                        # expects number of minutes
     Inherited
         json = status()                    # returns json payload
         set_version(version)               # 3.1 [default] or 3.3
@@ -69,18 +69,23 @@ class TowelRailHeaterDevice(Device):
             "Power On": status[self.DPS_POWER],
             "Set temperature": status[self.DPS_SET_TEMP],
             "Current temperature": status[self.DPS_CUR_TEMP],
-            "Fan speed": status[self.DPS_FAN],
             "Operating mode": status[self.DPS_MODE],
             "Timer left": status[self.DPS_TIMER],
         }
 
+    def tuya_temperature_to_celsius(self, temperature):
+        return int(temperature/10)
+
+    def celsius_to_tuya_temperature(self, temperature):
+        return int(temperature*10)
+
     def get_room_temperature(self):
         status = self.status()["dps"]
-        return status[self.DPS_CUR_TEMP]/10
+        return tuya_temperature_to_celsius(status[self.DPS_CUR_TEMP])
 
     def get_target_temperature(self):
         status = self.status()["dps"]
-        return status[self.DPS_SET_TEMP]/10
+        return tuya_temperature_to_celsius(status[self.DPS_SET_TEMP])
 
     def set_target_temperature(self, t):
         def is_float(f):
@@ -94,7 +99,7 @@ class TowelRailHeaterDevice(Device):
         if not is_float(t):
             return
 
-        self.set_value(int(self.DPS_SET_TEMP*10), t)
+        self.set_value(self.DPS_SET_TEMP, celsius_to_tuya_temperature(t))
 
     def get_operating_mode(self):
         status = self.status()["dps"]
@@ -109,11 +114,19 @@ class TowelRailHeaterDevice(Device):
         status = self.status()["dps"]
         return "On" if status[self.DPS_POWER] else "Off"
 
+    def tuya_duration_to_minutes(self, duration):
+        return duration * 6 # Returns 10 for 1 hour, 15 for 1 hour 30, 20 for 2 hours and so on
+
+    def minutes_to_tuya_duration(self, duration):
+        return int( duration / 6) # Returns 10 for 1 hour, 15 for 1 hour 30, 20 for 2 hours and so on
+
     def get_timer(self):
         status = self.status()["dps"]
-        return status[self.DPS_TIMER]   # TODO, figure out how to represent this
+        return tuya_duration_to_minutes(status[self.DPS_TIMER])
 
     def set_timer(self, delay):
-        if delay < 0 or delay > 24:
+        if delay < 30 or delay > 8*60:
             return
-        self.set_value(self.DPS_TIMER, delay) # TODO, figure out how to represent this
+        if delay % 30 != 0
+            return
+        self.set_value(self.DPS_TIMER, minutes_to_tuya_duration(delay))
