@@ -11,7 +11,7 @@ from tinytuya.core import Device
  Functions
     TowelRailHeaterDevice:
         status_json()
-        get_room_temperature()
+        get_current_temperature()
         get_target_temperature()
         set_target_temperature()
         get_operating_mode()
@@ -79,7 +79,7 @@ class TowelRailHeaterDevice(Device):
     def celsius_to_tuya_temperature(self, temperature):
         return int(temperature*10)
 
-    def get_room_temperature(self):
+    def get_current_temperature(self):
         status = self.status()["dps"]
         return tuya_temperature_to_celsius(status[self.DPS_CUR_TEMP])
 
