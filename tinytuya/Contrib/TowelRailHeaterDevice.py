@@ -1,7 +1,7 @@
 from tinytuya.core import Device
 
 """
- Python module to interface with Tuya Portable Air Conditioner devices
+ Python module to interface with Tuya Heated Towel Rail devices
 
  Local Control Classes
     TowelRailHeaterDevice(..., version=3.4)
@@ -67,25 +67,25 @@ class TowelRailHeaterDevice(Device):
         status = self.status()["dps"]
         return {
             "Power On": status[self.DPS_POWER],
-            "Set temperature": status[self.DPS_SET_TEMP],
-            "Current temperature": status[self.DPS_CUR_TEMP],
+            "Set temperature": self.tuya_temperature_to_celsius(status[self.DPS_SET_TEMP]),
+            "Current temperature": self.tuya_temperature_to_celsius(status[self.DPS_CUR_TEMP]),
             "Operating mode": status[self.DPS_MODE],
-            "Timer left": status[self.DPS_TIMER],
+            "Timer left": self.tuya_duration_to_minutes(status[self.DPS_TIMER]),
         }
 
     def tuya_temperature_to_celsius(self, temperature):
-        return int(temperature/10)
+        return int(temperature / 10)
 
     def celsius_to_tuya_temperature(self, temperature):
-        return int(temperature*10)
+        return int(temperature * 10)
 
     def get_current_temperature(self):
         status = self.status()["dps"]
-        return tuya_temperature_to_celsius(status[self.DPS_CUR_TEMP])
+        return self.tuya_temperature_to_celsius(status[self.DPS_CUR_TEMP])
 
     def get_target_temperature(self):
         status = self.status()["dps"]
-        return tuya_temperature_to_celsius(status[self.DPS_SET_TEMP])
+        return self.tuya_temperature_to_celsius(status[self.DPS_SET_TEMP])
 
     def set_target_temperature(self, t):
         def is_float(f):
@@ -99,7 +99,7 @@ class TowelRailHeaterDevice(Device):
         if not is_float(t):
             return
 
-        self.set_value(self.DPS_SET_TEMP, celsius_to_tuya_temperature(t))
+        self.set_value(self.DPS_SET_TEMP, self.celsius_to_tuya_temperature(t))
 
     def get_operating_mode(self):
         status = self.status()["dps"]
@@ -118,15 +118,15 @@ class TowelRailHeaterDevice(Device):
         return duration * 6 # Returns 10 for 1 hour, 15 for 1 hour 30, 20 for 2 hours and so on
 
     def minutes_to_tuya_duration(self, duration):
-        return int( duration / 6) # Returns 10 for 1 hour, 15 for 1 hour 30, 20 for 2 hours and so on
+        return int(duration / 6) # Returns 10 for 1 hour, 15 for 1 hour 30, 20 for 2 hours and so on
 
     def get_timer(self):
         status = self.status()["dps"]
-        return tuya_duration_to_minutes(status[self.DPS_TIMER])
+        return self.tuya_duration_to_minutes(status[self.DPS_TIMER])
 
     def set_timer(self, delay):
-        if delay < 30 or delay > 8*60:
+        if delay < 30 or delay > 8 * 60: #8 hours maximum
             return
         if delay % 30 != 0
             return
-        self.set_value(self.DPS_TIMER, minutes_to_tuya_duration(delay))
+        self.set_value(self.DPS_TIMER, self.minutes_to_tuya_duration(delay))
