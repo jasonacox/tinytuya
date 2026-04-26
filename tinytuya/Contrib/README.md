@@ -252,7 +252,7 @@ print(wdm.get_voltage())
 
 The mode is mapped as follows:
 * "auto" is the scheduler, I could not find a way to set or configure the schedule through Tuya, only physically on the device
-* "heat" is the user configured temperature (`set_target_temperature`)
+* "hot" is the user configured temperature (`set_target_temperature`)
 * "cold" is the hard-coded 50 degrees C
 * "eco"  is the heat for a defined duration and then switch back off again.
 
