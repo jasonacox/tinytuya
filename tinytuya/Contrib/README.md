@@ -228,7 +228,7 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 * WiFiDualMeterDevice - A community-contributed Python module to add support for Tuya WiFi Dual Meter device
 * Author: [Guillaume Gardet](https://github.com/ggardet)
 
-```
+```python
 from tinytuya.Contrib import WiFiDualMeterDevice
 
 wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
@@ -243,8 +243,35 @@ wdm.print_all()
 # Only print Voltage and frequency
 print(wdm.get_freq())
 print(wdm.get_voltage())
+```
 
+### TowelRailHeaterDevice
 
+* TowelRailHeaterDevice - A community-contributed Python module to add support for Tuya WiFi Towel Rail Heater
+* Author: [Rob Emery](https://github.com/mintsoft)
+
+The mode is mapped as follows:
+* "auto" is the scheduler, I could not find a way to set or configure the schedule through Tuya, only physically on the device
+* "hot" is the user configured temperature (`set_target_temperature`)
+* "cold" is the hard-coded 50 degrees C
+* "eco"  is the heat for a defined duration and then switch back off again.
+
+```python
+from tinytuya.Contrib import TowelRailHeaterDevice
+
+device = TowelRailHeaterDevice.TowelRailHeaterDevice(
+      dev_id='YOUR_DEV_ID',
+      address='192.168.XX.YY',      # Or set to 'Auto' to auto-discover IP address
+      local_key='LOCAL_KEY',
+      version=3.4)
+
+# Print all known values
+device.print_all()
+
+print(device.get_operating_mode())
+print(device.get_current_temperature())
+
+```
 ## Submit Your Device
 
 * We welcome new device modules!
