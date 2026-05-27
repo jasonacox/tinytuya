@@ -15,6 +15,10 @@ from . import header as H
 log = logging.getLogger(__name__)
 
 
+# Heuristic ceiling to reject corrupt/desynced streams. Large IR learn frames
+# (e.g. air-conditioner codes) exceed 1 KB, so cap generously rather than at 1 KB.
+MAX_PAYLOAD_LENGTH = 65535
+
 # Tuya Packet Format
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
 MessagePayload = namedtuple("MessagePayload", "cmd payload")
@@ -91,9 +95,9 @@ def parse_header(data):
         #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
         raise DecodeError('Header prefix wrong! %08X is not %08X or %08X' % (prefix, H.PREFIX_55AA_VALUE, H.PREFIX_6699_VALUE))
 
-    # sanity check. currently the max payload length is somewhere around 300 bytes
-    if payload_len > 1000:
-        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (payload_len,fmt,unpacked))
+    # sanity check to catch a corrupt/desynced stream (see MAX_PAYLOAD_LENGTH)
+    if payload_len > MAX_PAYLOAD_LENGTH:
+        raise DecodeError('Header claims the packet size is over %d bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (MAX_PAYLOAD_LENGTH,payload_len,fmt,unpacked))
 
     return TuyaHeader(prefix, seqno, cmd, payload_len, total_length)
 
