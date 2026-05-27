@@ -10,14 +10,11 @@ from hashlib import sha256
 
 from .crypto_helper import AESCipher
 from .exceptions import DecodeError
+from .const import MAX_PAYLOAD_LENGTH
 from . import header as H
 
 log = logging.getLogger(__name__)
 
-
-# Heuristic ceiling to reject corrupt/desynced streams. Large IR learn frames
-# (e.g. air-conditioner codes) exceed 1 KB, so cap generously rather than at 1 KB.
-MAX_PAYLOAD_LENGTH = 65535
 
 # Tuya Packet Format
 TuyaHeader = namedtuple('TuyaHeader', 'prefix seqno cmd length total_length')
