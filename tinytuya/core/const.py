@@ -12,6 +12,12 @@ TIMEOUT = 3.0       # Seconds to wait for a broadcast
 TCPTIMEOUT = 0.4    # Seconds to wait for socket open for scanning
 DEFAULT_NETWORK = '192.168.0.0/24'
 
+# Heuristic ceiling used to reject corrupt/desynced streams. Most devices only
+# have ~256 KiB of RAM and need 2x-3x the payload size for buffers, plus packets
+# over ~1440 bytes tend to fragment, so keep the default conservative. Override
+# at runtime if a particular device needs larger frames.
+MAX_PAYLOAD_LENGTH = 1440
+
 # Configuration Files
 CONFIGFILE = 'tinytuya.json'
 DEVICEFILE = 'devices.json'

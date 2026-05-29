@@ -20,6 +20,8 @@ import base64
 
 import tinytuya
 from tinytuya.Contrib.RFRemoteControlDevice import RFRemoteControlDevice
+from tinytuya.core import message_helper as mh
+from tinytuya.core.exceptions import DecodeError
 
 LOCAL_KEY = '0123456789abcdef'
 
@@ -382,6 +384,27 @@ class TestLoadDeviceFile(unittest.TestCase):
         path = self._write_json(devices)
         result = tinytuya.load_devicefile(path)
         self.assertEqual(result[0]['key'], ":|S'vf<MT6xhr{1~")
+
+
+class TestParseHeader(unittest.TestCase):
+    """parse_header must accept large IR/AC learn frames (>1000 bytes) while
+    still rejecting absurd sizes from a corrupt or desynced stream."""
+
+    def _header_6699(self, payload_len):
+        return struct.pack(
+            mh.H.MESSAGE_HEADER_FMT_6699,
+            mh.H.PREFIX_6699_VALUE, 0, 1, 8, payload_len,
+        )
+
+    def test_large_ir_payload_accepted(self):
+        # a 1038-byte frame is a real air-conditioner learn report; it must parse
+        header = mh.parse_header(self._header_6699(1038) + b'\x00' * 40)
+        self.assertEqual(header.length, 1038)
+
+    def test_oversized_payload_rejected(self):
+        oversized = self._header_6699(mh.MAX_PAYLOAD_LENGTH + 1)
+        with self.assertRaises(DecodeError):
+            mh.parse_header(oversized + b'\x00' * 40)
 
 
 if __name__ == '__main__':
