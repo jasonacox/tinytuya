@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+## v1.18.1 - IR Learn Frame Fix
+
+* core: Added `MAX_PAYLOAD_LENGTH` constant (default 1440 bytes) in `tinytuya/core/const.py` to replace the hardcoded 1000-byte ceiling in `parse_header()`. Enables local IR learn frame capture from devices with larger payloads such as AC IR blasters. Fixes [#708](https://github.com/jasonacox/tinytuya/issues/708) via [#709](https://github.com/jasonacox/tinytuya/pull/709) by @ostjen.
+
 ## v1.18.0 - Format Handling and UX Improvements
 
 * `devices.json` format: All loading paths (library, CLI, scanner, wizard, API server) now support both a flat `[{...}]` list and the `{"devices": [{...}]}` wrapped-dict format via a new centralized `load_devicefile()` helper. Fixes [#532](https://github.com/jasonacox/tinytuya/issues/532) via [#700](https://github.com/jasonacox/tinytuya/pull/700) by @uzlonewolf and @jasonacox.
