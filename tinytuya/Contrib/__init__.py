@@ -9,8 +9,7 @@ from .IRRemoteControlDevice import IRRemoteControlDevice
 from .SocketDevice import SocketDevice
 from .DoorbellDevice import DoorbellDevice
 from .ClimateDevice import ClimateDevice
-from .FloorFanDevice import FloorFanDevice
 from .AtorchTemperatureControllerDevice import AtorchTemperatureControllerDevice
 from .InverterHeatPumpDevice import InverterHeatPumpDevice, TemperatureUnit, InverterHeatPumpMode, InverterHeatPumpFault
 
-DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "FloorFanDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice"]
+DeviceTypes = ["ThermostatDevice", "IRRemoteControlDevice", "SocketDevice", "DoorbellDevice", "ClimateDevice", "AtorchTemperatureControllerDevice", "InverterHeatPumpDevice"]

@@ -56,7 +56,6 @@ class FloorFanDevice(Device):
     DPS_MODE = "2"
     DPS_SPEED = "3"
     DPS_OSCILLATION = "5"
-    DPS_STATUS_FLAG = "13"
     DPS_TIMER = "22"
 
     def __init__(self, *args, **kwargs):
@@ -79,7 +78,7 @@ class FloorFanDevice(Device):
     def get_power(self):
         """Get the power status of the fan."""
         status = self.status()["dps"]
-        return status[self.DPS_POWER]
+        return status.get(self.DPS_POWER, False)
 
     def set_power(self, on):
         """Set the power status of the fan.
@@ -96,16 +95,19 @@ class FloorFanDevice(Device):
             str: One of 'normal', 'nature', or 'sleep'
         """
         status = self.status()["dps"]
-        return status[self.DPS_MODE]
+        return status.get(self.DPS_MODE, "normal")
 
     def set_mode(self, mode):
         """Set the wind mode.
         
         Args:
             mode (str): One of 'normal', 'nature', or 'sleep'
+            
+        Raises:
+            ValueError: If mode is not one of the valid options
         """
         if mode not in ("normal", "nature", "sleep"):
-            return
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of: 'normal', 'nature', 'sleep'")
         self.set_value(self.DPS_MODE, mode)
 
     def get_speed(self):
@@ -115,16 +117,19 @@ class FloorFanDevice(Device):
             int: Speed level from 1 to 5
         """
         status = self.status()["dps"]
-        return status[self.DPS_SPEED]
+        return status.get(self.DPS_SPEED, 1)
 
     def set_speed(self, speed):
         """Set the fan speed level.
         
         Args:
             speed (int): Speed level from 1 to 5
+            
+        Raises:
+            ValueError: If speed is not between 1 and 5
         """
         if speed not in (1, 2, 3, 4, 5):
-            return
+            raise ValueError(f"Invalid speed {speed}. Must be between 1 and 5")
         self.set_value(self.DPS_SPEED, speed)
 
     def get_oscillation(self):
@@ -134,7 +139,7 @@ class FloorFanDevice(Device):
             bool: True if oscillation is on, False otherwise
         """
         status = self.status()["dps"]
-        return status[self.DPS_OSCILLATION]
+        return status.get(self.DPS_OSCILLATION, False)
 
     def set_oscillation(self, on):
         """Set the oscillation/swing status.
@@ -151,7 +156,7 @@ class FloorFanDevice(Device):
             str: One of 'cancel', '1h', '2h', ..., '12h'
         """
         status = self.status()["dps"]
-        return status[self.DPS_TIMER]
+        return status.get(self.DPS_TIMER, "cancel")
 
     def set_timer(self, timer):
         """Set the sleep timer.
@@ -159,11 +164,14 @@ class FloorFanDevice(Device):
         Args:
             timer (str): One of 'cancel', '1h', '2h', '3h', '4h', '5h', '6h', 
                         '7h', '8h', '9h', '10h', '11h', or '12h'
+                        
+        Raises:
+            ValueError: If timer is not one of the valid options
         """
         valid_timers = [
             "cancel", "1h", "2h", "3h", "4h", "5h", "6h",
             "7h", "8h", "9h", "10h", "11h", "12h"
         ]
         if timer not in valid_timers:
-            return
+            raise ValueError(f"Invalid timer '{timer}'. Must be one of: {', '.join(repr(t) for t in valid_timers)}")
         self.set_value(self.DPS_TIMER, timer)

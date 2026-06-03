@@ -30,8 +30,8 @@ def main():
     # Enable debug mode to see what's happening
     # fan.set_debug(True)
 
-    try:
-        print("=== Floor Standing Fan Control Example ===\n")
+    try:        # Note: Each status_json() call makes a full round-trip to the device.
+        # For production use, consider caching status or reducing polling frequency.        print("=== Floor Standing Fan Control Example ===\n")
 
         # Get the current status
         print("1. Getting current status...")
