@@ -93,8 +93,8 @@ def main():
         heartbeat_interval=HEARTBEAT_INTERVAL,
     )
 
-    # Register devices
-    registered = []
+    # Register devices — add() returns a proxy handle for sending commands
+    handles = []
     for cfg in devices:
         dev_id = cfg.get("id", cfg.get("gwId", ""))
         ip = cfg.get("ip", cfg.get("address"))
@@ -107,17 +107,18 @@ def main():
 
         print(f"Connecting to {name} ({ip}) ... ", end="", flush=True)
         result = mon.add(d)
-        if result is True:
+        if isinstance(result, tinytuya.core.Monitor._DeviceProxy):
             print("OK")
-            registered.append(d)
+            handles.append(result)
         else:
             print(f"FAILED: {result}")
 
-    if not registered:
+    if not handles:
         print("No devices connected. Exiting.")
         sys.exit(1)
 
-    print(f"\nMonitoring {len(registered)} device(s). Press Ctrl+C to stop.\n")
+    print(f"\nMonitoring {len(handles)} device(s). Press Ctrl+C to stop.\n")
+    print("Send commands via handles, e.g.: handles[0].set_value(1, True)")
 
     # Start the monitor reactor on a daemon thread
     mon.start()

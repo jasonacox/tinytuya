@@ -33,7 +33,8 @@ def on_status(device, result):
 def main():
     mon = tinytuya.Monitor(on_status=on_status, heartbeat_interval=12)
 
-    # Register and connect devices
+    # Register and connect devices — add() returns a proxy handle
+    handles = []
     for cfg in device_list:
         d = tinytuya.OutletDevice(
             cfg["id"], cfg["ip"], cfg["key"],
@@ -41,8 +42,9 @@ def main():
         )
         d.name = cfg.get("name", cfg["id"][:8])
         result = mon.add(d)
-        if result is True:
+        if isinstance(result, tinytuya.core.Monitor._DeviceProxy):
             print(f"Connected to {d.name}")
+            handles.append(result)
         else:
             print(f"Failed to connect to {d.name}: {result}")
 

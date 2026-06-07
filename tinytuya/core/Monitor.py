@@ -18,15 +18,21 @@ Usage::
         print(device.id, result.get('dps'))
 
     mon = tinytuya.Monitor(on_status=on_status)
+    handles = []
     for cfg in my_devices:
         d = tinytuya.OutletDevice(cfg['id'], cfg['ip'], cfg['key'],
                                   version=3.3, persist=True)
-        mon.add(d)           # blocking connect happens here, once
+        handle = mon.add(d)     # blocking connect happens here, once
+        handles.append(handle)
 
-    mon.start()              # reactor runs on one daemon thread
+    mon.start()                  # reactor runs on one daemon thread
 
-    # ... later ...
-    mon.send(d, 'set_value', 1, True)  # thread-safe command
+    # Send commands via the proxy handle (thread-safe)
+    handles[0].set_value(1, True)
+
+    # Or use .command() directly:
+    # mon.command(d, 'set_value', 1, True)
+
     mon.stop()
 
 Or drive it from a caller's own loop::
@@ -41,13 +47,11 @@ import logging
 import os
 import selectors
 import socket
-import struct
 import threading
 import time
 
 from . import header as H
 from .message_helper import (
-    TuyaMessage,
     parse_header,
     unpack_message,
 )
@@ -80,6 +84,37 @@ class _DeviceState:
         self.on_disconnect = on_disconnect
 
 
+class _DeviceProxy:
+    """
+    Proxy handle returned by ``Monitor.add()``.
+
+    Provides a clean UX for sending commands through the Monitor's
+    thread-safe command queue.  Any attribute access on the proxy
+    returns a callable that queues the method call for execution
+    on the reactor thread (always with ``nowait=True``).
+
+    Usage::
+
+        handle = mon.add(device)
+        handle.set_value(1, True)       # equivalent to mon.command(device, 'set_value', 1, True)
+        handle.set_status(False, 1)     # equivalent to mon.command(device, 'set_status', False, 1)
+    """
+
+    def __init__(self, monitor, device):
+        # Store without __dict__ pollution via object.__setattr__
+        object.__setattr__(self, '_monitor', monitor)
+        object.__setattr__(self, '_device', device)
+
+    def __getattr__(self, name):
+        """Return a callable that enqueues the method call via Monitor.command()."""
+        def enqueue(*args, **kwargs):
+            self._monitor.command(self._device, name, *args, **kwargs)
+        return enqueue
+
+    def __repr__(self):
+        return f'_DeviceProxy({self._device.id})'
+
+
 class Monitor:
     """
     Single-thread, multi-device status monitor using ``selectors``.
@@ -106,9 +141,11 @@ class Monitor:
         self._devices = {}          # fileno -> _DeviceState
         self._id_to_state = {}      # device.id -> _DeviceState
 
-        # Self-pipe: allows wake() to interrupt a blocking select()
-        self._wake_r, self._wake_w = os.pipe()
-        self._wake_r_fd = os.fdopen(self._wake_r, 'rb')
+        # Self-pipe: allows wake() to interrupt a blocking select().
+        # Uses socket.socketpair() instead of os.pipe() for Windows
+        # compatibility — SelectSelector on Windows only supports sockets.
+        self._wake_r, self._wake_w = socket.socketpair()
+        self._wake_r.setblocking(False)
         self._sel.register(self._wake_r, selectors.EVENT_READ, data='_wake')
 
         # Thread-safe command queue
@@ -138,11 +175,15 @@ class Monitor:
             on_disconnect: Per-device callback override.
 
         Returns:
-            True on success, error string on failure.
+            A ``_DeviceProxy`` handle on success, or an error string on failure.
+            The proxy allows thread-safe command dispatch::
+
+                handle = mon.add(device)
+                handle.set_value(1, True)
         """
         if device.id in self._id_to_state:
             log.warning('Device %s already registered with Monitor', device.id)
-            return True
+            return _DeviceProxy(self, device)
 
         # Ensure persistent connection mode
         if not device.socketPersistent:
@@ -157,8 +198,10 @@ class Monitor:
         if sock is None:
             return 'Unable to open socket'
 
-        # Set socket to non-blocking for selector use
-        sock.setblocking(False)
+        # Note: selectors does NOT require non-blocking sockets as long as
+        # we only recv() after select() indicates readability.  Keeping the
+        # socket in blocking mode avoids issues with TinyTuya's send path
+        # (sendall, retry logic) which was not designed for non-blocking I/O.
 
         hb = heartbeat_interval if heartbeat_interval is not None else self._heartbeat_interval
         state = _DeviceState(
@@ -178,7 +221,7 @@ class Monitor:
         # Fire connect callback
         self._fire_connect(state, None)
 
-        return True
+        return _DeviceProxy(self, device)
 
     def remove(self, device):
         """
@@ -201,7 +244,7 @@ class Monitor:
             pass
         device.socket = None
 
-    def send(self, device, method_name, *args, **kwargs):
+    def command(self, device, method_name, *args, **kwargs):
         """
         Thread-safe: queue a command to be executed on the reactor thread.
 
@@ -210,12 +253,34 @@ class Monitor:
             method_name: Name of a device method (e.g. ``'set_value'``).
             *args, **kwargs: Arguments forwarded to the method.
 
-        The method is called with ``nowait=True`` (overridable via kwargs).
+        The method is always called with ``nowait=True``.  Passing
+        ``nowait=False`` will raise ``ValueError`` to prevent blocking
+        the reactor loop.
         """
-        kwargs.setdefault('nowait', True)
+        if kwargs.get('nowait', True) is False:
+            raise ValueError(
+                'Monitor.command() does not support nowait=False — '
+                'blocking calls would stall the reactor loop.'
+            )
+        kwargs['nowait'] = True
         with self._queue_lock:
             self._queue.append((device.id, method_name, args, kwargs))
         self._wake()
+
+    # Backward-compatible alias
+    send = command
+
+    def __getitem__(self, device):
+        """
+        Return a ``_DeviceProxy`` for the given device.
+
+        Allows dict-style access for a clean UX::
+
+            mon[device].set_value(1, True)
+        """
+        if device.id not in self._id_to_state:
+            raise KeyError(f'Device {device.id} is not registered with this Monitor')
+        return _DeviceProxy(self, device)
 
     def start(self):
         """
@@ -262,9 +327,9 @@ class Monitor:
         events = self._sel.select(timeout=timeout)
         for key, mask in events:
             if key.data == '_wake':
-                # Drain the wake pipe
+                # Drain the wake socket
                 try:
-                    self._wake_r_fd.read(1024)
+                    self._wake_r.recv(1024)
                 except Exception:
                     pass
                 continue
@@ -285,7 +350,7 @@ class Monitor:
                         break
                     if key.data == '_wake':
                         try:
-                            self._wake_r_fd.read(1024)
+                            self._wake_r.recv(1024)
                         except Exception:
                             pass
                         continue
@@ -366,7 +431,7 @@ class Monitor:
                 return
 
             # We have a complete frame
-            frame = buf[:header.total_length]
+            frame = buf[:header.total_length:]
             state.recv_buffer = buf[header.total_length:]
 
             # Decode the frame
@@ -414,18 +479,31 @@ class Monitor:
             if found_cid:
                 for child in device.children.values():
                     if child.cid == found_cid:
-                        # Cache result on the child device
+                        # Route to the child device: cache + process on it,
+                        # and dispatch the callback using the child's state
                         child._cache_response(result)
                         result = child._process_response(result)
+                        # Look up the child's own state if registered, or
+                        # fall back to the gateway's state with child device object
+                        child_state = self._id_to_state.get(child.id)
+                        if child_state is not None:
+                            target_state = child_state
+                        else:
+                            # Child not separately registered — update state to
+                            # reference the child device so callbacks use it
+                            target_state = _DeviceState.__new__(_DeviceState)
+                            for attr in _DeviceState.__slots__:
+                                setattr(target_state, attr, getattr(state, attr))
+                            target_state.device = child
                         break
 
-        # Cache on the main device
+        # Cache on the main device (if not already handled via CID routing)
         if target_state is state:
             device._cache_response(result)
             result = device._process_response(result)
 
         # Fire status callback
-        self._fire_status(target_state if target_state is not state else state, result)
+        self._fire_status(target_state, result)
 
     # ── Heartbeats ──────────────────────────────────────────────────
 
@@ -438,18 +516,12 @@ class Monitor:
                 state.last_heartbeat = now
 
     def _do_heartbeat(self, state):
-        """Send a heartbeat to one device (nowait, on reactor thread)."""
+        """Send a heartbeat to one device using the existing Device API."""
         device = state.device
         if device.socket is None:
             return
         try:
-            payload = device.generate_payload(H.HEART_BEAT if hasattr(H, 'HEART_BEAT') else 0x0009)
-            from .message_helper import MessagePayload
-            from . import command_types as CT
-            # Use the raw payload approach — heartbeat command
-            payload = device.generate_payload(CT.HEART_BEAT)
-            enc = device._encode_message(payload) if type(payload) == MessagePayload else payload
-            device.socket.sendall(enc)
+            device.heartbeat(nowait=True)
             log.debug('Monitor: sent heartbeat to %s', device.id)
         except Exception:
             log.debug('Monitor: heartbeat send failed for %s', device.id, exc_info=True)
@@ -513,9 +585,9 @@ class Monitor:
     # ── Wake mechanism ──────────────────────────────────────────────
 
     def _wake(self):
-        """Interrupt a blocking select() by writing to the self-pipe."""
+        """Interrupt a blocking select() by writing to the self-pipe socket."""
         try:
-            os.write(self._wake_w, b'\x00')
+            self._wake_w.send(b'\x00')
         except OSError:
             pass
 
@@ -557,10 +629,10 @@ class Monitor:
         except Exception:
             pass
         try:
-            self._wake_r_fd.close()
+            self._wake_r.close()
         except Exception:
             pass
         try:
-            os.close(self._wake_w)
+            self._wake_w.close()
         except Exception:
             pass
