@@ -593,6 +593,9 @@ class BulbDevice(Device):
         if err:
             raise ValueError( 'set_white_percentage: %s percentage needs to be between 0 and 100.' % err[1:])
 
+        if not self.bulb_configured:
+            self.detect_bulb(nowait=nowait)
+
         b = int(self.dpset['value_max'] * brightness // 100)
         c = int(self.dpset['value_max'] * colourtemp // 100)
 
@@ -656,6 +659,8 @@ class BulbDevice(Device):
         """
         if not 0 <= brightness <= 100:
             raise ValueError('set_brightness_percentage: The brightness needs to be between 0 and 100.')
+        if not self.bulb_configured:
+            self.detect_bulb(nowait=nowait)
         b = int(self.dpset['value_max'] * brightness // 100)
         return self.set_brightness(b, nowait=nowait)
 
@@ -704,6 +709,8 @@ class BulbDevice(Device):
         """
         if not 0 <= colourtemp <= 100:
             raise ValueError( 'set_colourtemp_percentage: Colourtemp percentage needs to be between 0 and 100.')
+        if not self.bulb_configured:
+            self.detect_bulb(nowait=nowait)
         c = int(self.dpset['value_max'] * colourtemp // 100)
         return self.set_colourtemp( c, nowait=nowait )
 
