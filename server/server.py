@@ -759,7 +759,10 @@ if __name__ == "__main__":
                 print(f" - ForceScan: Found {len(found)} devices")
                 for f in found:
                     log.debug(f"   - {found[f]}")
-                    gwId = found[f]["id"]
+                    gwId = found[f].get("id") or found[f].get("gwId")
+                    if not gwId:
+                        log.debug("Skipping force-scanned device with no id: %r", found[f])
+                        continue
                     result = {}
                     dname = dkey = mac = ""
                     try:
