@@ -259,6 +259,22 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_percentage_raises_when_unconfigured(self):
+        # Regression test: calling *_percentage() before bulb detection,
+        # with nowait=True and no cached status, should raise RuntimeError
+        # instead of silently computing with value_max=-1.
+        d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.3)
+        # No detect_bulb() called, no cached status available
+        d.cached_status = MagicMock(return_value=None)
+
+        with self.assertRaises(RuntimeError):
+            d.set_brightness_percentage(50, nowait=True)
+        with self.assertRaises(RuntimeError):
+            d.set_white_percentage(50, 50, nowait=True)
+        with self.assertRaises(RuntimeError):
+            d.set_colourtemp_percentage(50, nowait=True)
+
 
 def build_mock_rf():
     d = RFRemoteControlDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, control_type=1)
