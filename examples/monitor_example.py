@@ -57,9 +57,16 @@ def on_connect(device, error):
 
 
 def on_disconnect(device, error):
-    """Called when a device disconnects."""
+    """Called when a device disconnects.
+
+    This callback is opt-in — only fires if you pass on_disconnect
+    to Monitor(). Use it for custom reconnection logic, alerts, or cleanup.
+    """
     name = getattr(device, "name", device.id)
     print(f"[DISCONNECTED] {name}: {error}")
+    # Example: attempt manual reconnect after a short delay
+    # time.sleep(5)
+    # mon.add(device)
 
 
 # ── Main ────────────────────────────────────────────────────────────
