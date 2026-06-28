@@ -383,7 +383,8 @@ class XenonDevice(object):
                         log.debug("Bad local key length for device!")
                     return ERR_KEY_OR_VER
 
-                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                family = socket.AF_INET6 if ':' in self.address else socket.AF_INET
+                self.socket = socket.socket(family, socket.SOCK_STREAM)
                 if self.socketNODELAY:
                     self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 self.socket.settimeout(self.connection_timeout)
