@@ -10,6 +10,12 @@ using ``selectors`` (``select``/``poll``/``epoll``).  Updates are delivered
 through callbacks.  No ``asyncio``, no per-device threads, no new
 dependencies.
 
+This class is experimental. It currently duplicates some framing logic from
+``XenonDevice._receive()`` to keep the feature self-contained and limit the
+blast radius for this release. Longer term, that shared parsing path should
+be refactored into a common helper. Please report issues so the API and
+internals can be hardened before this graduates from experimental status.
+
 Usage::
 
     import tinytuya
@@ -34,6 +40,15 @@ Usage::
     # mon.command(d, 'set_value', 1, True)
 
     mon.stop()
+
+With automatic reconnect::
+
+    mon = tinytuya.Monitor(
+        on_status=on_status,
+        on_disconnect=lambda dev, err: print(f'{dev.id} disconnected: {err}'),
+        auto_reconnect=True,           # enables background connector thread
+        reconnect_backoff=5.0,         # seconds between retry attempts
+    )
 
 Or drive it from a caller's own loop::
 
@@ -119,6 +134,10 @@ class Monitor:
     """
     Single-thread, multi-device status monitor using ``selectors``.
 
+    Experimental: this class intentionally keeps some logic self-contained,
+    including duplicated framing behavior that should be refactored into a
+    shared helper in a future release once the design settles.
+
     The reactor loop calls ``select()``, reads from ready sockets,
     reassembles complete frames, decodes them, and fires callbacks.
     All socket I/O for monitored devices happens on the reactor thread.
@@ -128,14 +147,20 @@ class Monitor:
         on_connect:     Global callback ``f(device, error)`` when a device connects.
         on_disconnect:  Global callback ``f(device, error)`` when a device disconnects.
         heartbeat_interval: Default seconds between heartbeats per device (default 12).
+        auto_reconnect: When True, a background connector thread automatically
+                        attempts to reconnect disconnected devices (default False).
+        reconnect_backoff: Seconds between reconnect attempts (default 5.0).
     """
 
     def __init__(self, on_status=None, on_connect=None, on_disconnect=None,
-                 heartbeat_interval=12):
+                 heartbeat_interval=12, auto_reconnect=False,
+                 reconnect_backoff=5.0):
         self._on_status = on_status
         self._on_connect = on_connect
         self._on_disconnect = on_disconnect
         self._heartbeat_interval = heartbeat_interval
+        self._auto_reconnect = auto_reconnect
+        self._reconnect_backoff = reconnect_backoff
 
         self._sel = selectors.DefaultSelector()
         self._devices = {}          # fileno -> _DeviceState
@@ -155,6 +180,14 @@ class Monitor:
         # Reactor thread state
         self._thread = None
         self._running = False
+
+        # Auto-reconnect infrastructure
+        self._reconnect_queue = []      # device_ids waiting for reconnect
+        self._reconnect_lock = threading.Lock()
+        self._register_queue = []       # device_ids ready for re-registration
+        self._register_lock = threading.Lock()
+        self._connector_thread = None
+        self._devices_in_reconnect = set()  # device_ids currently being processed
 
     # ── Public API ──────────────────────────────────────────────────
 
@@ -285,12 +318,22 @@ class Monitor:
     def start(self):
         """
         Start the reactor on a daemon thread.
+
+        If ``auto_reconnect`` is enabled, also starts a background
+        connector thread that handles automatic reconnection of
+        disconnected devices.
         """
         if self._thread is not None and self._thread.is_alive():
             return
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name='TinyTuyaMonitor')
         self._thread.start()
+
+        if self._auto_reconnect and self._connector_thread is None:
+            self._connector_thread = threading.Thread(
+                target=self._run_connector, daemon=True,
+                name='TinyTuyaReconnect')
+            self._connector_thread.start()
 
     def stop(self):
         """
@@ -301,6 +344,9 @@ class Monitor:
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
+        if self._connector_thread is not None:
+            self._connector_thread.join(timeout=5)
+            self._connector_thread = None
         # Close all device sockets
         for state in list(self._devices.values()):
             try:
@@ -314,6 +360,11 @@ class Monitor:
             state.device.socket = None
         self._devices.clear()
         self._id_to_state.clear()
+        with self._reconnect_lock:
+            self._reconnect_queue.clear()
+            self._devices_in_reconnect.clear()
+        with self._register_lock:
+            self._register_queue.clear()
 
     def poll(self, timeout=1.0):
         """
@@ -322,6 +373,7 @@ class Monitor:
         Call this from your own loop instead of ``start()``.
         """
         self._drain_queue()
+        self._process_register_queue()
         self._send_heartbeats()
 
         events = self._sel.select(timeout=timeout)
@@ -342,6 +394,7 @@ class Monitor:
         while self._running:
             try:
                 self._drain_queue()
+                self._process_register_queue()
                 self._send_heartbeats()
 
                 events = self._sel.select(timeout=1.0)
@@ -554,6 +607,108 @@ class Monitor:
         self._devices.pop(fd, None)
         state.fileno = None
         state.recv_buffer = b''
+
+        # Enqueue for auto-reconnect if enabled
+        if self._auto_reconnect and device.id in self._id_to_state:
+            with self._reconnect_lock:
+                if device.id not in self._devices_in_reconnect:
+                    self._reconnect_queue.append(device.id)
+                    self._devices_in_reconnect.add(device.id)
+                    log.debug('Monitor: enqueued %s for auto-reconnect', device.id)
+
+    # ── Auto-reconnect connector thread ─────────────────────────
+
+    def _run_connector(self):
+        """Background thread that handles blocking reconnects."""
+        while self._running:
+            # Pop a device that needs reconnect
+            device_id = None
+            with self._reconnect_lock:
+                if self._reconnect_queue:
+                    device_id = self._reconnect_queue.pop(0)
+
+            if device_id is None:
+                time.sleep(0.5)
+                continue
+
+            state = self._id_to_state.get(device_id)
+            if state is None:
+                # Device was removed entirely
+                with self._reconnect_lock:
+                    self._devices_in_reconnect.discard(device_id)
+                continue
+
+            device = state.device
+            log.debug('Monitor: attempting reconnect for %s', device_id)
+
+            # Sleep the backoff before attempting
+            time.sleep(self._reconnect_backoff)
+
+            if not self._running:
+                break
+
+            # Blocking connect (this is why we're on a separate thread)
+            try:
+                result = device._get_socket(False)
+            except Exception as exc:
+                result = str(exc)
+
+            if result is True and device.socket is not None:
+                # Success — hand off to reactor for selector registration
+                with self._register_lock:
+                    self._register_queue.append(device_id)
+                self._wake()
+                log.debug('Monitor: reconnect successful for %s, queued for registration', device_id)
+            else:
+                # Failure — re-enqueue for another cycle
+                log.debug('Monitor: reconnect failed for %s: %s, will retry', device_id, result)
+                with self._reconnect_lock:
+                    if device_id in self._id_to_state:  # still registered?
+                        self._reconnect_queue.append(device_id)
+                    else:
+                        self._devices_in_reconnect.discard(device_id)
+
+    def _process_register_queue(self):
+        """Register reconnected sockets with the selector (reactor thread only)."""
+        with self._register_lock:
+            items = self._register_queue[:]
+            self._register_queue.clear()
+
+        for device_id in items:
+            state = self._id_to_state.get(device_id)
+            if state is None:
+                with self._reconnect_lock:
+                    self._devices_in_reconnect.discard(device_id)
+                continue
+
+            device = state.device
+            sock = device.socket
+            if sock is None:
+                # Socket was closed between reconnect and registration
+                with self._reconnect_lock:
+                    self._devices_in_reconnect.discard(device_id)
+                continue
+
+            try:
+                fd = sock.fileno()
+                state.fileno = fd
+                state.recv_buffer = b''
+                state.last_heartbeat = time.monotonic()
+                self._devices[fd] = state
+                self._sel.register(sock, selectors.EVENT_READ, data=state)
+            except (KeyError, ValueError, OSError) as exc:
+                log.error('Monitor: failed to re-register %s: %s', device_id, exc)
+                # Try again next cycle
+                with self._reconnect_lock:
+                    self._reconnect_queue.append(device_id)
+                continue
+
+            with self._reconnect_lock:
+                self._devices_in_reconnect.discard(device_id)
+
+            # Fire connect callback
+            self._fire_connect(state, None)
+            log.debug('Monitor: device %s re-registered with selector', device_id)
 
     # ── Command queue ───────────────────────────────────────────────
 
