@@ -428,6 +428,78 @@ while(True):
 
 ```
 
+### Multi-Device Monitor (Monitor Class)
+
+The `Monitor` class provides efficient, single-thread monitoring of multiple Tuya devices using OS-level selectors (`epoll`/`poll`/`select`). No asyncio, no per-device threads, no extra dependencies. It's ideal for home automation dashboards, data loggers, or any application that needs to watch many devices simultaneously.
+
+**Key features:**
+* Single OS thread handles all device I/O via `selectors`
+* Real-time status updates through callbacks (`on_status`, `on_connect`, `on_disconnect`)
+* Thread-safe command dispatch — send commands from anywhere via proxy handles
+* Built-in heartbeat management per device
+* Optional manual poll mode for integration into existing event loops
+
+```python
+import tinytuya
+
+def on_status(device, result):
+    dps = result.get("dps", {}) if result else {}
+    name = getattr(device, "name", device.id)
+    print(f"[STATUS] {name}: {dps}")
+
+def on_connect(device, error):
+    if error:
+        print(f"[CONNECT FAIL] {device.id}: {error}")
+    else:
+        print(f"[CONNECTED] {device.id}")
+
+def on_disconnect(device, error):
+    print(f"[DISCONNECTED] {device.id}: {error}")
+
+# Create the monitor with callbacks
+mon = tinytuya.Monitor(
+    on_status=on_status,
+    on_connect=on_connect,
+    on_disconnect=on_disconnect,
+    heartbeat_interval=12,
+)
+
+# Register devices — add() connects and returns a proxy handle
+handles = []
+for cfg in devices:
+    d = tinytuya.OutletDevice(cfg["id"], cfg["ip"], cfg["key"],
+                              version=3.3, persist=True)
+    handle = mon.add(d)
+    handles.append(handle)
+
+# Start the reactor on a background daemon thread
+mon.start()
+
+# Send commands via the proxy handle (thread-safe)
+handles[0].set_value(1, True)    # turn on first device
+
+# ... later
+mon.stop()
+```
+
+**The `on_disconnect` callback** is opt-in — if you don't pass it, disconnects are logged silently. When provided, you receive the device object and error string, allowing you to implement custom reconnection logic, alerts, or cleanup:
+
+```python
+# Example: reconnect on disconnect
+def on_disconnect(device, error):
+    print(f"{device.id} went away: {error}")
+    # Reconnect by re-adding the device
+    time.sleep(5)
+    mon.add(device)
+
+mon = tinytuya.Monitor(
+    on_status=on_status,
+    on_disconnect=on_disconnect,
+)
+```
+
+See `examples/monitor_example.py` for a complete working example, and `examples/monitor_poll_example.py` for manual poll mode (no background thread).
+
 ### Tuya Cloud Access
 
 You can poll and manage Tuya devices using the `Cloud` class and functions.

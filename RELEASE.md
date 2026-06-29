@@ -1,5 +1,15 @@
 # RELEASE NOTES
 
+## v1.19.0 - Monitor Class, IPv6, and Community Fixes
+
+* **New Feature: `Monitor` class** — Single-thread, multi-device status monitoring using `selectors` (`select`/`poll`/`epoll`). Watch any number of Tuya devices on one OS thread with callback-driven updates (`on_status`, `on_connect`, `on_disconnect`), automatic heartbeats, gateway/cid routing, thread-safe command queue, and optional `auto_reconnect`. No `asyncio`, no per-device threads, no new dependencies. See `examples/monitor_example.py` and `examples/monitor_poll_example.py`. Implements the [proposal by @3735943886](https://github.com/jasonacox/tinytuya/pull/649#issuecomment-4628381086) via [#712](https://github.com/jasonacox/tinytuya/pull/712) by @jasonacox-sam. **Note:** `Monitor` is an experimental class. See [#713](https://github.com/jasonacox/tinytuya/issues/713) for feedback and future refactoring plans.
+* **IPv6/NAT64 support**: Device connection addresses now support IPv6 and NAT64 translations. Fixes connection failures on IPv6-only or dual-stack networks via [#718](https://github.com/jasonacox/tinytuya/pull/718) by @Kasoo.
+* **Cloud API fix**: `PUT` and `DELETE` requests now use the correct HTTP method instead of being sent as `POST`. Fixes Cloud API calls that silently failed on certain endpoints via [#717](https://github.com/jasonacox/tinytuya/pull/717) by @vladulus.
+* **BulbDevice fix**: `set_brightness_percentage()` and `set_colourtemp_percentage()` now call `detect_bulb()` before reading `value_max`, preventing `AttributeError` on newly created `BulbDevice` instances. Adds regression test via [#714](https://github.com/jasonacox/tinytuya/pull/714) by @jasonacox-sam.
+* **API server**: Updated `server.py` with improvements via [#715](https://github.com/jasonacox/tinytuya/pull/715) by @mkerni.
+* **Contrib: FloorFanDevice**: New device class for Comfort Zone floor standing tower fan (CZTF423S) via [#711](https://github.com/jasonacox/tinytuya/pull/711) by @cmoates.
+* **Contrib**: Updated `testcontrib.py` and `Contrib/README.md` to use the preferred import pattern.
+
 ## v1.18.1 - IR Learn Frame Fix
 
 * core: Added `MAX_PAYLOAD_LENGTH` constant (default 1440 bytes) in `tinytuya/core/const.py` to replace the hardcoded 1000-byte ceiling in `parse_header()`. Enables local IR learn frame capture from devices with larger payloads such as AC IR blasters. Fixes [#708](https://github.com/jasonacox/tinytuya/issues/708) via [#709](https://github.com/jasonacox/tinytuya/pull/709) by @ostjen.
