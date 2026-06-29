@@ -231,11 +231,13 @@ class Cloud(object):
             )
         else:
             log.debug(
-                "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
+                "%s: URL=%s HEADERS=%s DATA=%s", action, url, headers, body,
             )
-            response = requests.post(url, headers=headers, data=body)
+            # use the actual HTTP method (the signature is already computed with it);
+            # always sending POST here breaks PUT/DELETE endpoints (e.g. device rename)
+            response = requests.request(action, url, headers=headers, data=body)
             log.debug(
-                "POST RESPONSE: code=%d text=%s token=%s", response.status_code, response.text, self.token
+                "%s RESPONSE: code=%d text=%s token=%s", action, response.status_code, response.text, self.token
             )
 
         # Check to see if token is expired
