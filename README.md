@@ -428,7 +428,7 @@ while(True):
 
 ```
 
-### Multi-Device Monitor (Monitor Class)
+### Multi-Device Monitor (Monitor Class) - ⚠️ Experimental
 
 The `Monitor` class provides efficient, single-thread monitoring of multiple Tuya devices using OS-level selectors (`epoll`/`poll`/`select`). No asyncio, no per-device threads, no extra dependencies. It's ideal for home automation dashboards, data loggers, or any application that needs to watch many devices simultaneously.
 
