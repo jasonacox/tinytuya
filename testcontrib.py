@@ -2,20 +2,33 @@
 """
  TinyTuya test for Contrib
 
+ NOTE: Contrib/__init__.py is DEPRECATED — do not add new modules to it.
+   The old pattern `from tinytuya import Contrib` still works for backward
+   compatibility, but new device modules should be imported directly:
+       from tinytuya.Contrib import YourNewModule
+   See tinytuya/Contrib/__init__.py for details.
+
  Author: Jason A. Cox
  For more information see https://github.com/jasonacox/tinytuya
 """
 import tinytuya
-from tinytuya import Contrib
+
+# Preferred import pattern — import each module directly from tinytuya.Contrib
+from tinytuya.Contrib import ThermostatDevice, TemperatureUnit, InverterHeatPumpDevice
 
 print("TinyTuya (Contrib Import Test) [%s]\n" % tinytuya.__version__)
 
-print("   Contrib Devices Loaded: ")
+# Backward-compatible listing via the deprecated Contrib/__init__.py
+# This is kept for legacy visibility only — new devices do NOT need to be
+# registered in __init__.py.
+from tinytuya import Contrib
+print("   Contrib Devices Loaded (via deprecated __init__.py): ")
 for i in Contrib.DeviceTypes:
     print("      * %s" % i)
 
 print("   Test ThermostatDevice init(): ")
-d = Contrib.ThermostatDevice("abcdefghijklmnop123456", "172.28.321.475", "1234567890123abc")
+# Use the preferred import pattern (not Contrib.ThermostatDevice)
+d = ThermostatDevice("abcdefghijklmnop123456", "172.28.321.475", "1234567890123abc")
 
 import time
 import os
@@ -40,7 +53,8 @@ if IHP_DEVICEID and IHP_DEVICEIP and IHP_DEVICEKEY and IHP_DEVICEVERS:
     print("      * Device Version: %s" % IHP_DEVICEVERS)
     print()
 
-    device = Contrib.InverterHeatPumpDevice(
+    # Use the preferred import pattern (not Contrib.InverterHeatPumpDevice)
+    device = InverterHeatPumpDevice(
         dev_id=IHP_DEVICEID, address=IHP_DEVICEIP, local_key=IHP_DEVICEKEY, version=IHP_DEVICEVERS
     )
 
@@ -75,8 +89,8 @@ if IHP_DEVICEID and IHP_DEVICEIP and IHP_DEVICEKEY and IHP_DEVICEVERS:
     
     print("    Toggle unit")
     for unit_value in [not unit.value, unit.value]:
-        print("      * Setting unit to %r" % Contrib.TemperatureUnit(unit_value))
-        device.set_unit(Contrib.TemperatureUnit(unit_value))
+        print("      * Setting unit to %r" % TemperatureUnit(unit_value))
+        device.set_unit(TemperatureUnit(unit_value))
         time.sleep(5)
         print("      * get_unit(): %r" % device.get_unit())
         time.sleep(5)
