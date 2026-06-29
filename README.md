@@ -437,6 +437,7 @@ The `Monitor` class provides efficient, single-thread monitoring of multiple Tuy
 * Real-time status updates through callbacks (`on_status`, `on_connect`, `on_disconnect`)
 * Thread-safe command dispatch — send commands from anywhere via proxy handles
 * Built-in heartbeat management per device
+* Automatic reconnection on disconnect (`auto_reconnect=True`)
 * Optional manual poll mode for integration into existing event loops
 
 ```python
@@ -462,6 +463,7 @@ mon = tinytuya.Monitor(
     on_connect=on_connect,
     on_disconnect=on_disconnect,
     heartbeat_interval=12,
+    auto_reconnect=True,   # automatically reconnect on disconnect
 )
 
 # Register devices — add() connects and returns a proxy handle
