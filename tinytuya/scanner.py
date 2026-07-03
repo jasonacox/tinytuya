@@ -1130,7 +1130,7 @@ def _print_device_info( result, note, term, extra_message=None, verbose=True ):
 # Scan function
 def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
             discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=None,
-            maxdevices=0): # pylint: disable=W0621, W0102
+            maxdevices=0): # pylint: disable=W0621
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
