@@ -423,5 +423,30 @@ class TestParseHeader(unittest.TestCase):
             mh.parse_header(oversized + b'\x00' * 40)
 
 
+class TestSessionCrypto(unittest.TestCase):
+    """Session-key negotiation and GCM nonces must use fresh randomness so the
+    same nonce/IV is never reused across messages or sessions."""
+
+    def test_client_nonce_is_random_and_16_bytes(self):
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.5)
+        d._negotiate_session_key_generate_step_1()
+        first = d.local_nonce
+        d._negotiate_session_key_generate_step_1()
+        second = d.local_nonce
+        self.assertEqual(len(first), 16)
+        self.assertEqual(len(second), 16)
+        self.assertNotEqual(first, second, "client nonce must differ between negotiations")
+
+    def test_gcm_iv_is_random_and_12_bytes(self):
+        cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
+        if not cipher.CRYPTOLIB_HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
+        iv1 = cipher.get_encryption_iv(True)
+        iv2 = cipher.get_encryption_iv(True)
+        self.assertEqual(len(iv1), 12)
+        self.assertEqual(len(iv2), 12)
+        self.assertNotEqual(iv1, iv2, "GCM IV must be random per message")
+
+
 if __name__ == '__main__':
     unittest.main()
