@@ -447,6 +447,24 @@ class TestSessionCrypto(unittest.TestCase):
         self.assertEqual(len(iv2), 12)
         self.assertNotEqual(iv1, iv2, "GCM IV must be random per message")
 
+    def test_receive_rejects_gcm_auth_failure(self):
+        key = LOCAL_KEY.encode('latin1')
+        cipher = mh.AESCipher(key)
+        if not cipher.CRYPTOLIB_HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
 
+        # Build a valid 6699/GCM frame, then flip 1 bit in the tag.
+        payload = b'{"x":1}'
+        good = mh.pack_message(
+            mh.TuyaMessage(1, 16, None, payload, 0, True, mh.H.PREFIX_6699_VALUE, b'\x00' * 12),
+            hmac_key=key,
+        )
+        bad = good[:-5] + bytes([good[-5] ^ 1]) + good[-4:]
+
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.5)
+        d._recv_all = lambda n: bad
+        d.local_key = key
+        with self.assertRaises(DecodeError):
+            d._receive()
 if __name__ == '__main__':
     unittest.main()
