@@ -51,12 +51,16 @@ class _AESCipher_Base(object):
         if not cls.CRYPTOLIB_HAS_GCM:
             raise NotImplementedError( 'Crypto library does not support GCM' )
         if iv is True:
-            # GCM nonce: must be unique per (key, message).  A time-derived or
-            # constant nonce reuses the value across messages under the same
-            # session key, which breaks GCM confidentiality and allows tag
-            # forgery.  The IV is transmitted in the frame, so a random value is
-            # fully wire-compatible.
-            iv = os.urandom(12)
+            if log.isEnabledFor( logging.DEBUG ):
+                # Debug mode: fixed IV for troubleshooting and packet analysis
+                iv = b'0123456789ab'
+            else:
+                # GCM nonce: must be unique per (key, message).  A time-derived
+                # or constant nonce reuses the value across messages under the
+                # same session key, which breaks GCM confidentiality and allows
+                # tag forgery.  The IV is transmitted in the frame, so a random
+                # value is fully wire-compatible.
+                iv = os.urandom(12)
         return iv
 
     @classmethod
