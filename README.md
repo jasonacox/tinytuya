@@ -1046,7 +1046,7 @@ Example device: https://www.aliexpress.com/item/1005005034880204.html
 | 112  | Work log | byte str |||
 | 113  | Partition parameters | byte str |||
 | 114  | Work mode | enum | AutoMode/?? ||
-| 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li><ul> ||
+| 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li></ul> ||
 
 Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 
