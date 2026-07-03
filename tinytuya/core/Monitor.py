@@ -422,6 +422,12 @@ class Monitor:
             device.socket = None
             device.socketRetryLimit = state.saved_retry_limit
         self._devices.clear()
+        # Restore the retry limit for devices that disconnected mid-flight and
+        # remained in _id_to_state awaiting auto-reconnect (not in _devices).
+        # Devices that were still active had their limit restored above already
+        # — setting it again to saved_retry_limit is idempotent.
+        for state in list(self._id_to_state.values()):
+            state.device.socketRetryLimit = state.saved_retry_limit
         self._id_to_state.clear()
         with self._reconnect_lock:
             self._reconnect_queue.clear()

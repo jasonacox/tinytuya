@@ -564,6 +564,13 @@ class _FakeDevice:
         self._peer = peer
         return True
 
+    def __del__(self):
+        if self._peer is not None:
+            try:
+                self._peer.close()
+            except Exception:
+                pass
+
     def heartbeat(self, nowait=True):
         self.heartbeat_calls += 1
         if self.heartbeat_should_fail:
@@ -650,6 +657,24 @@ class TestMonitorReliability(unittest.TestCase):
         queued = {name: kwargs for (_id, name, _a, kwargs) in mon._queue}
         self.assertEqual(queued['set_value'].get('nowait'), True)
         self.assertNotIn('nowait', queued['set_socketPersistent'])
+
+    def test_stop_restores_retry_limit_for_disconnected_devices(self):
+        """stop() must restore socketRetryLimit even for devices that
+        disconnected before stop() was called (in _id_to_state but not _devices)."""
+        mon = self._make(auto_reconnect=True)
+        dev = _FakeDevice('devE', retry_limit=7)
+        mon.add(dev)
+        # Simulate a disconnect: device leaves _devices but stays in _id_to_state.
+        state = mon._id_to_state['devE']
+        dev.heartbeat_should_fail = True
+        mon._do_heartbeat(state)
+        # Device is now disconnected — socketRetryLimit is still 0.
+        self.assertEqual(dev.socketRetryLimit, 0)
+        self.assertIn('devE', mon._id_to_state)
+        self.assertNotIn(state, mon._devices.values())
+        # stop() must restore the original limit.
+        mon.stop()
+        self.assertEqual(dev.socketRetryLimit, 7)
 
     def test_accepts_nowait_helper(self):
         self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
