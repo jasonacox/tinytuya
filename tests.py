@@ -441,6 +441,8 @@ class TestSessionCrypto(unittest.TestCase):
         cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
         if not cipher.CRYPTOLIB_HAS_GCM:
             self.skipTest("crypto backend has no GCM support")
+        if log.isEnabledFor(logging.DEBUG):
+            self.skipTest("debug mode uses a fixed IV for packet troubleshooting")
         iv1 = cipher.get_encryption_iv(True)
         iv2 = cipher.get_encryption_iv(True)
         self.assertEqual(len(iv1), 12)
