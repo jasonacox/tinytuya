@@ -1129,7 +1129,7 @@ def _print_device_info( result, note, term, extra_message=None, verbose=True ):
 
 # Scan function
 def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
-            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
+            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=None,
             maxdevices=0): # pylint: disable=W0621, W0102
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
@@ -1163,6 +1163,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             dps = devices[ip]['dps']
 
     """
+    tuyadevices = [] if tuyadevices is None else tuyadevices
+
     # Terminal formatting
     color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
@@ -1799,7 +1801,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         for item in tuyadevices:
             k = item["id"]
             if not any(d['gwId'] == k for d in devicesarray):
-                tmp = item
+                # operate on a shallow copy so we do not mutate the caller's dict
+                tmp = dict(item)
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = ''
                 tmp['origin'] = 'cloud'

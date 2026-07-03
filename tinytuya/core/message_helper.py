@@ -125,6 +125,10 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
         raise DecodeError('Not enough data to unpack payload')
 
     end_len = struct.calcsize(end_fmt)
+    # a truncated/corrupt frame can declare a length smaller than retcode+crc+suffix;
+    # bail out cleanly instead of letting struct.unpack() raise a raw struct.error
+    if header.length < (retcode_len + end_len) or (msg_len - (header_len + retcode_len)) < end_len:
+        raise DecodeError('Not enough data to unpack payload')
     # the retcode is technically part of the payload, but strip it as we do not want it here
     retcode = 0 if not retcode_len else struct.unpack(H.MESSAGE_RETCODE_FMT, data[header_len:header_len+retcode_len])[0]
     payload = data[header_len+retcode_len:msg_len]

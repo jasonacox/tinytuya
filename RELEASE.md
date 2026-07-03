@@ -1,5 +1,20 @@
 # RELEASE NOTES
 
+## Unreleased - Bug Fixes
+
+* **Cloud**: Token-refresh retry in `_tuyaplatform()` now forwards `query` and `content_type`, so paginated/queried calls (device list, `getdevicelog`, `getdps`) no longer silently lose their query string when the access token expires mid-flight.
+* **Cloud**: `_gettoken()`, `_getuid()`, `_getdevice()`, `getdps()`, `sendcommand()`, and `getconnectstatus()` now return the standard error dict on a failed or empty Cloud response instead of raising `TypeError`/`KeyError`.
+* **Device**: `set_timer()` now selects the timer DP numerically instead of lexicographically (previously `"9"` sorted above `"102"`, targeting the wrong DP on devices with DP indices spanning a power of ten).
+* **XenonDevice**: Exhausted-retry socket timeouts now return `ERR_TIMEOUT` (902, "Timeout Waiting for Device") instead of the misleading `ERR_KEY_OR_VER` ("Check device key or version").
+* **XenonDevice**: Frame resync in `_receive()` now picks the earliest prefix when both 55AA and 6699 markers appear in buffered garbage; bare `except:` clauses in `_send_receive_quick()` no longer swallow `KeyboardInterrupt`; `received_wrong_cid_queue` is capped at 100 entries; hot-path `binascii.hexlify()` debug logging is now gated on the log level.
+* **BulbDevice**: `hexvalue_to_hsv()` reads Hue from the correct hex offset `[6:10]` in the rgb8 format (latent off-by-one); corrected the `set_music_colour()` docstring to match the actual argument order (`transition` first).
+* **Monitor**: A corrupt or desynced stream no longer stalls a device permanently — oversized/garbage headers now trigger a buffer resync to the next frame prefix instead of buffering forever.
+* **message_helper**: Truncated 55AA frames raise `DecodeError` (retryable) instead of leaking `struct.error`.
+* **udp_helper**: `decrypt_udp()` no longer raises `IndexError` on an empty or all-NUL 6699 broadcast payload.
+* **error_helper**: `error_json()` builds its dict directly (no JSON string round-trip) and returns "Unknown Error" for unrecognized codes instead of raising `KeyError`.
+* **scanner**: `devices()` no longer uses a shared mutable default for `tuyadevices` and no longer mutates the caller's device dicts when adding cloud-only entries to scan results.
+* Added offline regression tests for `set_timer` DP selection, `error_json` shape/unknown codes, and rgb8 hue round-trip (tests 23 → 29).
+
 ## v1.19.0 - Monitor Class, IPv6, and Community Fixes
 
 * **New Feature: `Monitor` class** — Single-thread, multi-device status monitoring using `selectors` (`select`/`poll`/`epoll`). Watch any number of Tuya devices on one OS thread with callback-driven updates (`on_status`, `on_connect`, `on_disconnect`), automatic heartbeats, gateway/cid routing, thread-safe command queue, and optional `auto_reconnect`. No `asyncio`, no per-device threads, no new dependencies. See `examples/monitor_example.py` and `examples/monitor_poll_example.py`. Implements the [proposal by @3735943886](https://github.com/jasonacox/tinytuya/pull/649#issuecomment-4628381086) via [#712](https://github.com/jasonacox/tinytuya/pull/712) by @jasonacox-sam. **Note:** `Monitor` is an experimental class. See [#713](https://github.com/jasonacox/tinytuya/issues/713) for feedback and future refactoring plans.

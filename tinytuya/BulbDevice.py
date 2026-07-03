@@ -23,7 +23,7 @@
         set_timer(self, num_secs, nowait=False):
         set_musicmode(self, transition, modify_settings=True, nowait=False):
         unset_musicmode( self ):
-        set_music_colour( self, red, green, blue, brightness=None, colourtemp=None, transition=None, nowait=False ):
+        set_music_colour( self, transition, red, green, blue, brightness=None, colourtemp=None, nowait=False ):
         set_colour(r, g, b, nowait):
         set_hsv(h, s, v, nowait):
         set_white_percentage(brightness=100, colourtemp=0, nowait):
@@ -363,7 +363,7 @@ class BulbDevice(Device):
                 h, s, v = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
             else:
                 # hexvalue is in rgb+hsv
-                h = int(hexvalue[7:10], 16) / 360.0
+                h = int(hexvalue[6:10], 16) / 360.0
                 s = int(hexvalue[10:12], 16) / 255.0
                 v = int(hexvalue[12:14], 16) / 255.0
         elif hexformat == 'hsv16':

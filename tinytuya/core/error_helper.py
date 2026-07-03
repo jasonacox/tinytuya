@@ -1,7 +1,6 @@
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 
-import json
 import logging
 
 log = logging.getLogger(__name__)
@@ -46,13 +45,7 @@ error_codes = {
 
 def error_json(number=None, payload=None):
     """Return error details in JSON"""
-    try:
-        spayload = json.dumps(payload)
-        # spayload = payload.replace('\"','').replace('\'','')
-    except:
-        spayload = '""'
+    error = error_codes.get(number, error_codes[None])
+    log.debug("ERROR %s - %s - payload: %s", error, str(number), payload)
 
-    vals = (error_codes[number], str(number), spayload)
-    log.debug("ERROR %s - %s - payload: %s", *vals)
-
-    return json.loads('{ "Error":"%s", "Err":"%s", "Payload":%s }' % vals)
+    return {"Error": error, "Err": str(number), "Payload": payload}
