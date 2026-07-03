@@ -102,7 +102,7 @@ cred_group = subparsers['wizard'].add_argument_group( 'Cloud API Credentials', '
 cred_group.add_argument( '-credentials-file', help='JSON file to load/save Cloud credentials from/to [Default: %s]' % CONFIGFILE, metavar='FILE' )
 cred_group.add_argument( '-key', help='Cloud API Key to use' )
 cred_group.add_argument( '-secret', help='Cloud API Secret to use' )
-cred_group.add_argument( '-region', help='Cloud API Region to use', choices=('cn', 'eu', 'eu-w', 'in', 'us', 'us-e') )
+cred_group.add_argument( '-region', help='Cloud API Region to use', choices=('cn', 'eu', 'eu-w', 'in', 'sg', 'us', 'us-e') )
 cred_group.add_argument( '-device', help='One or more Device ID(s) to use', action='append', nargs='+' )
 
 subparsers['wizard'].add_argument( '-dry-run', help='Do not actually connect to the Cloud', action='store_true' )

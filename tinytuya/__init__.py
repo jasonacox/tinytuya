@@ -23,14 +23,14 @@
   Functions
     Device(XenonDevice)
         json = status()                    # returns json payload
-        set_version(version)               # 3.1 [default] or 3.3
+        set_version(version)               # 3.1 [default], 3.2, 3.3, 3.4 or 3.5
         set_socketPersistent(False/True)   # False [default] or True
         set_socketNODELAY(False/True)      # False or True [default]
         set_socketRetryLimit(integer)      # retry count limit [default 5]
         set_socketTimeout(timeout)         # set connection timeout in seconds [default 5]
         set_dpsUsed(dps_to_request)        # add data points (DPS) to request
         add_dps_to_request(index)          # add data point (DPS) index set to None
-        set_retry(retry=True)              # retry if response payload is truncated
+        set_retry(retry)                   # retry if response payload is truncated
         set_status(on, switch=1, nowait)   # Set status of switch to 'on' or 'off' (bool)
         set_value(index, value, nowait)    # Set int value of any index.
         heartbeat(nowait)                  # Send heartbeat to device

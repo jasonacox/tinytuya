@@ -44,6 +44,9 @@ Cross-reference: framing & packing logic lives in `tinytuya/core/message_helper.
 0x0D CONTROL_NEW    New control frame (used for device22 + 3.4+ override)
 0x10 DP_QUERY_NEW   New DP query (used in 3.4+/3.5 overrides)
 0x12 UPDATEDPS      Request async DP refresh
+0x13 UDP_NEW        Encrypted UDP discovery broadcast (port 6667)
+0x23 BOARDCAST_LPV34 Discovery broadcast (v3.4)
+0x25 REQ_DEVINFO    Discovery solicitation request (UDP/7000, v3.5)
 0x03/0x04/0x05      Session key negotiation (3.4+)
 0x40 LAN_EXT_STREAM Extended (e.g., gateway subdevice ops)
 ```
@@ -56,26 +59,26 @@ Typical control payload (pre‑encryption) for a basic switch:
 3.4+/3.5 reduce required identifiers; many fields become optional (see per‑version details). Sub‑devices (Zigbee via gateway) add `cid` and wrap DPS inside `data`.
 
 ### Version Header ("3.x header")
-`<ascii version><12 x 0x00>` (e.g. `b"3.3\x00..."` length = 3 + 12). Presence and encryption differs by version and command (skipped for `DP_QUERY`, `UPDATEDPS`, `HEART_BEAT`, session negotiation, `LAN_EXT_STREAM`).
+`<ascii version><12 x 0x00>` (e.g. `b"3.3\x00..."` length = 3 + 12). Presence and encryption differs by version and command (skipped for `DP_QUERY`, `DP_QUERY_NEW`, `UPDATEDPS`, `HEART_BEAT`, session negotiation, `LAN_EXT_STREAM`).
 
 ### "Version Protocol" Source Header (overview)
-For v3.3+ some messages (STATUS/DP updates, sometimes CONTROL responses) begin with an additional 24-byte ASCII hex prefix before the encrypted or decrypted JSON payload:
+For v3.3+ some messages (STATUS/DP updates, sometimes CONTROL responses) begin with a 15-byte prefix before the encrypted or decrypted JSON payload: the ASCII version followed by three 32-bit big-endian binary fields (same overall size and position as the all-zeros version header):
 
-`3.xCCCCCCCCSSSSSSSSUUUUUUUU`
+`3.x | CCCC | SSSS | UUUU` (3 ASCII bytes + 4 + 4 + 4 binary bytes = 15 bytes)
 
 Where:
 * `3.x` – ASCII protocol version (e.g. `3.3`, `3.4`, `3.5`).
-* `CCCCCCCC` – 8 hex chars CRC32 of message for cloud/MQTT sourced traffic; `00000000` for LAN-sourced frames.
-* `SSSSSSSS` – 8 hex chars (32-bit) per-source monotonic sequence counter (device discards repeats or lower values for same `U`).
-* `UUUUUUUU` – 8 hex chars unique source identifier. Device uses `00000001`; clients should generate & persist a random non-zero value. Device caches only the last ~5 distinct IDs.
+* `CCCC` – 32-bit CRC32 of message for cloud/MQTT sourced traffic; zero for LAN-sourced frames.
+* `SSSS` – 32-bit per-source monotonic sequence counter (device discards repeats or lower values for same `U`).
+* `UUUU` – 32-bit unique source identifier. Device uses 1; clients should generate & persist a random non-zero value. Device caches only the last ~5 distinct IDs.
 
-If `UUUUUUUU == 00000000`, sequence checking is bypassed (all accepted). Header handling differs per version (clear vs encrypted) and is reiterated below per section for clarity.
+If the source identifier is 0, sequence checking is bypassed (all accepted). Header handling differs per version (clear vs encrypted) and is reiterated below per section for clarity. TinyTuya does not parse the individual fields; it simply strips the entire 15-byte block the same way it strips the all-zeros version header (`XenonDevice._decode_payload`).
 
 ### Header Types Quick Reference
 | Header Type | Byte Pattern | Purpose | Introduced | Visible in Clear | Encrypted With JSON? |
 |-------------|--------------|---------|------------|------------------|----------------------|
 | Version header | `3.x` + 12 zero bytes | Internal payload version marker | 3.2* | 3.2–3.3 yes (when present); 3.4+ no | 3.4+ yes |
-| Source header  | `3.xCCCCCCCCSSSSSSSSUUUUUUUU` | Per‑source sequencing & origin identity | 3.3 | 3.3 yes; 3.4+ no | 3.4+ yes |
+| Source header  | `3.x` + CRC32(4) + seq(4) + source id(4) | Per‑source sequencing & origin identity | 3.3 | 3.3 yes; 3.4+ no | 3.4+ yes |
 | 3.1 CONTROL prefix | `3.1` + 16 MD5 hex slice | Lightweight integrity tag for CONTROL | 3.1 | Yes | N/A (outer) |
 
 * Practical appearance begins with 3.2/3.3 devices. 3.1 does not embed a version header (only the CONTROL MD5 prefix). 3.1 and 3.2 do NOT use the Source header; its presence implies 3.3+.
@@ -118,6 +121,9 @@ If payload starts with `b"3.1"`, strip version + 16 md5 chars, base64‑decode r
 ### Version Protocol Source Header
 Not present (introduced later in 3.3). If you see a source header, firmware is not 3.1.
 
+### Discovery
+v3.1 devices announce themselves with plaintext JSON broadcasts on UDP/6666 — no key needed to read them. (Encrypted UDP/6667 broadcasts belong to 3.3+ firmware; see those sections.)
+
 ### Example (TinyTuya)
 ```python
 import tinytuya
@@ -150,13 +156,13 @@ Rare transitional variant; behaves almost identically to early 3.3 devices (ofte
 55AA frame identical to 3.3: seq | cmd | len | (retcode on replies) | payload | CRC32 | footer. CRC32 covers prefix through final payload byte (before CRC field).
 
 ### Encryption & Header Visibility
-Build JSON → AES-ECB (local key) → prepend clear version header `b"3.2" + 12*0x00` (unless command in skip list: DP_QUERY, UPDATEDPS, HEART_BEAT, handshake not applicable) → frame.
+Build JSON → AES-ECB (local key) → prepend clear version header `b"3.2" + 12*0x00` (unless command in skip list: DP_QUERY, DP_QUERY_NEW, UPDATEDPS, HEART_BEAT, LAN_EXT_STREAM; handshake not applicable) → frame.
 
 ### Version Protocol Source Header
 Not used in 3.2. Seeing one implies the device is actually 3.3+.
 
 ### DP Query / device22 Behavior
-Some 3.2 devices require explicit DPS list via `CONTROL_NEW` (device22 pattern). TinyTuya auto-detects on `data unvalid` and sets `dev_type='device22'`, switching query command & inserting null-valued DPS map.
+Most 3.2 devices require explicit DPS list via `CONTROL_NEW` (device22 pattern). TinyTuya does not wait for a `data unvalid` error here: `set_version(3.2)` unconditionally sets `dev_type='device22'` and, if no DPS are known yet, immediately brute-force scans for them (`detect_available_dps()`), switching the query command & inserting a null-valued DPS map. (The `data unvalid` auto-detection is only used for 3.3/3.4.)
 
 ### Example
 ```python
@@ -168,7 +174,7 @@ dev.set_value(1, True)     # CONTROL
 ```
 
 ### Notes
-- Minimal dedicated logic; treated like 3.3 variant internally.
+- Treated like a 3.3 variant internally, but always forced into device22 mode (with an up-front DPS brute-force scan) by `set_version(3.2)`.
 - Upgrade path firmware sometimes reports 3.2 but responds as 3.3 (library adapts).
 
 ---
@@ -194,30 +200,30 @@ For commands (except those in skip list):
 3. Prepend clear 3.x header (`b"3.3" + 12*0x00`).
 4. Frame in 55AA with CRC32.
 
-`DP_QUERY` / `UPDATEDPS` / `HEART_BEAT` are sent without the header (and for `DP_QUERY` may be empty JSON dict depending on device type). Some devices respond with encrypted payload that begins WITH the 3.3 header (clear) followed by ciphertext.
+`DP_QUERY` / `DP_QUERY_NEW` / `UPDATEDPS` / `HEART_BEAT` / `LAN_EXT_STREAM` are sent without the header (and for `DP_QUERY` may be empty JSON dict depending on device type). Some devices respond with encrypted payload that begins WITH the 3.3 header (clear) followed by ciphertext.
 
 ### "Version Protocol" Source Header (v3.3)
-Format (clear text at start of decrypted payload sequence):
+Format (clear, at start of the payload, 15 bytes total):
 
-`3.3CCCCCCCCSSSSSSSSUUUUUUUU`
+`3.3 | CRC32(4) | seq(4) | source id(4)`
 
 Where:
 * `3.3` – ASCII protocol version
-* `CCCCCCCC` – 8 hex chars CRC32 of message for cloud/MQTT sourced traffic; `00000000` for LAN-sourced frames.
-* `SSSSSSSS` – 8 hex chars (32-bit) per-source monotonic sequence counter (device discards repeats or lower values for same `U`).
-* `UUUUUUUU` – 8 hex chars unique source identifier. Device uses `00000001`; clients should generate & persist a random non-zero value. Device caches only the last ~5 distinct IDs.
+* `CRC32` – 32-bit CRC32 of message for cloud/MQTT sourced traffic; zero for LAN-sourced frames.
+* `seq` – 32-bit per-source monotonic sequence counter (device discards repeats or lower values for the same source id).
+* `source id` – 32-bit unique source identifier. Device uses 1; clients should generate & persist a random non-zero value. Device caches only the last ~5 distinct IDs.
 
 Handling:
 * Present mainly on STATUS / spontaneous updates.
-* Stripped by TinyTuya before JSON parsing.
-* LAN traffic normally shows `CCCCCCCC = 00000000`.
-* Provides duplicate-suppression and missed-message detection (look for gaps in `SSSSSSSS`).
+* TinyTuya strips the whole 15-byte block before JSON parsing (same code path as the all-zeros version header; the individual fields are not parsed).
+* LAN traffic normally shows CRC32 = 0.
+* Provides duplicate-suppression and missed-message detection (look for gaps in the sequence field).
 
 ### Discovery
-Legacy broadcast (UDP/6667). No solicitation port 7000 behavior (see 3.5).
+Legacy broadcast (UDP/6667), AES-ECB encrypted with the well-known key `MD5(b"yGAdlopoPVldABfn")` — the same key later reused for 3.5 GCM discovery. (Plaintext UDP/6666 broadcasts are only sent by 3.1 devices.) No solicitation port 7000 behavior (see 3.5).
 
 ### Device22 Behavior
-If device replies with error substring `data unvalid` while using default type, TinyTuya flips to `dev_type="device22"`:
+If device replies with error substring `data unvalid` while using default type, TinyTuya flips to `dev_type="device22"` (this auto-detection fires only for 3.3/3.4):
 * `DP_QUERY` uses command ID 0x0D (`CONTROL_NEW`).
 * Payload includes explicit DPS map (keys mapped to `null`).
 * Library maintains `dps_to_request` (auto-populated via brute force if needed).
@@ -276,7 +282,7 @@ Encryption differences:
 All multi‑byte integers are big‑endian. Aside from the HMAC vs CRC and encrypted version header, v3.4 framing is identical to prior 55AA revisions.
 
 ### Session Key Handshake
-Commands: START (0x03), RESP (0x04), FINISH (0x05). All three use normal 55AA framing; RESP payload is AES-ECB encrypted; START and FINISH payloads are plaintext nonces/HMACs.
+Commands: START (0x03), RESP (0x04), FINISH (0x05). All three use normal 55AA framing, and all three payloads are AES-ECB encrypted with the real (static) local key — the nonces/HMACs are never sent in the clear. (These commands skip only the version header.)
 
 Handshake Sequence:
 ```mermaid
@@ -284,22 +290,22 @@ sequenceDiagram
     autonumber
     participant C as Client
     participant D as Device
-    C->>D: SESS_KEY_NEG_START (cmd=0x03) payload = client_nonce (16B)
+    C->>D: SESS_KEY_NEG_START (cmd=0x03) payload = ENC( client_nonce (16B) )
     D-->>C: SESS_KEY_NEG_RESP (0x04) payload = ENC( device_nonce || HMAC(client_nonce) )
-    C->>D: SESS_KEY_NEG_FINISH (0x05) payload = HMAC(device_nonce)
+    C->>D: SESS_KEY_NEG_FINISH (0x05) payload = ENC( HMAC(device_nonce) )
     Note over C,D: Both sides derive session_key = AES_ECB_realKey( client_nonce XOR device_nonce )
 ```
-`HMAC = HMAC-SHA256(real_local_key, nonce)`.
+`HMAC = HMAC-SHA256(real_local_key, nonce)`; `ENC = AES-ECB(real_local_key, ...)`.
 
 Code reference: see `_negotiate_session_key_generate_step_1/3/finalize()` in `tinytuya/core/XenonDevice.py`.
 
 ### Session Key (Detailed)
 v3.4 derives a per-connection session key using a 3‑way exchange:
-1. Client -> Device (SESS_KEY_NEG_START / 0x03): 16‑byte client nonce (unencrypted payload).
+1. Client -> Device (SESS_KEY_NEG_START / 0x03): 16‑byte client nonce (AES‑ECB encrypted with the real local key).
 2. Device -> Client (SESS_KEY_NEG_RESP / 0x04): 16‑byte device nonce || HMAC-SHA256(client_nonce) encrypted with the real (static) local key (AES‑ECB).
-3. Client -> Device (SESS_KEY_NEG_FINISH / 0x05): HMAC-SHA256(device_nonce) (unencrypted payload).
+3. Client -> Device (SESS_KEY_NEG_FINISH / 0x05): HMAC-SHA256(device_nonce) (AES‑ECB encrypted with the real local key).
 
-Validation: Client recomputes `HMAC(client_nonce)` using real key and compares to bytes 16..48 of step 2 payload. If valid, it sends step 3 and both sides derive the session key.
+Validation: Client recomputes `HMAC(client_nonce)` using real key and compares to bytes 16..48 of the decrypted step 2 payload. If valid, it sends step 3 and both sides derive the session key.
 
 Derivation (3.4): XOR the two nonces byte-wise, AES-ECB encrypt with real key (no IV, no padding change) and use the full 16‑byte result as session key. (Implementation stores encrypted XOR directly.)
 
@@ -344,10 +350,10 @@ d.set_value(1, False)
 ### "Version Protocol" Source Header (v3.4)
 Because 3.4 encrypts the version header region, this source header (if present) is inside the AES-ECB encrypted payload:
 ```
-3.4CCCCCCCCSSSSSSSSUUUUUUUU
+3.4 | CRC32(4) | seq(4) | source id(4)
 ```
-* Same semantics as v3.3 (CRC / sequence / source id).
-* TinyTuya decrypts entire payload, then strips this source header, then the internal 3.x header if needed.
+* Same semantics as v3.3 (CRC / sequence / source id); 15 bytes total, occupying the same slot as the all-zeros version header.
+* TinyTuya decrypts the entire payload, then strips this 15-byte block (it does not parse the individual fields).
 
 ---
 ## Version 3.5
@@ -391,7 +397,7 @@ Properties:
 * Payload is NOT padded (GCM streaming block mode).
 * All multi‑byte integers big‑endian.
 * Entire payload (and optional retcode) is both encrypted and authenticated; header fields are only authenticated.
-* After decrypt: if first 4 bytes look like a plausible retcode (and next byte begins JSON `{`), library strips it before JSON decode.
+* After decrypt: for TCP data frames the library always strips the first 4 bytes as the retcode before JSON decode. (A `{`-lookahead heuristic exists only for UDP discovery decrypts, where the retcode may be absent.)
 
 `length` counts bytes from IV start through end of Tag (excludes footer).
 
@@ -400,7 +406,7 @@ Associated Data (AAD) exact formula:
 
 ### Session Key Handshake
 Same three-message flow / math as 3.4 except:
-* RESP (0x04) payload appears unencrypted (already GCM not yet active) or may be treated directly; TinyTuya only decrypts that step for 3.4.
+* All three messages travel as plaintext *inside* GCM-encrypted 6699 frames keyed with the real (static) local key — the frame layer itself provides the encryption, so no additional AES-ECB pass is applied to the payloads. TinyTuya only performs an explicit payload decrypt of RESP for 3.4; for 3.5 the frame decrypt has already exposed it.
 * Session key derivation uses AES-GCM with IV = first 12 bytes of client nonce and takes slice `[12:28]` of the result ciphertext+tag blob:
   ```python
   tmp = bytes(a^b for a,b in zip(device_nonce, client_nonce))
@@ -421,8 +427,8 @@ sequenceDiagram
 
 ### Session Key (Detailed)
 Both v3.4 and v3.5 share the nonce/HMAC pattern; v3.5 differs in how the final session key bytes are carved out:
-1. Client sends 16‑byte nonce (plain in START frame payload).
-2. Device responds with 16‑byte device nonce + HMAC-SHA256(client_nonce) (for 3.5 this arrives as plaintext inside 55AA or 6699 depending on implementation; TinyTuya handles it transparently).
+1. Client sends 16‑byte nonce (as the plaintext of a GCM-encrypted START frame).
+2. Device responds with 16‑byte device nonce + HMAC-SHA256(client_nonce) (for 3.5 this arrives inside a GCM-encrypted 6699 frame keyed with the real local key; the frame decrypt exposes it — TinyTuya handles it transparently).
 3. Client validates HMAC, returns HMAC-SHA256(device_nonce).
 
 Derivation (3.5): XOR the nonces -> encrypt with AES-GCM using real key and IV = first 12 bytes of client nonce; take bytes 12..28 of the resulting (IV||ciphertext||tag) buffer as the session key. This matches device behavior.
@@ -447,20 +453,20 @@ Notes:
 3. Return code (if present in responses) is decrypted first 4 bytes before JSON.
 
 ### DP Query / device22
-Device22 override still applies (CONTROL_NEW / DP_QUERY_NEW). Library wraps resulting JSON in GCM.
+Device22 command overrides still apply if `dev_type='device22'` was set manually or carried over (CONTROL_NEW / DP_QUERY_NEW), but the `data unvalid` auto-detection never fires on 3.5 (it is gated to 3.3/3.4). Library wraps resulting JSON in GCM.
 
 ### Retcode & Header Decode Order
 Typical decrypted ordering:
-`[retcode(4)] [source header?] [version header] { JSON }`
+`[retcode(4)] [version or source header (15B)] { JSON }`
+
+The version header and the source header occupy the same 15-byte slot (`3.5` + 12 bytes); a payload carries at most one of them.
 
 Pseudo-order logic (illustrative):
 ```text
-ptr=0
-ret = u32(payload[0:4]); ptr += 4
-if payload[ptr:ptr+2] == b'3.5' and looks_like_source_header(payload[ptr:ptr+24]):
-    source = payload[ptr:ptr+24]; ptr += 24
+ptr = 0
+ret = u32(payload[0:4]); ptr += 4   # retcode (always stripped for TCP frames)
 if payload[ptr:ptr+3] == b'3.5':
-    ptr += 15  # skip version header
+    ptr += 15  # skip 15-byte version/source header block
 json_bytes = payload[ptr:]
 ```
 Library handles this automatically.
@@ -476,21 +482,21 @@ d.set_value(1, True)
 ```
 
 ### "Version Protocol" Source Header (v3.5)
-Encrypted within the GCM ciphertext (after optional retcode). Layout unchanged:
+Encrypted within the GCM ciphertext (after the retcode). Layout unchanged:
 ```
-3.5CCCCCCCCSSSSSSSSUUUUUUUU
+3.5 | CRC32(4) | seq(4) | source id(4)
 ```
 Differences vs earlier versions:
-* Outer 6699 frame sequence is GLOBAL and independent; inner `SSSSSSSS` remains per source.
-* TinyTuya decrypts, strips retcode, then this header, then proceeds to JSON.
-* Same CRC zeroing for LAN; same small cache of recent `UUUUUUUU` identities.
+* Outer 6699 frame sequence is GLOBAL and independent; the inner sequence field remains per source.
+* TinyTuya decrypts, strips the retcode, then strips this 15-byte block, then proceeds to JSON.
+* Same CRC zeroing for LAN; same small cache of recent source ids.
 
 ### Discovery (v3.5)
 Two patterns:
 1. Broadcast (older 3.5) using 6699 GCM packet on UDP/6667.
 2. Solicited: Send client broadcast (UDP/7000) GCM-encrypted JSON: `{"from":"app","ip":"<your-ip>"}`. Device replies unicast (port 7000) encrypted.
 
-Broadcast encryption key = `MD5("yGAdlopoPVldABfn")` (16 bytes). Same key/IV rules as normal 3.5 packets (per-packet IV, Tag verify).
+Broadcast encryption key = `MD5("yGAdlopoPVldABfn")` (16 bytes). Same key/IV rules as normal 3.5 packets (per-packet IV, Tag verify). This is the same well-known key that decrypts the pre-3.5 AES-ECB broadcasts on UDP/6667; TinyTuya's `decrypt_udp()` transparently handles all three broadcast formats (raw AES-ECB blob, 55AA-framed plaintext or ECB payload, and 6699 GCM).
 
 Minimal listener (PyCryptodome):
 ```python
@@ -536,19 +542,20 @@ payload = json.dumps({"from":"app","ip":"YOUR_IP"}).encode()
 
 def pack6699(seq, cmd, raw):
     # Minimal 6699 pack for discovery (no retcode). Not production-hardened.
+    import os
     prefix = b'\x00\x00\x66\x99'
     reserved = b'\x00\x00'
     seq_b = seq.to_bytes(4,'big')
     cmd_b = cmd.to_bytes(4,'big')
-    # We'll generate IV, then fill length.
-    import os
     iv = os.urandom(12)
-    header_wo_prefix = reserved + seq_b + cmd_b + b'\x00\x00\x00\x00'  # temp length
-    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
-    cipher.update(header_wo_prefix)  # AAD excludes prefix per standard usage in library
-    ct, tag = cipher.encrypt_and_digest(raw)
-    length = (len(iv) + len(ct) + len(tag)).to_bytes(4,'big')
+    # GCM does not pad, so length (IV + ciphertext + tag) is known up front.
+    # The header MUST be built with the final length BEFORE encrypting,
+    # because the AAD must match the transmitted header bytes exactly.
+    length = (12 + len(raw) + 16).to_bytes(4,'big')
     header = prefix + reserved + seq_b + cmd_b + length
+    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+    cipher.update(header[4:])  # AAD = header bytes after the prefix (as in the library)
+    ct, tag = cipher.encrypt_and_digest(raw)
     return header + iv + ct + tag + b'\x00\x00\x99\x66'
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -564,13 +571,13 @@ Listen on UDP/7000 for the unicast encrypted reply and decrypt with the same key
 |--------|---------|----------|
 | DP Query cmd | 0x0A (DP_QUERY) | 0x0D (CONTROL_NEW) override |
 | Required DPS list | Optional | Required (sent as null-valued map) |
-| Auto-detection | N/A | Triggered by `"data unvalid"` response on first attempt |
+| Auto-detection | N/A | Triggered by `"data unvalid"` response on first attempt (3.3/3.4 only; 3.2 is forced at `set_version()`, 3.5 never auto-detects) |
 
 TinyTuya sets `self.dev_type` and rebuilds internal payload dictionary accordingly.
 
 ---
 ## Sub-Devices / Gateways (Zigbee via Wi‑Fi Hub)
-* Uses `cid` (child id) inserted into JSON; gateway sets `dev_type='gateway'` plus child devices registered.
+* Uses `cid` (child id) inserted into JSON; the library selects gateway payload templates based on registered child devices (`self.children`), not a special `dev_type`.
 * 3.4/3.5 Zigbee control encloses `{ "protocol":5, "t":"int", "data":{"cid":"...","dps":{...}}}` inside encrypted payload.
 * Extended operations use `LAN_EXT_STREAM` (0x40) with `reqType` selectors (e.g. `subdev_online_stat_query`).
 
@@ -597,7 +604,7 @@ sequenceDiagram
     D-->>C: RESP (0x04) device_nonce||HMAC(client_nonce)
     C->>D: FINISH (0x05) HMAC(device_nonce)
     Note over C,D: Derive session_key
-    C->>D: DP_QUERY_NEW (0x10) (GCM, header+JSON encrypted)
+    C->>D: DP_QUERY_NEW (0x10) (GCM, JSON encrypted; no version header)
     D-->>C: Response (retcode + JSON encrypted)
     C->>D: CONTROL_NEW (0x0D) set dps
     D-->>C: Ack / updated state
@@ -659,8 +666,8 @@ Protocol reverse-engineering contributions by many in the community; specific 3.
 Below is a fabricated (shortened) hex frame for a v3.4 CONTROL_NEW command turning DP 1 on. Session key already negotiated.
 
 ```
-000055aa 0000002a 0000000d 00000058 
-        <ciphertext ... 48 bytes ...> 
+000055aa 0000002a 0000000d 00000074 
+        <ciphertext ... 80 bytes ...> 
 5f1c3a9b 7b1d2c0f 0000aa55
 ```
 
@@ -670,7 +677,7 @@ Breaking it down:
 | 000055aa | Prefix |
 | 0000002a | seq = 42 |
 | 0000000d | cmd = 0x0D CONTROL_NEW |
-| 00000058 | length (0x58 = 88) = payload+ciphertext + HMAC (32) + footer (4) [device->client would also include retcode field adjustment] |
+| 00000074 | length (0x74 = 116) = ciphertext (80) + HMAC (32) + footer (4) [device->client replies also count the 4‑byte retcode] |
 | …ciphertext… | AES‑ECB(session_key, padded( version_header + JSON )) |
 | 5f1c3a9b 7b1d2c0f | (first 8 bytes of 32‑byte HMAC-SHA256 shown) |
 | 0000aa55 | Footer |
@@ -683,28 +690,29 @@ Decrypted (after AES‑ECB & unpad) plaintext (pretty‑printed):
     "data": { "dps": { "1": true } }
 }
 ```
-The preceding bytes inside the ciphertext started with the 3.4 version header (`33 2e 34 00 ... 00` total 15 bytes) before the JSON.
+The plaintext inside the ciphertext started with the 3.4 version header (`33 2e 34 00 ... 00` total 15 bytes) followed by the compact 55‑byte JSON: 15 + 55 = 70 bytes, PKCS#7 padded to the 80‑byte ciphertext above.
 
 ### B. Version Protocol Source Header (v3.3 STATUS response)
-Sample leading bytes (ASCII) before JSON (unencrypted for 3.3):
+Sample leading bytes before JSON (unencrypted for 3.3), 15 bytes total:
 ```
-33 2e 33 30 30 30 30 30 30 30 30 30 41 42 30 30 30 30 30 30 30 30 30 32
-│ 3 │ . │ 3 │ 0 0 0 0 0 0 0 0 │ A B 0 0 │ 0 0 0 0 0 0 0 2 │
+33 2e 33 | 00 00 00 00 | 00 00 00 02 | 00 00 00 01
+  "3.3"    CRC32 = 0      seq = 2      source id = 1
 ```
 Interpreted:
-* `3.3` – version
-* `00000000` – CRC32 placeholder (LAN, zeroed)
-* `AB00` – high word of per-source sequence (example) continuing as `00000002` low portion (entire 8 hex chars sequence = `AB000000` then next 8 = `00000002` depending on formatting). (Illustrative only.)
-* `00000002` – source id (client #2)
+* `3.3` – ASCII version
+* `00000000` – CRC32 zeroed (LAN-sourced)
+* `00000002` – per-source sequence = 2
+* `00000001` – source id (the device itself)
 
-Immediately after this header the payload continues with (possibly encrypted) version header or JSON depending on version/command.
+Immediately after this 15-byte header the payload continues with the (possibly encrypted) JSON.
 
 ### C. 6699 Frame (v3.5 DP_QUERY_NEW response with retcode)
 Fabricated hex (grouped):
 ```
-00006699 0000 00000035 00000010 00000034 
+00006699 0000 00000035 00000010 00000057 
  1a2b3c4d5e6f708192a3b4c5  
-    d4c3b2a19081726355443322 00112233445566778899aabbccddeeff 112233445566778899aabbccddeeff
+    <ciphertext ... 59 bytes ...>
+    00112233445566778899aabbccddeeff
     00009966
 ```
 
@@ -714,27 +722,28 @@ Fabricated hex (grouped):
 | 0000 | Reserved/ignored |
 | 00000035 | seq (global) = 53 |
 | 00000010 | cmd = 0x10 DP_QUERY_NEW |
-| 00000034 | length (0x34=52) bytes from IV through Tag |
+| 00000057 | length (0x57 = 87) = IV (12) + ciphertext (59) + Tag (16); footer excluded |
 | 1a2b3c…c5 | 12‑byte IV/nonce |
-| d4c3…3322 | Ciphertext (first 12 bytes) – begins with encrypted retcode (4 bytes) then encrypted header/JSON |
-| 0011..eeff | More ciphertext (trimmed) |
-| 1122..eeff | 16‑byte GCM Tag |
+| …ciphertext… | 59 bytes (GCM, unpadded) – encrypted retcode (4) + 15‑byte header + 40‑byte JSON |
+| 0011..eeff | 16‑byte GCM Tag |
 | 00009966 | Footer |
 
-After AES‑GCM decrypt/tag verify using session key:
+After AES‑GCM decrypt/tag verify using session key (59 bytes plaintext):
 ```
-00000000 3378000000000000000000017b227d7d
-^^^^^^^^ retcode (0)
-                ^^^^^^^^^^^^^^^^^^^^^^^^ Version Protocol source header (example: 3.5 + zeros + src id 1)
-                                                                ^^^^^^^^ JSON begins
+00000000 | 33 2e 35  00000000  00000002  00000001 | 7b 22 64 70 73 ... 7d 7d
+retcode=0   "3.5"     CRC32=0    seq=2    srcid=1   JSON (40 bytes)
 ```
+* First 4 bytes: retcode (0 = success).
+* Next 15 bytes: Version Protocol source header (`3.5` + CRC32 + seq + source id).
+* Remaining 40 bytes: JSON.
+
 Decoded JSON (toy example):
 ```json
 {"dps":{"1":true,"20":123,"101":"blue"}}
 ```
 
 ### D. Mixed Ordering (3.5 CONTROL_NEW ack)
-Some responses: `retcode || source_header || version_header || JSON`. TinyTuya handles stripping in that order; if you craft tooling replicate the same parse sequence.
+Some responses: `retcode || header(15B) || JSON`, where the 15-byte block is either the all-zeros version header or the CRC/seq/source-id variant (never both). TinyTuya strips the retcode then the 15-byte block; if you craft tooling replicate the same parse sequence.
 
 ### E. Practical Hex Capture Tips
 1. Use `tcpdump -i <iface> -s 0 -X 'tcp port 6668'` (replace port if different) to capture.
