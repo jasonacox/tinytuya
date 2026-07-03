@@ -101,7 +101,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
     * **RENEWAL:** The subscription to the `IoT Core` service expires after some time. By default, when you subscribe to it for the first time, it will last for one month. Once expired, the setup wizard won't be able to communicate with the Tuya account anymore, so it needs to be renewed. As of November 12th 2024, it can be renewed for a duration of 1, 3 or 6 months by simply filling in a form with some basic information (e.g. purpose of the project, type of developer).
 
-5. WIZARD - Run Setup Wizard:
+4. WIZARD - Run Setup Wizard:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
@@ -178,7 +178,7 @@ Classes
 TinyTuya Base Functions
     devices = deviceScan()                        # Returns dictionary of devices found on local network
     scan()                                        # Interactive scan of local network
-    wizard()                                      # Interactive setup wizard
+    wizard                                        # Interactive setup wizard (run via: python -m tinytuya wizard)
     set_debug(toggle, color)                      # Activate verbose debugging output
     pack_message(msg, hmac_key)                   # Packs a TuyaMessage(), encrypting or adding a CRC if required 
     unpack_message(data, hmac_key, header, 
@@ -192,7 +192,7 @@ TinyTuya Base Functions
  Device Functions (All Devices)
     json = status()                               # returns json payload
     subdev_query(nowait)                          # query sub-device status (only for gateway devices)
-    set_version(version)                          # 3.1 [default], 3.2, 3.3 or 3.4
+    set_version(version)                          # 3.1 [default], 3.2, 3.3, 3.4 or 3.5
     set_socketPersistent(False/True)              # False [default] or True
     set_socketNODELAY(False/True)                 # False or True [default]
     set_socketRetryLimit(integer)                 # retry count limit [default 5]
@@ -200,7 +200,7 @@ TinyTuya Base Functions
     set_socketTimeout(timeout)                    # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)                   # add data points (DPS) to request
     add_dps_to_request(index)                     # add data point (DPS) index set to None
-    set_retry(retry=True)                         # retry if response payload is truncated
+    set_retry(retry)                              # retry if response payload is truncated
     set_status(on, switch=1, nowait)              # Set status of switch to 'on' or 'off' (bool)
     set_value(index, value, nowait)               # Set int value of any index.
     set_multiple_values(index_value_dict, nowait) # Set multiple values with a single request
@@ -208,7 +208,7 @@ TinyTuya Base Functions
     updatedps(index=[1], nowait)                  # Send updatedps command to device
     turn_on(switch=1, nowait)                     # Turn on device / switch #
     turn_off(switch=1, nowait)                    # Turn off
-    set_timer(num_secs, nowait)                   # Set timer for num_secs
+    set_timer(num_secs, dps_id=0, nowait)         # Set timer for num_secs on DPS dps_id (0=detect)
     set_sendWait(num_secs)                        # Time to wait after sending commands before pulling response
     detect_available_dps()                        # Return list of DPS available from device
     generate_payload(command, data,...            # Generate TuyaMessage payload for command with data
@@ -227,7 +227,7 @@ BulbDevice Additional Functions
     set_brightness_percentage(brightness=100, nowait):
     set_colourtemp(colourtemp, nowait):
     set_colourtemp_percentage(colourtemp=100, nowait):
-    set_scene(scene, nowait):                     # 1=nature, 3=rave, 4=rainbow
+    set_scene(scene, scene_data=None, nowait):    # 1=nature, 3=rave, 4=rainbow
     set_mode(mode='white', nowait):               # white, colour, scene, music
     result = brightness():
     result = colourtemp():
@@ -266,7 +266,7 @@ Cloud Functions
     getdps(deviceid)
     sendcommand(deviceid, commands [, uri])
     getconnectstatus(deviceid)
-    getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
+    getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=0 [all], max_fetches=50, params={})
       -> when start or end are negative, they are the number of days before "right now"
           i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
           
@@ -325,7 +325,6 @@ if data:
 data = d.set_status(False, 4)
 if data:
     print('set_status() result %r' % data)
-    print('set_status() extra %r' % data[20:-8])
 
 """
 RGB Bulb Device
@@ -415,7 +414,7 @@ while(True):
     # Send keep-alive heartbeat
     if not data:
         print(" > Send Heartbeat Ping < ")
-    	d.heartbeat()
+        d.heartbeat()
 
     # NOTE If you are not seeing updates, you can force them - uncomment:
     # print(" > Send Request for Status < ")
@@ -702,7 +701,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
   Version
       tinytuya version
 
-        Prints the installed TinyTuya version, e.g.:  TinyTuya version: 1.18.0
+        Prints the installed TinyTuya version, e.g.:  TinyTuya version: 1.19.0
 
   Help
       tinytuya help
@@ -712,7 +711,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 ```
 
 ### Scan Tool 
-The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
+The function `tinytuya.scan()` will listen to your local network (UDP 6666, 6667 and 7000) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
 
 You can run the scanner from the command line using these interactive commands:
   ```bash
@@ -745,7 +744,7 @@ You can run the scanner from the command line using these interactive commands:
   python -m tinytuya version
   ```
 
-By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
+By default, the scan functions will listen for about 18 seconds to find new devices. If you are not seeing all your devices, you can increase the scan time by passing an optional number of seconds (eg. 50 seconds):
 
   ```bash
   # command line
@@ -757,7 +756,7 @@ By default, the scan functions will retry 15 times to find new devices. If you a
   tinytuya.scan(50)
 
   # return payload of devices
-  devices = tinytuya.deviceScan(false, 50)
+  devices = tinytuya.deviceScan(False, 50)
   ```
 
 ## Troubleshooting
@@ -1046,7 +1045,8 @@ Example device: https://www.aliexpress.com/item/1005005034880204.html
 | 111  | Error log | byte str |||
 | 112  | Work log | byte str |||
 | 113  | Partition parameters | byte str |||
-| 114  | Work mode | enum | AutoMode/?? ||                                                                                                                           | 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li><ul> ||
+| 114  | Work mode | enum | AutoMode/?? ||
+| 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li></ul> ||
 
 Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 
@@ -1134,7 +1134,8 @@ Note: (A) or (B) means channel A or channel B
 
 A user contributed module is available for this device in the [Contrib library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
 
-```python                                                                                                                                                                                                         from tinytuya.Contrib import WiFiDualMeterDevice
+```python
+from tinytuya.Contrib import WiFiDualMeterDevice
 
 wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
     dev_id='abcdefghijklmnop123456',
