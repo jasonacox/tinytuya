@@ -15,6 +15,12 @@
 * **scanner**: `devices()` no longer uses a shared mutable default for `tuyadevices` and no longer mutates the caller's device dicts when adding cloud-only entries to scan results.
 * Added offline regression tests for `set_timer` DP selection, `error_json` shape/unknown codes, and rgb8 hue round-trip (tests 23 → 29).
 
+## Unreleased - Session Crypto Hardening
+
+* **Security: random AES-GCM nonces (v3.5)** — GCM message nonces were derived from the wall clock (`time.time()`, ~0.1 s granularity) and became a fixed constant whenever debug logging was enabled, causing nonce reuse under a single session key (which breaks GCM confidentiality and allows tag forgery). Nonces now come from `os.urandom(12)`. The IV is transmitted in the frame, so this is fully wire-compatible.
+* **Security: random session-key client nonce (v3.4/v3.5)** — the client nonce used in session-key negotiation was hardcoded to `0123456789abcdef`, making the session key a deterministic function of the device nonce alone (and reusing the same GCM IV every 3.5 session). It now uses `os.urandom(16)` per negotiation. Devices accept any client nonce, so this is wire-compatible.
+* **Security: enforce GCM authentication on receive** — 6699/GCM frames that fail their authentication tag were previously passed to the decoder as raw ciphertext. They are now rejected (`DecodeError` in `XenonDevice._receive`, dropped in `Monitor`), so a forged or corrupt frame can no longer feed unverified bytes into payload processing.
+
 ## v1.19.0 - Monitor Class, IPv6, and Community Fixes
 
 * **New Feature: `Monitor` class** — Single-thread, multi-device status monitoring using `selectors` (`select`/`poll`/`epoll`). Watch any number of Tuya devices on one OS thread with callback-driven updates (`on_status`, `on_connect`, `on_disconnect`), automatic heartbeats, gateway/cid routing, thread-safe command queue, and optional `auto_reconnect`. No `asyncio`, no per-device threads, no new dependencies. See `examples/monitor_example.py` and `examples/monitor_poll_example.py`. Implements the [proposal by @3735943886](https://github.com/jasonacox/tinytuya/pull/649#issuecomment-4628381086) via [#712](https://github.com/jasonacox/tinytuya/pull/712) by @jasonacox-sam. **Note:** `Monitor` is an experimental class. See [#713](https://github.com/jasonacox/tinytuya/issues/713) for feedback and future refactoring plans.

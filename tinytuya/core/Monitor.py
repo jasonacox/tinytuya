@@ -523,6 +523,12 @@ class Monitor:
         if msg is None:
             return
 
+        # For 6699/GCM frames a failed authentication tag means the payload is
+        # undecryptable ciphertext; drop the frame instead of decoding garbage.
+        if msg.prefix == H.PREFIX_6699_VALUE and not msg.crc_good:
+            log.debug('Monitor: GCM authentication failed for %s - frame dropped', device.id)
+            return
+
         # Null payload — heartbeat ack, etc.
         if not msg.payload or len(msg.payload) == 0:
             log.debug('Monitor: null payload from %s (cmd=%s)', device.id, msg.cmd)
