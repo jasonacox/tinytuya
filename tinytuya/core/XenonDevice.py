@@ -6,6 +6,7 @@ import hmac
 import json
 from hashlib import md5, sha256
 import logging
+import os
 import socket
 import struct
 import time
@@ -493,7 +494,13 @@ class XenonDevice(object):
         log.debug("received data=%r", binascii.hexlify(data))
         hmac_key = self.local_key if self.version >= 3.4 else None
         no_retcode = False #None if self.version >= 3.5 else False
-        return unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
+        msg = unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
+        # For 6699/GCM frames a failed authentication tag means the payload is
+        # undecryptable ciphertext; reject the frame instead of feeding garbage
+        # to the decoder.  DecodeError is handled by the caller's retry logic.
+        if msg.prefix == H.PREFIX_6699_VALUE and not msg.crc_good:
+            raise DecodeError('GCM authentication failed - frame rejected')
+        return msg
 
     # similar to _send_receive() but never retries sending and does not decode the response
     def _send_receive_quick(self, payload, recv_retries, from_child=None): # pylint: disable=W0613
@@ -882,7 +889,11 @@ class XenonDevice(object):
         return True
 
     def _negotiate_session_key_generate_step_1( self ):
-        self.local_nonce = b'0123456789abcdef' # not-so-random random key
+        # Fresh random client nonce per negotiation.  A hardcoded nonce means the
+        # session key is a deterministic function of the device nonce alone (and,
+        # for 3.5, reuses the same GCM IV every session); the device accepts any
+        # nonce, so this is wire-compatible.
+        self.local_nonce = os.urandom(16)
         self.remote_nonce = b''
         self.local_key = self.real_local_key
 
