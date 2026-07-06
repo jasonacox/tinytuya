@@ -76,6 +76,25 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_set_timer_picks_numeric_max_dp(self):
+        # regression: DP keys must be selected numerically, not lexicographically
+        # ("9" > "102" as strings, but 102 > 9 as ints)
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d.set_version(3.1)
+        # status() supplies the DPS the timer selection scans
+        d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1":False,"9":0,"102":0}}
+        d._send_receive = MagicMock(return_value={"devId":"DEVICE_ID","dps":{"1":False,"9":0,"102":0}})
+
+        # act
+        d.set_timer(6666)
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # assert the timer targeted DP "102", not "9"
+        self.assertEqual(result_cmd, tinytuya.CONTROL)
+        self.assertDictEqual(result_payload, {"uid":"DEVICE_ID_HERE","devId":"DEVICE_ID_HERE","t":"","dps":{"102":6666}})
+
     def test_set_status(self):
         # arrange
         d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
@@ -423,6 +442,55 @@ class TestParseHeader(unittest.TestCase):
             mh.parse_header(oversized + b'\x00' * 40)
 
 
+class TestErrorJson(unittest.TestCase):
+    """error_json must return the expected dict shape and never raise, even
+    for an unknown error code."""
+
+    def test_known_code_shape(self):
+        from tinytuya.core.error_helper import error_json, ERR_TIMEOUT
+        result = error_json(ERR_TIMEOUT)
+        self.assertEqual(result["Error"], "Timeout Waiting for Device")
+        self.assertEqual(result["Err"], "902")
+        self.assertIsNone(result["Payload"])
+        self.assertEqual(set(result.keys()), {"Error", "Err", "Payload"})
+
+    def test_payload_preserved(self):
+        from tinytuya.core.error_helper import error_json, ERR_CLOUD
+        result = error_json(ERR_CLOUD, "some detail")
+        self.assertEqual(result["Payload"], "some detail")
+        self.assertEqual(result["Err"], "913")
+
+    def test_unknown_code_does_not_raise(self):
+        from tinytuya.core.error_helper import error_json
+        result = error_json(99999)
+        self.assertEqual(result["Error"], "Unknown Error")
+        self.assertEqual(result["Err"], "99999")
+
+    def test_default_none_code(self):
+        from tinytuya.core.error_helper import error_json
+        result = error_json()
+        self.assertEqual(result["Error"], "Unknown Error")
+        self.assertEqual(result["Err"], "None")
+        self.assertIsNone(result["Payload"])
+
+
+class TestHexvalueRoundTrip(unittest.TestCase):
+    """hexvalue_to_hsv must decode the hue written by rgb_to_hexvalue at the
+    correct offset (regression for the [7:10] vs [6:10] off-by-one)."""
+
+    def test_rgb8_round_trip(self):
+        import colorsys
+        for rgb in ((255, 128, 0), (0, 255, 64), (30, 60, 200)):
+            hexvalue = tinytuya.BulbDevice.rgb_to_hexvalue(*rgb, 'rgb8')
+            self.assertEqual(len(hexvalue), 14)
+            h, s, v = tinytuya.BulbDevice.hexvalue_to_hsv(hexvalue, 'rgb8')
+            eh, es, ev = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
+            # allow small quantization error from the 8-bit hex encoding
+            self.assertAlmostEqual(h, eh, delta=0.01)
+            self.assertAlmostEqual(s, es, delta=0.01)
+            self.assertAlmostEqual(v, ev, delta=0.01)
+
+
 class TestSessionCrypto(unittest.TestCase):
     """Session-key negotiation and GCM nonces must use fresh randomness so the
     same nonce/IV is never reused across messages or sessions."""
@@ -468,5 +536,6 @@ class TestSessionCrypto(unittest.TestCase):
         d.local_key = key
         with self.assertRaises(DecodeError):
             d._receive()
+
 if __name__ == '__main__':
     unittest.main()

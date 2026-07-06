@@ -176,7 +176,10 @@ class Device(XenonDevice):
             if "dps" in status:
                 devices = status["dps"]
                 devices_numbers = list(devices.keys())
-                devices_numbers.sort()
+                try:
+                    devices_numbers.sort(key=int)
+                except (TypeError, ValueError):
+                    devices_numbers.sort()
                 dps_id = devices_numbers[-1]
             else:
                 log.debug("set_timer received error=%r", status)

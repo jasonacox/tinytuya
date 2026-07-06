@@ -66,6 +66,7 @@ import threading
 import time
 
 from . import header as H
+from .const import MAX_PAYLOAD_LENGTH
 from .message_helper import (
     parse_header,
     unpack_message,
@@ -475,6 +476,22 @@ class Monitor:
             try:
                 header = parse_header(buf)
             except Exception:
+                # Normally this means the header is incomplete, so wait for more
+                # data.  But if the buffer is already larger than any legal frame,
+                # "not enough data" cannot be the real cause — the stream is
+                # desynced/corrupt.  Resync by discarding up to the next prefix.
+                if len(buf) > MAX_PAYLOAD_LENGTH:
+                    next_55aa = buf.find(H.PREFIX_55AA_BIN, 1)
+                    next_6699 = buf.find(H.PREFIX_6699_BIN, 1)
+                    candidates = [o for o in (next_55aa, next_6699) if o >= 1]
+                    if candidates:
+                        next_offset = min(candidates)
+                        log.debug("Corrupt/oversized header, resyncing buffer to next prefix at offset %d", next_offset)
+                        state.recv_buffer = buf[next_offset:]
+                        continue
+                    log.debug("Corrupt/oversized header and no further prefix found, dropping buffer")
+                    state.recv_buffer = buf[-3:]
+                    return
                 # Incomplete header — wait for more data
                 return
 

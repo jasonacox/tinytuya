@@ -251,7 +251,7 @@ class Cloud(object):
                 log.debug("Failed to renew token")
                 return None
             else:
-                return self._tuyaplatform(uri, action, post, ver, True)
+                return self._tuyaplatform(uri, action, post, ver, True, query, content_type)
 
         try:
             response_dict = json.loads(response.content.decode())
@@ -274,9 +274,10 @@ class Cloud(object):
         response_dict = self._tuyaplatform('token?grant_type=1')
 
         if not response_dict or 'success' not in response_dict or not response_dict['success']:
+            msg = response_dict.get('msg') if response_dict else 'no response'
             self.error = error_json(
                 ERR_CLOUDTOKEN,
-                "Cloud _gettoken() failed: %r" % response_dict['msg'],
+                "Cloud _gettoken() failed: %r" % msg,
             )
             return self.error
 
@@ -301,17 +302,15 @@ class Cloud(object):
         uri = 'devices/%s' % deviceid
         response_dict = self._tuyaplatform(uri)
 
-        if not response_dict['success']:
-            if 'code' not in response_dict:
-                response_dict['code'] = -1
-            if 'msg' not in response_dict:
-                response_dict['msg'] = 'Unknown Error'
+        if not response_dict or not response_dict.get('success'):
+            code = response_dict.get('code', -1) if response_dict else -1
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
             )
             return error_json(
                 ERR_CLOUD,
-                "Error from Tuya Cloud: Code %r: %r" % (response_dict['code'], response_dict['msg'])
+                "Error from Tuya Cloud: Code %r: %r" % (code, msg)
             )
 
         uid = response_dict['result']['uid']
@@ -613,9 +612,14 @@ class Cloud(object):
         uri = 'iot-03/devices/%s/%s' % (deviceid, param)
         response_dict = self._tuyaplatform(uri)
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -651,9 +655,14 @@ class Cloud(object):
         uri = 'devices/%s/specifications' % (deviceid)
         response_dict = self._tuyaplatform(uri, ver='v1.1')
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -671,9 +680,14 @@ class Cloud(object):
         uri += '%s/commands' % (deviceid)
         response_dict = self._tuyaplatform(uri,action='POST',post=commands)
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -691,8 +705,13 @@ class Cloud(object):
         uri = 'devices/%s' % (deviceid)
         response_dict = self._tuyaplatform(uri, ver='v1.0')
 
-        if not response_dict['success']:
-            log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
+            log.debug("Error from Tuya Cloud: %r", msg)
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
+            )
         return(response_dict["result"]["online"])
 
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):

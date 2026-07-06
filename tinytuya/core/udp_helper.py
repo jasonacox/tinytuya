@@ -38,8 +38,7 @@ def decrypt_udp(msg):
     if header.prefix == H.PREFIX_6699_VALUE:
         unpacked = unpack_message(msg, hmac_key=udpkey, no_retcode=None)
         payload = unpacked.payload.decode()
-        # app sometimes has extra bytes at the end
-        while payload[-1] == chr(0):
-            payload = payload[:-1]
+        # app sometimes has extra NUL bytes at the end
+        payload = payload.rstrip('\x00')
         return payload
     return decrypt(msg, udpkey)

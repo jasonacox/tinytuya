@@ -14,7 +14,7 @@ import sys
 
 from .const import DEVICEFILE, TCPPORT
 from .crypto_helper import AESCipher
-from .error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ERR_OFFLINE, ERR_PAYLOAD, error_json
+from .error_helper import ERR_CONNECT, ERR_DEVTYPE, ERR_JSON, ERR_KEY_OR_VER, ERR_OFFLINE, ERR_PAYLOAD, ERR_TIMEOUT, error_json
 from .exceptions import DecodeError
 from .message_helper import MessagePayload, TuyaMessage, pack_message, unpack_message, parse_header
 from . import command_types as CT, header as H
@@ -479,7 +479,13 @@ class XenonDevice(object):
             if prefix_offset_55AA < 0 and prefix_offset_6699 < 0:
                 data = data[1-prefix_len:]
             else:
-                prefix_offset = prefix_offset_6699 if prefix_offset_55AA < 0 else prefix_offset_55AA
+                # pick the earliest (minimum non-negative) prefix offset
+                if prefix_offset_55AA < 0:
+                    prefix_offset = prefix_offset_6699
+                elif prefix_offset_6699 < 0:
+                    prefix_offset = prefix_offset_55AA
+                else:
+                    prefix_offset = min(prefix_offset_55AA, prefix_offset_6699)
                 data = data[prefix_offset:]
 
             data += self._recv_all( min_len - len(data) )
@@ -491,7 +497,8 @@ class XenonDevice(object):
         if remaining > 0:
             data += self._recv_all( remaining )
 
-        log.debug("received data=%r", binascii.hexlify(data))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("received data=%r", binascii.hexlify(data))
         hmac_key = self.local_key if self.version >= 3.4 else None
         no_retcode = False #None if self.version >= 3.5 else False
         msg = unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
@@ -516,12 +523,12 @@ class XenonDevice(object):
         enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
         try:
             self.socket.sendall(enc_payload)
-        except:
+        except Exception:
             self._check_socket_close(True)
             return None
         try:
             self.raw_sent = parse_header(enc_payload)
-        except:
+        except Exception:
             self.raw_sent = None
         if not recv_retries:
             return True
@@ -529,7 +536,7 @@ class XenonDevice(object):
             try:
                 msg = self._receive()
                 self.raw_recv.append(msg)
-            except:
+            except Exception:
                 msg = None
             if msg:
                 self._get_retcode(self.raw_sent, msg) # set self.cmd_retcode
@@ -645,7 +652,7 @@ class XenonDevice(object):
                         self.socketRetryLimit
                     )
                     # timeout reached - return error
-                    return error_json(ERR_KEY_OR_VER)
+                    return error_json(ERR_TIMEOUT)
                 # wait a bit before retrying
                 time.sleep(0.1)
             except DecodeError as err:
@@ -751,6 +758,10 @@ class XenonDevice(object):
                         self._cache_response(result)
                         result = self._process_response(result)
                     self.received_wrong_cid_queue.append( (found_child, result) )
+                    # cap the queue so a stream of wrong-CID updates cannot grow it unbounded
+                    if len(self.received_wrong_cid_queue) > 100:
+                        log.debug( 'received_wrong_cid_queue exceeded 100 entries, dropping oldest' )
+                        self.received_wrong_cid_queue.pop(0)
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
 
@@ -980,7 +991,8 @@ class XenonDevice(object):
                 msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
                 data = pack_message(msg,hmac_key=self.local_key)
-                log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
                 return data
 
             payload = self.cipher.encrypt(payload, False)
@@ -1015,7 +1027,8 @@ class XenonDevice(object):
         msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg,hmac_key=hmac_key)
-        log.debug("payload encrypted=%r",binascii.hexlify(buffer))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
 
     def _get_retcode(self, sent, msg):
