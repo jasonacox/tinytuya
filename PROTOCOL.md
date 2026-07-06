@@ -604,7 +604,7 @@ sequenceDiagram
     D-->>C: RESP (0x04) device_nonce||HMAC(client_nonce)
     C->>D: FINISH (0x05) HMAC(device_nonce)
     Note over C,D: Derive session_key
-    C->>D: DP_QUERY_NEW (0x10) (GCM, JSON encrypted; no version header)
+    C->>D: DP_QUERY_NEW (0x10) (GCM, JSON encrypted, no version header)
     D-->>C: Response (retcode + JSON encrypted)
     C->>D: CONTROL_NEW (0x0D) set dps
     D-->>C: Ack / updated state
