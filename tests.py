@@ -537,5 +537,149 @@ class TestSessionCrypto(unittest.TestCase):
         with self.assertRaises(DecodeError):
             d._receive()
 
+
+import socket as _socket_mod
+from tinytuya.core.Monitor import Monitor, _accepts_nowait
+
+
+class _FakeDevice:
+    """Minimal stand-in for a tinytuya Device that Monitor can drive without a
+    real network — _get_socket() hands back one end of a socketpair."""
+
+    def __init__(self, dev_id, retry_limit=5):
+        self.id = dev_id
+        self.socket = None
+        self.socketPersistent = False
+        self.socketRetryLimit = retry_limit
+        self.children = {}
+        self.version = 3.3
+        self._peer = None
+        self.heartbeat_should_fail = False
+        self.heartbeat_calls = 0
+        self.method_calls = []
+
+    def _get_socket(self, renew):
+        s, peer = _socket_mod.socketpair()
+        self.socket = s
+        self._peer = peer
+        return True
+
+    def __del__(self):
+        if self._peer is not None:
+            try:
+                self._peer.close()
+            except Exception:
+                pass
+
+    def heartbeat(self, nowait=True):
+        self.heartbeat_calls += 1
+        if self.heartbeat_should_fail:
+            # emulate fail-fast: socket closed + cleared, error dict returned
+            try:
+                self.socket.close()
+            except Exception:
+                pass
+            self.socket = None
+            return {"Error": "fail"}
+        return None
+
+    def set_value(self, index, value, nowait=False):
+        self.method_calls.append(('set_value', index, value, nowait))
+
+    def set_socketPersistent(self, persist):   # note: no nowait param
+        self.method_calls.append(('set_socketPersistent', persist))
+
+
+class TestMonitorReliability(unittest.TestCase):
+    """Monitor must own reconnection: monitored devices fail fast instead of
+    blocking the reactor or silently opening an unwatched socket."""
+
+    def _make(self, **kw):
+        mon = Monitor(**kw)
+        self.addCleanup(mon.stop)
+        return mon
+
+    def test_add_forces_fail_fast_and_remove_restores(self):
+        mon = self._make()
+        dev = _FakeDevice('devA', retry_limit=5)
+        proxy = mon.add(dev)
+        self.assertFalse(isinstance(proxy, str), 'add() should succeed')
+        # While monitored, the device must not run its own retry/reconnect loop.
+        self.assertEqual(dev.socketRetryLimit, 0)
+        state = mon._id_to_state['devA']
+        self.assertEqual(state.saved_retry_limit, 5)
+        # Removal hands the device back untouched.
+        mon.remove(dev)
+        self.assertEqual(dev.socketRetryLimit, 5)
+        self.assertIsNone(dev.socket)
+        self.assertNotIn('devA', mon._id_to_state)
+
+    def test_heartbeat_failure_disconnects_and_enqueues_reconnect(self):
+        disconnects = []
+        mon = self._make(auto_reconnect=True,
+                         on_disconnect=lambda d, e: disconnects.append(d.id))
+        dev = _FakeDevice('devB')
+        mon.add(dev)
+        state = mon._id_to_state['devB']
+        self.assertIsNotNone(state.fileno)
+
+        # Simulate a broken connection on the next heartbeat.
+        dev.heartbeat_should_fail = True
+        mon._do_heartbeat(state)
+
+        # The vanished socket must be detected as a disconnect...
+        self.assertEqual(disconnects, ['devB'])
+        self.assertIsNone(state.fileno)
+        self.assertNotIn(state, mon._devices.values())
+        # ...and the device queued for the connector thread to reconnect.
+        self.assertIn('devB', mon._reconnect_queue)
+        self.assertIn('devB', mon._devices_in_reconnect)
+
+    def test_command_dropped_when_device_not_active(self):
+        mon = self._make()
+        dev = _FakeDevice('devC')
+        mon.add(dev)
+        state = mon._id_to_state['devC']
+        # Emulate a device mid-reconnect (registered but not yet active).
+        state.fileno = None
+        mon.command(dev, 'set_value', 1, True)
+        mon._drain_queue()
+        self.assertEqual(dev.method_calls, [], 'command must not run on an inactive device')
+
+    def test_proxy_injects_nowait_only_when_accepted(self):
+        mon = self._make()
+        dev = _FakeDevice('devD')
+        mon.add(dev)
+        # set_value accepts nowait -> injected
+        mon.command(dev, 'set_value', 1, True)
+        # set_socketPersistent has no nowait param -> must NOT be injected
+        mon.command(dev, 'set_socketPersistent', True)
+        queued = {name: kwargs for (_id, name, _a, kwargs) in mon._queue}
+        self.assertEqual(queued['set_value'].get('nowait'), True)
+        self.assertNotIn('nowait', queued['set_socketPersistent'])
+
+    def test_stop_restores_retry_limit_for_disconnected_devices(self):
+        """stop() must restore socketRetryLimit even for devices that
+        disconnected before stop() was called (in _id_to_state but not _devices)."""
+        mon = self._make(auto_reconnect=True)
+        dev = _FakeDevice('devE', retry_limit=7)
+        mon.add(dev)
+        # Simulate a disconnect: device leaves _devices but stays in _id_to_state.
+        state = mon._id_to_state['devE']
+        dev.heartbeat_should_fail = True
+        mon._do_heartbeat(state)
+        # Device is now disconnected — socketRetryLimit is still 0.
+        self.assertEqual(dev.socketRetryLimit, 0)
+        self.assertIn('devE', mon._id_to_state)
+        self.assertNotIn(state, mon._devices.values())
+        # stop() must restore the original limit.
+        mon.stop()
+        self.assertEqual(dev.socketRetryLimit, 7)
+
+    def test_accepts_nowait_helper(self):
+        self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
+        self.assertTrue(_accepts_nowait(lambda x, **kw: None))
+        self.assertFalse(_accepts_nowait(lambda x: None))
+
 if __name__ == '__main__':
     unittest.main()

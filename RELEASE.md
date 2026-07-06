@@ -1,25 +1,27 @@
 # RELEASE NOTES
 
-## Unreleased - Bug Fixes
+## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
-* **Cloud**: Token-refresh retry in `_tuyaplatform()` now forwards `query` and `content_type`, so paginated/queried calls (device list, `getdevicelog`, `getdps`) no longer silently lose their query string when the access token expires mid-flight.
-* **Cloud**: `_gettoken()`, `_getuid()`, `_getdevice()`, `getdps()`, `sendcommand()`, and `getconnectstatus()` now return the standard error dict on a failed or empty Cloud response instead of raising `TypeError`/`KeyError`.
-* **Device**: `set_timer()` now selects the timer DP numerically instead of lexicographically (previously `"9"` sorted above `"102"`, targeting the wrong DP on devices with DP indices spanning a power of ten).
-* **XenonDevice**: Exhausted-retry socket timeouts now return `ERR_TIMEOUT` (902, "Timeout Waiting for Device") instead of the misleading `ERR_KEY_OR_VER` ("Check device key or version").
-* **XenonDevice**: Frame resync in `_receive()` now picks the earliest prefix when both 55AA and 6699 markers appear in buffered garbage; bare `except:` clauses in `_send_receive_quick()` no longer swallow `KeyboardInterrupt`; `received_wrong_cid_queue` is capped at 100 entries; hot-path `binascii.hexlify()` debug logging is now gated on the log level.
-* **BulbDevice**: `hexvalue_to_hsv()` reads Hue from the correct hex offset `[6:10]` in the rgb8 format (latent off-by-one); corrected the `set_music_colour()` docstring to match the actual argument order (`transition` first).
-* **Monitor**: A corrupt or desynced stream no longer stalls a device permanently — oversized/garbage headers now trigger a buffer resync to the next frame prefix instead of buffering forever.
-* **message_helper**: Truncated 55AA frames raise `DecodeError` (retryable) instead of leaking `struct.error`.
-* **udp_helper**: `decrypt_udp()` no longer raises `IndexError` on an empty or all-NUL 6699 broadcast payload.
-* **error_helper**: `error_json()` builds its dict directly (no JSON string round-trip) and returns "Unknown Error" for unrecognized codes instead of raising `KeyError`.
-* **scanner**: `devices()` no longer uses a shared mutable default for `tuyadevices` and no longer mutates the caller's device dicts when adding cloud-only entries to scan results.
-* Added offline regression tests for `set_timer` DP selection, `error_json` shape/unknown codes, and rgb8 hue round-trip (tests 23 → 29).
+Release rollup. The **Monitor reliability** changes below ship in this PR; the
+**session crypto hardening** and **bug-fix** bullets come from their own PRs and
+are listed here so the release changelog is complete.
 
-## Unreleased - Session Crypto Hardening
+### Monitor (experimental) reliability
+* **Monitor now owns reconnection.** Monitored devices are forced to fail fast on send errors (`socketRetryLimit = 0`) so a broken connection can no longer (a) block the single reactor thread inside the device's own retry/connect loop for tens of seconds, stalling every other monitored device, or (b) silently open a replacement socket the selector never watches — which previously caused a device to stop delivering updates with no disconnect ever reported (Linux/epoll) or spin in an error-log loop (Windows/select). See [#713](https://github.com/jasonacox/tinytuya/issues/713).
+* Heartbeat and queued-command send failures are now detected (vanished socket) and routed through the disconnect → auto-reconnect path.
+* Command dispatch is gated on selector registration state rather than `device.socket`, closing a race where a queued command could be sent on a socket the connector thread was still mid-handshake on.
+* The auto-reconnect connector thread uses an interruptible wait for its backoff, so `stop()` returns promptly instead of blocking up to `reconnect_backoff` seconds, and can no longer let a duplicate connector thread start.
+* Devices are unregistered from the selector by their stored fd (not the possibly-closed socket), and the command proxy only injects `nowait=True` for methods that accept it. Retry limits are restored when a device is removed or the Monitor is stopped.
+* Added the first offline unit tests for `Monitor` (fail-fast retry ownership, disconnect detection, command gating, proxy `nowait` handling).
+* **Note:** marshalling `add()`/`remove()` selector mutations onto the reactor thread remains a known follow-up for the [#713](https://github.com/jasonacox/tinytuya/issues/713) refactor.
 
-* **Security: random AES-GCM nonces (v3.5)** — GCM message nonces were derived from the wall clock (`time.time()`, ~0.1 s granularity) and became a fixed constant whenever debug logging was enabled, causing nonce reuse under a single session key (which breaks GCM confidentiality and allows tag forgery). Nonces now come from `os.urandom(12)`. The IV is transmitted in the frame, so this is fully wire-compatible.
-* **Security: random session-key client nonce (v3.4/v3.5)** — the client nonce used in session-key negotiation was hardcoded to `0123456789abcdef`, making the session key a deterministic function of the device nonce alone (and reusing the same GCM IV every 3.5 session). It now uses `os.urandom(16)` per negotiation. Devices accept any client nonce, so this is wire-compatible.
-* **Security: enforce GCM authentication on receive** — 6699/GCM frames that fail their authentication tag were previously passed to the decoder as raw ciphertext. They are now rejected (`DecodeError` in `XenonDevice._receive`, dropped in `Monitor`), so a forged or corrupt frame can no longer feed unverified bytes into payload processing.
+### Session crypto hardening (see security PR)
+* AES-GCM message nonces and the v3.4/v3.5 session-key client nonce now use `os.urandom` instead of a time-derived/constant value, eliminating nonce/IV reuse under a session key. Wire-compatible.
+* 6699/GCM frames that fail their authentication tag are rejected instead of being passed on as raw ciphertext.
+
+### Bug fixes (see bug-fix PR)
+* Cloud token-refresh retry preserves the query string; Cloud helpers return error dicts instead of raising on failed/empty responses.
+* `set_timer()` selects the timer DP numerically; timeout errors report `ERR_TIMEOUT`; `received_wrong_cid_queue` is bounded; truncated frames raise `DecodeError`; `error_json()` handles unknown codes; `BulbDevice` rgb8 hue offset fixed; scanner no longer mutates caller dicts; and more.
 
 ## v1.19.0 - Monitor Class, IPv6, and Community Fixes
 

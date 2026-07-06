@@ -58,6 +58,7 @@ Or drive it from a caller's own loop::
 Author: Sam (jasonacox-sam)
 """
 
+import inspect
 import logging
 import os
 import selectors
@@ -74,6 +75,23 @@ from .message_helper import (
 
 log = logging.getLogger(__name__)
 
+
+def _accepts_nowait(method):
+    """Return True if ``method`` accepts a ``nowait`` keyword argument.
+
+    Used so the command proxy only injects ``nowait=True`` for methods that
+    actually take it; methods without it (e.g. ``set_socketPersistent``) would
+    otherwise raise ``TypeError`` when dispatched.
+    """
+    try:
+        params = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return True  # cannot introspect — preserve historical behavior
+    if 'nowait' in params:
+        return True
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
 # ── Callback types ──────────────────────────────────────────────────
 # on_status(device, result)        — decoded status payload
 # on_connect(device, error)        — error is None on success
@@ -86,6 +104,7 @@ class _DeviceState:
     __slots__ = (
         'device', 'fileno', 'recv_buffer', 'heartbeat_interval',
         'last_heartbeat', 'on_status', 'on_connect', 'on_disconnect',
+        'saved_retry_limit',
     )
 
     def __init__(self, device, heartbeat_interval=12,
@@ -98,6 +117,11 @@ class _DeviceState:
         self.on_status = on_status
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
+        # The device's own retry limit, restored for blocking (re)connects and
+        # on removal.  While the device is watched by the reactor its limit is
+        # forced to 0 so a failed send fails fast instead of blocking the reactor
+        # thread or silently opening a new socket behind the selector's back.
+        self.saved_retry_limit = getattr(device, 'socketRetryLimit', 5)
 
 
 class _DeviceProxy:
@@ -189,6 +213,10 @@ class Monitor:
         self._register_lock = threading.Lock()
         self._connector_thread = None
         self._devices_in_reconnect = set()  # device_ids currently being processed
+        # Set on stop() so the connector thread's backoff wait is interruptible
+        # (a plain time.sleep would delay shutdown and could let a second
+        # connector thread start before the first one exits its sleep).
+        self._stop_event = threading.Event()
 
     # ── Public API ──────────────────────────────────────────────────
 
@@ -244,6 +272,15 @@ class Monitor:
             on_connect=on_connect,
             on_disconnect=on_disconnect,
         )
+
+        # Monitor now owns this device's connection lifecycle.  Force the device
+        # to fail fast on send errors (retry limit 0) so a broken connection can
+        # never (a) block the reactor thread inside the device's own retry loop,
+        # or (b) silently open a replacement socket the selector isn't watching.
+        # The saved limit is restored for blocking (re)connects and on removal.
+        state.saved_retry_limit = device.socketRetryLimit
+        device.socketRetryLimit = 0
+
         fd = sock.fileno()
         state.fileno = fd
 
@@ -260,23 +297,35 @@ class Monitor:
     def remove(self, device):
         """
         Unregister a device from the Monitor and close its socket.
+
+        Note: like ``add()``, this mutates the selector directly and is intended
+        to be called from the same thread that drives the reactor (or before
+        ``start()``).  Marshalling add/remove onto the reactor thread is a
+        planned follow-up (see #713).
         """
         state = self._id_to_state.pop(device.id, None)
         if state is None:
             return
+        # Unregister by the stored fd rather than device.socket: the socket may
+        # already be closed (and its fileno() invalid) if the device dropped.
         fd = state.fileno
-        self._devices.pop(fd, None)
+        if fd is not None:
+            try:
+                self._sel.unregister(fd)
+            except (KeyError, ValueError, OSError):
+                pass
+            self._devices.pop(fd, None)
+        state.fileno = None
 
-        try:
-            self._sel.unregister(device.socket)
-        except (KeyError, ValueError, OSError):
-            pass
+        if device.socket is not None:
+            try:
+                device.socket.close()
+            except Exception:
+                pass
+            device.socket = None
 
-        try:
-            device.socket.close()
-        except Exception:
-            pass
-        device.socket = None
+        # Hand the device back to the caller as we found it.
+        device.socketRetryLimit = state.saved_retry_limit
 
     def command(self, device, method_name, *args, **kwargs):
         """
@@ -296,7 +345,11 @@ class Monitor:
                 'Monitor.command() does not support nowait=False — '
                 'blocking calls would stall the reactor loop.'
             )
-        kwargs['nowait'] = True
+        # Only force nowait=True for methods that accept it, so proxying a method
+        # without a nowait parameter (e.g. set_socketPersistent) doesn't raise.
+        method = getattr(device, method_name, None)
+        if 'nowait' not in kwargs and method is not None and _accepts_nowait(method):
+            kwargs['nowait'] = True
         with self._queue_lock:
             self._queue.append((device.id, method_name, args, kwargs))
         self._wake()
@@ -327,6 +380,7 @@ class Monitor:
         if self._thread is not None and self._thread.is_alive():
             return
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name='TinyTuyaMonitor')
         self._thread.start()
 
@@ -341,6 +395,7 @@ class Monitor:
         Stop the reactor and close all device sockets.
         """
         self._running = False
+        self._stop_event.set()
         self._wake()
         if self._thread is not None:
             self._thread.join(timeout=5)
@@ -348,18 +403,31 @@ class Monitor:
         if self._connector_thread is not None:
             self._connector_thread.join(timeout=5)
             self._connector_thread = None
-        # Close all device sockets
+        # Close all device sockets and hand each device back with its own
+        # retry limit restored.
         for state in list(self._devices.values()):
+            device = state.device
+            fd = state.fileno
+            if fd is not None:
+                try:
+                    self._sel.unregister(fd)
+                except (KeyError, ValueError, OSError):
+                    pass
+            state.fileno = None
             try:
-                self._sel.unregister(state.device.socket)
-            except (KeyError, ValueError, OSError):
-                pass
-            try:
-                state.device.socket.close()
+                if device.socket is not None:
+                    device.socket.close()
             except Exception:
                 pass
-            state.device.socket = None
+            device.socket = None
+            device.socketRetryLimit = state.saved_retry_limit
         self._devices.clear()
+        # Restore the retry limit for devices that disconnected mid-flight and
+        # remained in _id_to_state awaiting auto-reconnect (not in _devices).
+        # Devices that were still active had their limit restored above already
+        # — setting it again to saved_retry_limit is idempotent.
+        for state in list(self._id_to_state.values()):
+            state.device.socketRetryLimit = state.saved_retry_limit
         self._id_to_state.clear()
         with self._reconnect_lock:
             self._reconnect_queue.clear()
@@ -598,38 +666,52 @@ class Monitor:
             return
         try:
             device.heartbeat(nowait=True)
-            log.debug('Monitor: sent heartbeat to %s', device.id)
         except Exception:
             log.debug('Monitor: heartbeat send failed for %s', device.id, exc_info=True)
             self._handle_disconnect(state, 'Heartbeat send failed')
+            return
+        # With the retry limit forced to 0, a failed send closes the socket and
+        # returns an error dict instead of raising.  A vanished socket is the
+        # disconnect signal — route it through reconnect rather than letting the
+        # device get stuck with no socket and no pending reconnect.
+        if device.socket is None:
+            self._handle_disconnect(state, 'Heartbeat send failed')
+        else:
+            log.debug('Monitor: sent heartbeat to %s', device.id)
 
     # ── Disconnect handling ─────────────────────────────────────────
 
     def _handle_disconnect(self, state, error):
-        """Handle a disconnection event."""
+        """Handle a disconnection event (reactor thread only)."""
+        # Guard against a double teardown — e.g. a recv error and a heartbeat
+        # failure for the same device within one reactor tick.  Once fileno is
+        # cleared the device is already unregistered.
+        if state.fileno is None:
+            return
         device = state.device
         log.debug('Monitor: device %s disconnected: %s', device.id, error)
 
-        # Unregister from selector
+        # Unregister by the stored fd: the device may already have closed its
+        # socket (fail-fast send), leaving device.socket == None and its old
+        # fileno() invalid, so the selector entry can only be found by fd.
+        fd = state.fileno
         try:
-            self._sel.unregister(device.socket)
+            self._sel.unregister(fd)
         except (KeyError, ValueError, OSError):
             pass
-
-        try:
-            device.socket.close()
-        except Exception:
-            pass
-        device.socket = None
-
-        # Fire disconnect callback
-        self._fire_disconnect(state, str(error))
-
-        # Remove from active devices but keep in id_to_state so we can reconnect
-        fd = state.fileno
         self._devices.pop(fd, None)
         state.fileno = None
         state.recv_buffer = b''
+
+        if device.socket is not None:
+            try:
+                device.socket.close()
+            except Exception:
+                pass
+            device.socket = None
+
+        # Fire disconnect callback
+        self._fire_disconnect(state, str(error))
 
         # Enqueue for auto-reconnect if enabled
         if self._auto_reconnect and device.id in self._id_to_state:
@@ -651,7 +733,9 @@ class Monitor:
                     device_id = self._reconnect_queue.pop(0)
 
             if device_id is None:
-                time.sleep(0.5)
+                # Interruptible idle wait so stop() returns promptly
+                if self._stop_event.wait(0.5):
+                    break
                 continue
 
             state = self._id_to_state.get(device_id)
@@ -664,17 +748,24 @@ class Monitor:
             device = state.device
             log.debug('Monitor: attempting reconnect for %s', device_id)
 
-            # Sleep the backoff before attempting
-            time.sleep(self._reconnect_backoff)
+            # Interruptible backoff before attempting — a plain sleep would delay
+            # shutdown and could let a second connector thread spawn on restart.
+            if self._stop_event.wait(self._reconnect_backoff):
+                break
 
             if not self._running:
                 break
 
-            # Blocking connect (this is why we're on a separate thread)
+            # Blocking connect (this is why we're on a separate thread).  Restore
+            # the device's real retry limit for the connect, then put it back to
+            # the reactor-safe fail-fast value before handing the socket back.
+            device.socketRetryLimit = state.saved_retry_limit
             try:
                 result = device._get_socket(False)
             except Exception as exc:
                 result = str(exc)
+            finally:
+                device.socketRetryLimit = 0
 
             if result is True and device.socket is not None:
                 # Success — hand off to reactor for selector registration
@@ -747,18 +838,27 @@ class Monitor:
                 log.warning('Monitor: queued command for unknown device %s', device_id)
                 continue
             device = state.device
-            if device.socket is None:
-                log.warning('Monitor: device %s not connected, dropping command', device_id)
+            # Only dispatch to a fully-registered, active device.  Gating on
+            # state.fileno (set only after selector registration) — rather than
+            # device.socket — avoids sending on a socket the connector thread is
+            # still mid-handshake on during a reconnect.
+            if state.fileno is None or device.socket is None:
+                log.warning('Monitor: device %s not active, dropping command %r', device_id, method_name)
+                continue
+            method = getattr(device, method_name, None)
+            if method is None:
+                log.warning('Monitor: device has no method %r', method_name)
                 continue
             try:
-                method = getattr(device, method_name, None)
-                if method is None:
-                    log.warning('Monitor: device has no method %r', method_name)
-                    continue
                 method(*args, **kwargs)
             except Exception:
                 log.error('Monitor: error executing %s on %s', method_name, device_id,
                           exc_info=True)
+                self._handle_disconnect(state, 'Command send failed')
+                continue
+            # Fail-fast send closed the socket instead of raising — reconnect.
+            if device.socket is None:
+                self._handle_disconnect(state, 'Command send failed')
 
     # ── Wake mechanism ──────────────────────────────────────────────
 
