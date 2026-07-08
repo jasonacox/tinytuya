@@ -199,7 +199,15 @@ class IRRemoteControlDevice(Device):
         self.set_socketTimeout( old_timeout )
         self.set_socketPersistent( old_persist )
 
-    def send_command( self, mode, data={} ):
+    def send_command( self, mode, data=None ):
+        if data is None:
+            data = {}
+        if not self.control_type:
+            raise RuntimeError(
+                'IRRemoteControlDevice: control_type has not been detected. '
+                'Pass control_type=1 (DPS 201/202) or control_type=2 (DPS 1-13) '
+                'to the constructor, or call detect_control_type() first.'
+            )
         if mode == 'send':
             if self.control_type == 1:
                 command = {

@@ -14,9 +14,9 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 
     ```python
     # Example usage of community contributed device modules
-    from tinytuya import Contrib
+    from tinytuya.Contrib import ThermostatDevice
 
-    thermo = Contrib.ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
+    thermo = ThermostatDevice( 'abcdefghijklmnop123456', '172.28.321.475', '1234567890123abc' )
     ```
 
 ### IRRemoteControlDevice
@@ -26,24 +26,24 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 * Example: [examples/IRRemoteControlDevice-example.py](https://github.com/jasonacox/tinytuya/blob/master/examples/Contrib/IRRemoteControlDevice-example.py)
 
     ```python
-    # Example 1 -usage of community contributed device modules
-    from tinytuya import Contrib
+    # Example 1 - usage of community contributed device modules
+    from tinytuya.Contrib import IRRemoteControlDevice
 
-    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc' )
+    ir = IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc' )
     button = ir.receive_button(timeout=15)
     ir.send_button(button)
     ```
 
     ```python
     # Example 2 - Aubess WiFi IR Controller S16 for Sony TV - Issue #492
-    from tinytuya import Contrib
+    from tinytuya.Contrib import IRRemoteControlDevice
 
     # Pull the Device Log from Tuya cloud while using Tuya Smart App and pressing PWR button on controller:
     # SONY Tuya Device Debug Log: IR send{"control":"send_ir","head":"xxxx","key1":"003xxx)","type":0,"delay":300}
     head = 'xxx'
     key1 = '003xxx'
 
-    ir = Contrib.IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc', persist=True )
+    ir = IRRemoteControlDevice( 'abcdefghijklmnop123456', '10.2.3.4', '1234567890123abc', persist=True )
     ir.send_key( head, key1 )
 
     # NOTE: If it doesn't work, try removing a leading zero from key1. Depending on what DPS set the device 
@@ -121,13 +121,13 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 * Tested: Fairland Inverter+ 21kW (IPHR55)
 
     ```python
-    from tinytuya import Contrib
+    from tinytuya.Contrib import InverterHeatPumpDevice, TemperatureUnit, InverterHeatPumpFault
 
-    device = Contrib.InverterHeatPumpDevice(dev_id="devid", address="ip", local_key="key", version="3.3")
+    device = InverterHeatPumpDevice(dev_id="devid", address="ip", local_key="key", version="3.3")
 
-    device.set_unit(Contrib.TemperatureUnit.CELSIUS)
+    device.set_unit(TemperatureUnit.CELSIUS)
 
-    if device.get_fault() != Contrib.InverterHeatPumpFault.NOMINAL:
+    if device.get_fault() != InverterHeatPumpFault.NOMINAL:
         print("The inverter can't work normally. Turning off...")
         device.turn_off()
         exit()
@@ -228,7 +228,7 @@ In addition to the built-in `OutletDevice`, `BulbDevice` and `CoverDevice` devic
 * WiFiDualMeterDevice - A community-contributed Python module to add support for Tuya WiFi Dual Meter device
 * Author: [Guillaume Gardet](https://github.com/ggardet)
 
-```
+```python
 from tinytuya.Contrib import WiFiDualMeterDevice
 
 wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
@@ -243,8 +243,35 @@ wdm.print_all()
 # Only print Voltage and frequency
 print(wdm.get_freq())
 print(wdm.get_voltage())
+```
 
+### TowelRailHeaterDevice
 
+* TowelRailHeaterDevice - A community-contributed Python module to add support for Tuya WiFi Towel Rail Heater
+* Author: [Rob Emery](https://github.com/mintsoft)
+
+The mode is mapped as follows:
+* "auto" is the scheduler, I could not find a way to set or configure the schedule through Tuya, only physically on the device
+* "hot" is the user configured temperature (`set_target_temperature`)
+* "cold" is the hard-coded 50 degrees C
+* "eco"  is the heat for a defined duration and then switches back off.
+
+```python
+from tinytuya.Contrib import TowelRailHeaterDevice
+
+device = TowelRailHeaterDevice.TowelRailHeaterDevice(
+      dev_id='YOUR_DEV_ID',
+      address='192.168.XX.YY',      # Or set to 'Auto' to auto-discover IP address
+      local_key='LOCAL_KEY',
+      version=3.4)
+
+# Print all known values
+print(device.status_json())
+
+print(device.get_operating_mode())
+print(device.get_current_temperature())
+
+```
 ## Submit Your Device
 
 * We welcome new device modules!

@@ -487,14 +487,15 @@ class ForceScannedDevice(DeviceDetect):
                     self.step = FSCAN_NOT_STARTED
                     self.connect()
                     return
-                # closed thrice, probably a v3.4 device
+                # closed thrice, probably a v3.4 or v3.5 device
                 if self.debug:
-                    print('ForceScannedDevice: Retrying as v3.4')
+                    print('ForceScannedDevice: Retrying as v3.4/3.5')
+                self.message = "%s    Unable to determine version, likely v3.4 or v3.5 - trying key negotiation..." % (self.options['termcolors'].dim)
                 self.retries = 0
                 self.deviceinfo['dev_type'] = 'default'
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
-                self.deviceinfo['version'] = 3.4
-                self.ver_found = True
+                self.deviceinfo['version'] = 3.4  # Assume 3.4 to start, but don't mark as confirmed
+                # Don't set ver_found = True here - only set it when we get actual response
                 self.keygen = (i for i in self.options['keylist'] if not i.used)
                 self.cur_key = next( self.keygen, None )
                 if self.debug:
@@ -513,7 +514,7 @@ class ForceScannedDevice(DeviceDetect):
                 else:
                     self.err_found = True
                     self.deviceinfo['version'] = 0.0
-                    self.message = "%s    Polling %s Failed: Device stopped responding before key was found" % (self.options['termcolors'].alertdim, self.ip)
+                    self.message = "%s    Polling %s Failed: Device stopped responding before key was found (likely v3.4 or v3.5)" % (self.options['termcolors'].alertdim, self.ip)
                     _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
                     self.displayed = True
                     self.close()
@@ -526,8 +527,9 @@ class ForceScannedDevice(DeviceDetect):
             self.v3x_brute_force_try_next_key()
         elif forced:
             self.err_found = True
-            self.message = "%s    Polling %s Failed: Unexpected close during read/write operation" % (self.options['termcolors'].alertdim, self.ip)
-            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose']) 
+            hint = " (likely v3.4 or v3.5)" if self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE else ""
+            self.message = "%s    Polling %s Failed: Unexpected close during read/write operation%s" % (self.options['termcolors'].alertdim, self.ip, hint)
+            _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
         elif self.step == FSCAN_v31_PASSIVE_LISTEN or self.step == FSCAN_v33_BRUTE_FORCE_ACQUIRE:
@@ -537,7 +539,8 @@ class ForceScannedDevice(DeviceDetect):
                 self.passive = True
         elif self.step == FSCAN_FINAL_POLL:
             if not self.message:
-                self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
+                hint = " (likely v3.4 or v3.5)" if not self.ver_found else ""
+                self.message = "%s    Polling %s Failed: No response to poll request%s" % (self.options['termcolors'].alertdim, self.ip, hint)
             _print_device_info( self.deviceinfo, 'Force-Scanned', self.options['termcolors'], self.message, self.options['verbose'])
             self.displayed = True
             self.remove = True
@@ -655,11 +658,8 @@ class ForceScannedDevice(DeviceDetect):
                     if prefix_offset > 0:
                         data = data[prefix_offset:]
                 else:
-                    prefix_offset = data.find(tinytuya.PREFIX_BIN)
-                    if prefix_offset >= 0:
-                        data = data[prefix_offset:]
-                        self.try_v35_with_v34 = False
-                    elif self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
+                    # Check for v3.5 prefix FIRST when testing both protocols
+                    if self.try_v35_with_v34 and self.deviceinfo['version'] == 3.4:
                         prefix_offset = data.find(tinytuya.PREFIX_6699_BIN)
                         if prefix_offset >= 0:
                             if self.debug:
@@ -669,6 +669,12 @@ class ForceScannedDevice(DeviceDetect):
                             self.deviceinfo['version'] = 3.5
                             self.device.set_version(3.5)
                             self.ver_found = True
+                    # Fall back to v3.4 prefix if v3.5 not found
+                    if self.deviceinfo['version'] != 3.5:
+                        prefix_offset = data.find(tinytuya.PREFIX_BIN)
+                        if prefix_offset >= 0:
+                            data = data[prefix_offset:]
+                            self.try_v35_with_v34 = False
                 hmac_key = self.device.local_key if self.deviceinfo['version'] >= 3.4 else None
                 msg = tinytuya.unpack_message(data, hmac_key=hmac_key)
             except:
@@ -1115,8 +1121,8 @@ def _print_device_info( result, note, term, extra_message=None, verbose=True ):
 
 # Scan function
 def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
-            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=[], 
-            maxdevices=0): # pylint: disable=W0621, W0102
+            discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=None,
+            maxdevices=0): # pylint: disable=W0621
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1149,6 +1155,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             dps = devices[ip]['dps']
 
     """
+    tuyadevices = [] if tuyadevices is None else tuyadevices
+
     # Terminal formatting
     color = color and HAVE_COLOR
     termcolors = tinytuya.termcolor(color)
@@ -1165,15 +1173,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     havekeys = False
     if not tuyadevices:
         # Check to see if we have additional Device info
-        try:
-            # Load defaults
-            with open(DEVICEFILE) as f:
-                tuyadevices = json.load(f)
-                havekeys = True
-                log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-        except:
-            # No Device info
-            pass
+        tuyadevices = tinytuya.load_devicefile(DEVICEFILE)
+        if tuyadevices:
+            havekeys = True
 
     if forcescan and len(tuyadevices) == 0:
         if discover:
@@ -1255,6 +1257,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     connect_next_round = []
     ip_wantips = bool(wantips)
     ip_wantids = bool(wantids)
+    can_end_early = ip_wantips or ip_wantids
     ip_force_wants_end = False
     ip_scan = False
     ip_scan_running = False
@@ -1783,14 +1786,15 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if scanned_devices[ip].found and dkey not in devices:
             devices[dkey] = dev
 
-    if verbose:
+    if verbose and not can_end_early:
         # Save polling data into snapshot format
         devicesarray = list(devices.values())
         # Add devices from devices.json even if they didn't poll
         for item in tuyadevices:
             k = item["id"]
             if not any(d['gwId'] == k for d in devicesarray):
-                tmp = item
+                # operate on a shallow copy so we do not mutate the caller's dict
+                tmp = dict(item)
                 tmp["gwId"] = item["id"]
                 tmp["ip"] = ''
                 tmp['origin'] = 'cloud'
@@ -1827,8 +1831,8 @@ def _display_status( item, dps, term ):
         name = item['gwId']
     ip = item['ip']
     if not ip:
-        print("    %s[%-25.25s] %sError: No IP found%s" %
-              (term.subbold, name, term.alert, term.normal))
+        print("    %s[%-25.25s] %sNo IP found - Battery-powered or offline%s" %
+              (term.subbold, name, term.alertdim, term.normal))
     elif not dps:
         print("    %s[%-25.25s] %s%-18s - %sNo Response" %
               (term.subbold, name, term.dim, ip, term.alert))
@@ -2008,13 +2012,9 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
         % (term.bold, term.normal, term.dim, tinytuya.__version__)
     )
     # Check to see if we have additional Device info
-    try:
-        # Load defaults
-        with open(DEVICEFILE) as f:
-            tuyadevices = json.load(f)
-            log.debug("loaded=%s [%d devices]", DEVICEFILE, len(tuyadevices))
-    except:
-        print("%s ERROR: Missing %s file\n" % (term.alert, DEVICEFILE))
+    tuyadevices = tinytuya.load_devicefile(DEVICEFILE)
+    if not tuyadevices:
+        print("%s ERROR: Missing or empty %s file\n" % (term.alert, DEVICEFILE))
         return
 
     print("%sLoaded %s - %d devices:" % (term.dim, DEVICEFILE, len(tuyadevices)))

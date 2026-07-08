@@ -10,6 +10,7 @@ from hashlib import sha256
 
 from .crypto_helper import AESCipher
 from .exceptions import DecodeError
+from .const import MAX_PAYLOAD_LENGTH
 from . import header as H
 
 log = logging.getLogger(__name__)
@@ -91,9 +92,9 @@ def parse_header(data):
         #log.debug('Header prefix wrong! %08X != %08X', prefix, PREFIX_VALUE)
         raise DecodeError('Header prefix wrong! %08X is not %08X or %08X' % (prefix, H.PREFIX_55AA_VALUE, H.PREFIX_6699_VALUE))
 
-    # sanity check. currently the max payload length is somewhere around 300 bytes
-    if payload_len > 1000:
-        raise DecodeError('Header claims the packet size is over 1000 bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (payload_len,fmt,unpacked))
+    # sanity check to catch a corrupt/desynced stream (see MAX_PAYLOAD_LENGTH)
+    if payload_len > MAX_PAYLOAD_LENGTH:
+        raise DecodeError('Header claims the packet size is over %d bytes!  It is most likely corrupt.  Claimed size: %d bytes. fmt:%s unpacked:%r' % (MAX_PAYLOAD_LENGTH,payload_len,fmt,unpacked))
 
     return TuyaHeader(prefix, seqno, cmd, payload_len, total_length)
 
@@ -124,6 +125,10 @@ def unpack_message(data, hmac_key=None, header=None, no_retcode=False):
         raise DecodeError('Not enough data to unpack payload')
 
     end_len = struct.calcsize(end_fmt)
+    # a truncated/corrupt frame can declare a length smaller than retcode+crc+suffix;
+    # bail out cleanly instead of letting struct.unpack() raise a raw struct.error
+    if header.length < (retcode_len + end_len) or (msg_len - (header_len + retcode_len)) < end_len:
+        raise DecodeError('Not enough data to unpack payload')
     # the retcode is technically part of the payload, but strip it as we do not want it here
     retcode = 0 if not retcode_len else struct.unpack(H.MESSAGE_RETCODE_FMT, data[header_len:header_len+retcode_len])[0]
     payload = data[header_len+retcode_len:msg_len]

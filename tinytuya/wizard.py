@@ -110,12 +110,9 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
             if not config[k]:
                 needconfigs = True
 
-    try:
-        # Load the old device list, if available
-        with open(DEVICEFILE, "r") as infile:
-            old_devices = json.load( infile )
-    except:
-        old_devices = {}
+    old_devices = tinytuya.load_devicefile(DEVICEFILE)
+    if not old_devices:
+        old_devices = []
 
     color = color and HAVE_COLOR
     (bold, subbold, normal, dim, alert, alertdim, cyan, red, yellow) = tinytuya.termcolor(color)
@@ -186,6 +183,9 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
         if cloud.error:
             err = cloud.error['Payload'] if 'Payload' in cloud.error else 'Unknown Error'
             print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+            if 'permission' in str(err).lower() or '1010' in str(err):
+                print(bold + 'Hint: ' + dim + 'This may indicate your Tuya IoT subscription has expired.')
+                print('      Visit https://iot.tuya.com to check and renew your IoT Core service.')
             print('Check API Key and Secret')
             return
 
@@ -202,6 +202,9 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
         if type(tuyadevices) != list:
             err = tuyadevices['Payload'] if 'Payload' in tuyadevices else 'Unknown Error'
             print('\n\n' + bold + 'Error from Tuya server: ' + dim + err)
+            if 'permission' in str(err).lower() or '1010' in str(err):
+                print(bold + 'Hint: ' + dim + 'This may indicate your Tuya IoT subscription has expired.')
+                print('      Visit https://iot.tuya.com to check and renew your IoT Core service.')
             print('Check DeviceID and Region')
             return
 

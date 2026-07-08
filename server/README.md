@@ -113,6 +113,11 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### p16 - Device File and Error Handling
+
+* Use centralized `tinytuya.load_devicefile()` to load `devices.json`, supporting both flat list and `{"devices": [...]}` wrapper formats. Fixes issue #532.
+* Add `isRegistered()` and `deviceError()` helpers to distinguish "Device offline" from "Device ID not found" in API error responses.
+
 ### p15 - Cross-Platform Memory Stats
 
 * Switched to using the `psutil` library for memory usage stats, making server.py fully cross-platform (Windows, macOS, Linux). Fixes issue #634.

@@ -32,12 +32,10 @@ def tuyaLookup(deviceid):
     return ("", "")
 
 # Read Devices.json 
-try:
-    # Load defaults
-    with open(DEVICEFILE) as f:
-        tuyadevices = json.load(f)
-        havekeys = True
-except:
+tuyadevices = tinytuya.load_devicefile(DEVICEFILE)
+if tuyadevices:
+    havekeys = True
+else:
     # No Device info
     print(alert + "\nNo devices.json file found." + normal)
     exit()

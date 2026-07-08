@@ -23,7 +23,7 @@ TinyTuya can also connect to the Tuya Cloud to poll status and issue commands to
 # Example Usage of TinyTuya
 import tinytuya
 
-d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 data = d.status() 
 print('Device status: %r' % data)
 ```
@@ -101,7 +101,7 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
     * **RENEWAL:** The subscription to the `IoT Core` service expires after some time. By default, when you subscribe to it for the first time, it will last for one month. Once expired, the setup wizard won't be able to communicate with the Tuya account anymore, so it needs to be renewed. As of November 12th 2024, it can be renewed for a duration of 1, 3 or 6 months by simply filling in a form with some basic information (e.g. purpose of the project, type of developer).
 
-5. WIZARD - Run Setup Wizard:
+4. WIZARD - Run Setup Wizard:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
       ```bash
       python -m tinytuya wizard   # use -nocolor for non-ANSI-color terminals
@@ -131,7 +131,7 @@ d = tinytuya.OutletDevice(
     dev_id='DEVICE_ID_HERE',
     address='IP_ADDRESS_HERE',      # Or set to 'Auto' to auto-discover IP address
     local_key='LOCAL_KEY_HERE', 
-    version=3.3)
+    version=3.3)                    # Set to your device's actual version (3.1, 3.2, 3.3, 3.4, or 3.5)
 
 # Get Status
 data = d.status() 
@@ -178,7 +178,7 @@ Classes
 TinyTuya Base Functions
     devices = deviceScan()                        # Returns dictionary of devices found on local network
     scan()                                        # Interactive scan of local network
-    wizard()                                      # Interactive setup wizard
+    wizard                                        # Interactive setup wizard (run via: python -m tinytuya wizard)
     set_debug(toggle, color)                      # Activate verbose debugging output
     pack_message(msg, hmac_key)                   # Packs a TuyaMessage(), encrypting or adding a CRC if required 
     unpack_message(data, hmac_key, header, 
@@ -192,7 +192,7 @@ TinyTuya Base Functions
  Device Functions (All Devices)
     json = status()                               # returns json payload
     subdev_query(nowait)                          # query sub-device status (only for gateway devices)
-    set_version(version)                          # 3.1 [default], 3.2, 3.3 or 3.4
+    set_version(version)                          # 3.1 [default], 3.2, 3.3, 3.4 or 3.5
     set_socketPersistent(False/True)              # False [default] or True
     set_socketNODELAY(False/True)                 # False or True [default]
     set_socketRetryLimit(integer)                 # retry count limit [default 5]
@@ -200,7 +200,7 @@ TinyTuya Base Functions
     set_socketTimeout(timeout)                    # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)                   # add data points (DPS) to request
     add_dps_to_request(index)                     # add data point (DPS) index set to None
-    set_retry(retry=True)                         # retry if response payload is truncated
+    set_retry(retry)                              # retry if response payload is truncated
     set_status(on, switch=1, nowait)              # Set status of switch to 'on' or 'off' (bool)
     set_value(index, value, nowait)               # Set int value of any index.
     set_multiple_values(index_value_dict, nowait) # Set multiple values with a single request
@@ -208,7 +208,7 @@ TinyTuya Base Functions
     updatedps(index=[1], nowait)                  # Send updatedps command to device
     turn_on(switch=1, nowait)                     # Turn on device / switch #
     turn_off(switch=1, nowait)                    # Turn off
-    set_timer(num_secs, nowait)                   # Set timer for num_secs
+    set_timer(num_secs, dps_id=0, nowait)         # Set timer for num_secs on DPS dps_id (0=detect)
     set_sendWait(num_secs)                        # Time to wait after sending commands before pulling response
     detect_available_dps()                        # Return list of DPS available from device
     generate_payload(command, data,...            # Generate TuyaMessage payload for command with data
@@ -227,7 +227,7 @@ BulbDevice Additional Functions
     set_brightness_percentage(brightness=100, nowait):
     set_colourtemp(colourtemp, nowait):
     set_colourtemp_percentage(colourtemp=100, nowait):
-    set_scene(scene, nowait):                     # 1=nature, 3=rave, 4=rainbow
+    set_scene(scene, scene_data=None, nowait):    # 1=nature, 3=rave, 4=rainbow
     set_mode(mode='white', nowait):               # white, colour, scene, music
     result = brightness():
     result = colourtemp():
@@ -236,9 +236,25 @@ BulbDevice Additional Functions
     result = state():
 
 CoverDevice Additional Functions
-    open_cover(switch=1):
-    close_cover(switch=1):
-    stop_cover(switch=1):
+    open_cover(switch=None, nowait=False):
+    close_cover(switch=None, nowait=False):
+    stop_cover(switch=None, nowait=False):
+    continue_cover(switch=None, nowait=False):
+    set_cover_type(cover_type):                  # Manually set cover type (1-8)
+    
+    CoverDevice automatically detects one of 8 device types by checking status:
+      Type 1: ["open", "close", "stop", "continue"] - Most curtains, blinds, roller shades (DEFAULT)
+      Type 2: [true, false]                         - Simple relays, garage doors, locks
+      Type 3: ["0", "1", "2"]                       - String-numeric position/state
+      Type 4: ["00", "01", "02", "03"]              - Zero-prefixed numeric position/state
+      Type 5: ["fopen", "fclose"]                   - Directional binary (no stop)
+      Type 6: ["on", "off", "stop"]                 - Switch-lexicon open/close
+      Type 7: ["up", "down", "stop"]                - Vertical-motion (lifts, hoists)
+      Type 8: ["ZZ", "FZ", "STOP"]                  - Vendor-specific (Abalon-style, older standard)
+    
+    Detection uses priority ordering based on real-world frequency (Type 1 → Type 8 → Type 3 → others).
+    Defaults to Type 1 if detection fails. Manual override: set_cover_type(type_id).
+    Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain).
 
 Cloud Functions
     setregion(apiRegion)
@@ -250,7 +266,7 @@ Cloud Functions
     getdps(deviceid)
     sendcommand(deviceid, commands [, uri])
     getconnectstatus(deviceid)
-    getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=100, params={})
+    getdevicelog(deviceid, start=[now - 1 day], end=[now], evtype="1,2,3,4,5,6,7,8,9,10", size=0 [all], max_fetches=50, params={})
       -> when start or end are negative, they are the number of days before "right now"
           i.e. "start=-1" is 1 day ago, "start=-7" is 7 days ago
           
@@ -292,7 +308,7 @@ import tinytuya
 """
 OUTLET Device
 """
-d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)
+d = tinytuya.Device('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE', version=3.3)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 data = d.status()  
 
 # Show status and state of first controlled switch on device
@@ -309,7 +325,6 @@ if data:
 data = d.set_status(False, 4)
 if data:
     print('set_status() result %r' % data)
-    print('set_status() extra %r' % data[20:-8])
 
 """
 RGB Bulb Device
@@ -317,7 +332,7 @@ RGB Bulb Device
 import time
 
 d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
-d.set_version(3.3)  # IMPORTANT to set this regardless of version
+d.set_version(3.3)  # IMPORTANT: Set the correct version for your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 d.set_socketPersistent(True)  # Optional: Keep socket open for multiple commands
 data = d.status()
 
@@ -349,6 +364,34 @@ d.set_mode('scene')
 # Scene Example: Set Color Rotation Scene
 d.set_value(25, '07464602000003e803e800000000464602007803e803e80000000046460200f003e803e800000000464602003d03e803e80000000046460200ae03e803e800000000464602011303e803e800000000')
 
+"""
+Cover Device (Window Shade)
+"""
+c = tinytuya.CoverDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', 'LOCAL_KEY_HERE')
+c.set_version(3.3)  # Set correct version for your device (3.1 through 3.5)
+data = c.status()
+
+# Show status
+print('Dictionary %r' % data)
+
+# CoverDevice will automatically detect the device type (1-8)
+# and use the appropriate commands
+
+# Open the cover
+c.open_cover()
+
+# Close the cover  
+c.close_cover()
+
+# Stop the cover
+c.stop_cover()
+
+# Continue cover motion (if supported by device type)
+c.continue_cover()
+
+# Manually set cover type if auto-detection doesn't work
+c.set_cover_type(1)   # Force Type 1 (open/close/stop/continue)
+
 ```
 ### Example Device Monitor
 
@@ -357,7 +400,7 @@ You can set up a persistent connection to a device and then monitor the state ch
 ```python
 import tinytuya
 
-d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)
+d = tinytuya.OutletDevice('DEVICEID', 'DEVICEIP', 'DEVICEKEY', version=3.3, persist=True)  # Set version to match your device (3.1, 3.2, 3.3, 3.4, or 3.5)
 
 print(" > Send Request for Status < ")
 d.status(nowait=True)
@@ -371,7 +414,7 @@ while(True):
     # Send keep-alive heartbeat
     if not data:
         print(" > Send Heartbeat Ping < ")
-    	d.heartbeat()
+        d.heartbeat()
 
     # NOTE If you are not seeing updates, you can force them - uncomment:
     # print(" > Send Request for Status < ")
@@ -383,6 +426,80 @@ while(True):
     # d.send(payload)    
 
 ```
+
+### Multi-Device Monitor (Monitor Class) - ⚠️ Experimental
+
+The `Monitor` class provides efficient, single-thread monitoring of multiple Tuya devices using OS-level selectors (`epoll`/`poll`/`select`). No asyncio, no per-device threads, no extra dependencies. It's ideal for home automation dashboards, data loggers, or any application that needs to watch many devices simultaneously.
+
+**Key features:**
+* Single OS thread handles all device I/O via `selectors`
+* Real-time status updates through callbacks (`on_status`, `on_connect`, `on_disconnect`)
+* Thread-safe command dispatch — send commands from anywhere via proxy handles
+* Built-in heartbeat management per device
+* Automatic reconnection on disconnect (`auto_reconnect=True`)
+* Optional manual poll mode for integration into existing event loops
+
+```python
+import tinytuya
+
+def on_status(device, result):
+    dps = result.get("dps", {}) if result else {}
+    name = getattr(device, "name", device.id)
+    print(f"[STATUS] {name}: {dps}")
+
+def on_connect(device, error):
+    if error:
+        print(f"[CONNECT FAIL] {device.id}: {error}")
+    else:
+        print(f"[CONNECTED] {device.id}")
+
+def on_disconnect(device, error):
+    print(f"[DISCONNECTED] {device.id}: {error}")
+
+# Create the monitor with callbacks
+mon = tinytuya.Monitor(
+    on_status=on_status,
+    on_connect=on_connect,
+    on_disconnect=on_disconnect,
+    heartbeat_interval=12,
+    auto_reconnect=True,   # automatically reconnect on disconnect
+)
+
+# Register devices — add() connects and returns a proxy handle
+handles = []
+for cfg in devices:
+    d = tinytuya.OutletDevice(cfg["id"], cfg["ip"], cfg["key"],
+                              version=3.3, persist=True)
+    handle = mon.add(d)
+    handles.append(handle)
+
+# Start the reactor on a background daemon thread
+mon.start()
+
+# Send commands via the proxy handle (thread-safe)
+handles[0].set_value(1, True)    # turn on first device
+
+# ... later
+mon.stop()
+```
+
+**The `on_disconnect` callback** is opt-in — if you don't pass it, disconnects are logged silently. When provided, you receive the device object and error string, allowing you to implement custom reconnection logic, alerts, or cleanup:
+
+```python
+# Example: reconnect on disconnect
+def on_disconnect(device, error):
+    print(f"{device.id} went away: {error}")
+    # Reconnect by re-adding the device
+    time.sleep(5)
+    mon.add(device)
+
+mon = tinytuya.Monitor(
+    on_status=on_status,
+    on_disconnect=on_disconnect,
+)
+```
+
+See `examples/monitor_example.py` for a complete working example, and `examples/monitor_poll_example.py` for manual poll mode (no background thread).
 
 ### Tuya Cloud Access
 
@@ -449,7 +566,7 @@ Tuya devices use AES encryption which is not available in the Python standard li
 
 ### Command Line
 
-TinyTuya provides a built-in command line interface to get Local key, scan and poll devices.
+TinyTuya provides a built-in command line interface to get Local key, scan, poll, list and control devices.
 
 Installation
 
@@ -466,11 +583,24 @@ Command Line Usage
 ```
 tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE] [-snapshot-file FILE]
 
-  wizard         Launch Setup Wizard to get Tuya Local KEYs.
+  Setup & Discovery
+  wizard         Launch Setup Wizard to get Tuya Local Keys from Tuya Cloud.
   scan           Scan local network for Tuya devices.
   devices        Scan all devices listed in devices.json file.
   snapshot       Scan devices listed in snapshot.json file.
-  json           Scan devices listed in snapshot.json file [JSON].
+  json           Scan devices listed in snapshot.json file [JSON output].
+  list           List devices from devices.json as a table (or --json).
+
+  Device Control  (require --id or --name)
+  on             Turn on a device switch.
+  off            Turn off a device switch.
+  set            Set a DPS value on a device.
+  get            Read a DPS value (or full status) from a device.
+  monitor        Connect to a device and monitor for live status updates.
+
+  Info
+  version        Display the TinyTuya version.
+  help           Show detailed help and usage examples.
 
   Wizard
       tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
@@ -515,10 +645,73 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
   JSON
       tinytuya json [-h] [-debug] [-device-file FILE] [-snapshot-file FILE]
 
+  List
+      tinytuya list [-h] [-debug] [--json] [-device-file FILE]
+
+        --json               Output as a JSON array instead of a table
+        -device-file FILE    JSON file to load devices from [Default: devices.json]
+
+  Device Control Options (on / off / set / get / monitor)
+      --id and --name are mutually exclusive; one is required.
+      --key, --ip, and --version are loaded automatically from devices.json if found.
+      If --key is omitted and not in devices.json, the CLI will prompt for it interactively
+      (input is hidden, avoiding shell-escaping issues with special characters like $, #, =).
+      Tuya local keys are always exactly 16 characters — a wrong length usually means a
+      shell-escaping problem (try wrapping with single quotes or omitting --key entirely).
+
+  On / Off
+      tinytuya on  [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+      tinytuya off [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              Switch DPS index [Default: 1]
+        --id ID              Device ID (mutually exclusive with --name)
+        --name NAME          Device name – looked up in device-file (mutually exclusive with --id)
+        --key KEY            Device local encryption key (prompted if omitted and not in device-file)
+        --ip IP              Device IP address (auto-discovered if omitted or set to "Auto")
+        --version VER        Tuya protocol version (auto-discovered if omitted, defaults to 3.3)
+        -device-file FILE    JSON file to load devices from [Default: devices.json]
+
+  Set
+      tinytuya set [-h] [-debug] --dps N --value VALUE (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              DPS index to write (required)
+        --value VALUE        Value to set – parsed as JSON if possible (true, false, 123, "text"),
+                             otherwise sent as a plain string
+
+  Get
+      tinytuya get [-h] [-debug] [--dps N] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        --dps N              DPS index to read; omit to return full device status JSON
+
+        Output:
+          No --dps  →  full status JSON, e.g. {"dps": {"1": true, "2": 500}}
+          --dps N   →  plain scalar value only, e.g. true
+
+  Monitor
+      tinytuya monitor [-h] [-debug] (--id ID | --name NAME) [--key KEY] [--ip IP] [--version VER] [-device-file FILE]
+
+        Connects to the device, prints the initial status, then enters a persistent
+        loop that listens for asynchronous updates, sends a heartbeat every 12 seconds,
+        and polls for a full status refresh every 30 seconds. Press Ctrl-C to exit.
+
+        Example:
+          tinytuya monitor --name "Kitchen Light"
+          tinytuya monitor --id $DEVICE_ID --key $KEY --ip 192.168.1.50
+
+  Version
+      tinytuya version
+
+        Prints the installed TinyTuya version, e.g.:  TinyTuya version: 1.19.0
+
+  Help
+      tinytuya help
+
+        Prints a detailed usage summary with examples for all commands.
+
 ```
 
 ### Scan Tool 
-The function `tinytuya.scan()` will listen to your local network (UDP 6666 and 6667) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
+The function `tinytuya.scan()` will listen to your local network (UDP 6666, 6667 and 7000) and identify Tuya devices broadcasting their Address, Device ID, Product ID and Version and will print that and their stats to stdout.  This can help you get a list of compatible devices on your network. The `tinytuya.deviceScan()` function returns all found devices and their stats (via dictionary result).
 
 You can run the scanner from the command line using these interactive commands:
   ```bash
@@ -535,9 +728,23 @@ You can run the scanner from the command line using these interactive commands:
   # List all register devices discovered from Wizard and poll them
   python -m tinytuya devices
 
+  # List devices from devices.json as a table
+  python -m tinytuya list
+
+  # Control devices by name or ID (key and IP are loaded from devices.json)
+  python -m tinytuya on  --name "Kitchen Light"
+  python -m tinytuya off --name "Kitchen Light"
+  python -m tinytuya set --name "Fan" --dps 3 --value 50
+  python -m tinytuya get --name "Sensor"
+
+  # Monitor a device for live async updates (Ctrl-C to exit)
+  python -m tinytuya monitor --name "Kitchen Light"
+
+  # Display version
+  python -m tinytuya version
   ```
 
-By default, the scan functions will retry 15 times to find new devices. If you are not seeing all your devices, you can increase max_retries by passing an optional arguments (eg. 50 retries):
+By default, the scan functions will listen for about 18 seconds to find new devices. If you are not seeing all your devices, you can increase the scan time by passing an optional number of seconds (eg. 50 seconds):
 
   ```bash
   # command line
@@ -549,19 +756,21 @@ By default, the scan functions will retry 15 times to find new devices. If you a
   tinytuya.scan(50)
 
   # return payload of devices
-  devices = tinytuya.deviceScan(false, 50)
+  devices = tinytuya.deviceScan(False, 50)
   ```
 
 ## Troubleshooting
 
 * Tuya devices only allow one TCP connection at a time.  Make sure you close the TuyaSmart or SmartLife app before using *TinyTuya* to connect.
+* **Battery-powered devices** (sensors, door/window contacts, etc.) are asleep most of the time and do not maintain a local network connection. They will not appear in scans and cannot be controlled locally — they only push data to the cloud when triggered. This is expected behaviour, not a TinyTuya bug.
+* **Polling too aggressively can cause devices to drop or reset their connection.** Avoid polling faster than once per second for most devices. For energy-monitoring plugs and other data-heavy devices, a 5–10 second interval is safer. Use `set_socketPersistent(True)` with a heartbeat loop rather than opening a new connection on every poll.
 * Some devices ship with older firmware that may not work with *TinyTuya*. If you're experiencing issues, please try updating the device's firmware in the official app.
 * The LOCAL KEY for Tuya devices will change every time a device is removed and re-added to the TuyaSmart app. If you're getting decrypt errors, try getting the key again as it might have changed. 
 * Devices running protocol version 3.1 (e.g. below Firmware 1.0.5) do not require a device *Local_Key* to read the status. All devices will require a device *Local_Key* to control the device.
 * Some devices with 22 character IDs will require additional setting to poll correctly. TinyTuya will attempt to detect and accomodate for this, but it can be specified directly:
   ```python
   a = tinytuya.OutletDevice('here_is_my_key', '192.168.x.x', 'secret_key_here', 'device22')
-  a.set_version(3.3)
+  a.set_version(3.3)  # Replace 3.3 with your device's actual version
   a.set_dpsUsed({"1": None})  # This needs to be a datapoint available on the device
   data =  a.status()
   print(data)
@@ -836,7 +1045,8 @@ Example device: https://www.aliexpress.com/item/1005005034880204.html
 | 111  | Error log | byte str |||
 | 112  | Work log | byte str |||
 | 113  | Partition parameters | byte str |||
-| 114  | Work mode | enum | AutoMode/?? ||                                                                                                                           | 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li><ul> ||
+| 114  | Work mode | enum | AutoMode/?? ||
+| 115  | Machine control CMD | enum | <ul><li>StartMowing</li><li>StartFixedMowing</li><li>PauseWork</li><li>CancelWork</li><li>StartReturnStation</li></ul> ||
 
 Reference [pymoebot](https://github.com/Whytey/pymoebot) for further definition.
 
@@ -924,7 +1134,8 @@ Note: (A) or (B) means channel A or channel B
 
 A user contributed module is available for this device in the [Contrib library](https://github.com/jasonacox/tinytuya/tree/master/tinytuya/Contrib):
 
-```python                                                                                                                                                                                                         from tinytuya.Contrib import WiFiDualMeterDevice
+```python
+from tinytuya.Contrib import WiFiDualMeterDevice
 
 wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
     dev_id='abcdefghijklmnop123456',
@@ -956,6 +1167,7 @@ wdm = WiFiDualMeterDevice.WiFiDualMeterDevice(
   * https://github.com/Marcus-L/m4rcus.TuyaCore - .NET
   * https://github.com/SDNick484/rectec_status/ - RecTec pellet smokers control (with Alexa skill)
   * https://github.com/TradeFace/tuyaface - Python Async Tuya API
+  * https://github.com/sjhorn/tinytuya - Dart Flutter port of TinyTuya based on this code base
 
 ## TinyTuya Powered Projects
 

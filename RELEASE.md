@@ -2,27 +2,123 @@
 
 ## v2.0.0 - Async Architecture Introduction (BREAKING MAJOR VERSION)
 
-This major release introduces the foundation for native asyncio-based device communication while fully preserving the existing synchronous API for backward compatibility.
+This major release introduces native asyncio-based device communication while fully preserving the existing synchronous API for backward compatibility.
 
 Highlights:
-* Version bump to 2.x to signal new async subsystem (legacy sync classes unchanged).
-* Planning document `ASYNC.md` added (vision, goals, milestones for XenonDeviceAsync & related classes).
-* No behavioral changes to existing synchronous code paths in this initial 2.0.0 tag.
-* Future minor releases (2.1.x+) will add new async classes and examples without removing sync support.
-
-Compatibility:
-* Existing imports and synchronous usage continue to work (API surface of 1.x retained).
-* New async classes will live alongside current modules (no name collisions) and require explicit opt‑in.
+* Version bump to 2.x to signal the new async subsystem (legacy sync classes unchanged).
+* New `DeviceAsync` class (`tinytuya/core/DeviceAsync.py`) — asyncio-native device communication (persistent connections, session-key negotiation, heartbeats, callbacks).
+* New async scanner (`tinytuya/scanner_async.py`).
+* Planning document `ASYNC.md` (vision, goals, milestones).
+* New pytest-based async test infrastructure (`tests/`, `pytest.ini`, `.coveragerc`, `codecov.yml`) and live-device test harness (`test-devices.py`).
 * Officially removed Python 2.7 support.
 
+Compatibility:
+* Existing imports and synchronous usage continue to work (API surface of 1.x retained, including all v1.20.0 fixes below).
+* Async classes live alongside current modules (no name collisions) and require explicit opt-in.
+
 Migration Guidance:
-* You can adopt async incrementally—no action required if you stay with sync API.
-* When async classes land, prefer `await device.status_async()` patterns in event loops for concurrency gains.
+* You can adopt async incrementally - no action required if you stay with the sync API.
+* In event loops, prefer `async with` / `await device.status()` patterns for concurrency gains.
 
 See `ASYNC.md` for roadmap details.
 
+## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
-## 1.17.4 - Cloud Config
+Release rollup. The **Monitor reliability** changes below ship in this PR; the
+**session crypto hardening** and **bug-fix** bullets come from their own PRs and
+are listed here so the release changelog is complete.
+
+### Monitor (experimental) reliability
+* **Monitor now owns reconnection.** Monitored devices are forced to fail fast on send errors (`socketRetryLimit = 0`) so a broken connection can no longer (a) block the single reactor thread inside the device's own retry/connect loop for tens of seconds, stalling every other monitored device, or (b) silently open a replacement socket the selector never watches — which previously caused a device to stop delivering updates with no disconnect ever reported (Linux/epoll) or spin in an error-log loop (Windows/select). See [#713](https://github.com/jasonacox/tinytuya/issues/713).
+* Heartbeat and queued-command send failures are now detected (vanished socket) and routed through the disconnect → auto-reconnect path.
+* Command dispatch is gated on selector registration state rather than `device.socket`, closing a race where a queued command could be sent on a socket the connector thread was still mid-handshake on.
+* The auto-reconnect connector thread uses an interruptible wait for its backoff, so `stop()` returns promptly instead of blocking up to `reconnect_backoff` seconds, and can no longer let a duplicate connector thread start.
+* Devices are unregistered from the selector by their stored fd (not the possibly-closed socket), and the command proxy only injects `nowait=True` for methods that accept it. Retry limits are restored when a device is removed or the Monitor is stopped.
+* Added the first offline unit tests for `Monitor` (fail-fast retry ownership, disconnect detection, command gating, proxy `nowait` handling).
+* **Note:** marshalling `add()`/`remove()` selector mutations onto the reactor thread remains a known follow-up for the [#713](https://github.com/jasonacox/tinytuya/issues/713) refactor.
+
+### Session crypto hardening (see security PR)
+* AES-GCM message nonces and the v3.4/v3.5 session-key client nonce now use `os.urandom` instead of a time-derived/constant value, eliminating nonce/IV reuse under a session key. Wire-compatible.
+* 6699/GCM frames that fail their authentication tag are rejected instead of being passed on as raw ciphertext.
+
+### Bug fixes (see bug-fix PR)
+* Cloud token-refresh retry preserves the query string; Cloud helpers return error dicts instead of raising on failed/empty responses.
+* `set_timer()` selects the timer DP numerically; timeout errors report `ERR_TIMEOUT`; `received_wrong_cid_queue` is bounded; truncated frames raise `DecodeError`; `error_json()` handles unknown codes; `BulbDevice` rgb8 hue offset fixed; scanner no longer mutates caller dicts; and more.
+
+## v1.19.0 - Monitor Class, IPv6, and Community Fixes
+
+* **New Feature: `Monitor` class** — Single-thread, multi-device status monitoring using `selectors` (`select`/`poll`/`epoll`). Watch any number of Tuya devices on one OS thread with callback-driven updates (`on_status`, `on_connect`, `on_disconnect`), automatic heartbeats, gateway/cid routing, thread-safe command queue, and optional `auto_reconnect`. No `asyncio`, no per-device threads, no new dependencies. See `examples/monitor_example.py` and `examples/monitor_poll_example.py`. Implements the [proposal by @3735943886](https://github.com/jasonacox/tinytuya/pull/649#issuecomment-4628381086) via [#712](https://github.com/jasonacox/tinytuya/pull/712) by @jasonacox-sam. **Note:** `Monitor` is an experimental class. See [#713](https://github.com/jasonacox/tinytuya/issues/713) for feedback and future refactoring plans.
+* **IPv6/NAT64 support**: Device connection addresses now support IPv6 and NAT64 translations. Fixes connection failures on IPv6-only or dual-stack networks via [#718](https://github.com/jasonacox/tinytuya/pull/718) by @Kasoo.
+* **Cloud API fix**: `PUT` and `DELETE` requests now use the correct HTTP method instead of being sent as `POST`. Fixes Cloud API calls that silently failed on certain endpoints via [#717](https://github.com/jasonacox/tinytuya/pull/717) by @vladulus.
+* **BulbDevice fix**: `set_brightness_percentage()` and `set_colourtemp_percentage()` now call `detect_bulb()` before reading `value_max`, preventing `AttributeError` on newly created `BulbDevice` instances. Adds regression test via [#714](https://github.com/jasonacox/tinytuya/pull/714) by @jasonacox-sam.
+* **API server**: Updated `server.py` with improvements via [#715](https://github.com/jasonacox/tinytuya/pull/715) by @mkerni.
+* **Contrib: FloorFanDevice**: New device class for Comfort Zone floor standing tower fan (CZTF423S) via [#711](https://github.com/jasonacox/tinytuya/pull/711) by @cmoates.
+* **Contrib**: Updated `testcontrib.py` and `Contrib/README.md` to use the preferred import pattern.
+
+## v1.18.1 - IR Learn Frame Fix
+
+* core: Added `MAX_PAYLOAD_LENGTH` constant (default 1440 bytes) in `tinytuya/core/const.py` to replace the hardcoded 1000-byte ceiling in `parse_header()`. Enables local IR learn frame capture from devices with larger payloads such as AC IR blasters. Fixes [#708](https://github.com/jasonacox/tinytuya/issues/708) via [#709](https://github.com/jasonacox/tinytuya/pull/709) by @ostjen.
+
+## v1.18.0 - Format Handling and UX Improvements
+
+* `devices.json` format: All loading paths (library, CLI, scanner, wizard, API server) now support both a flat `[{...}]` list and the `{"devices": [{...}]}` wrapped-dict format via a new centralized `load_devicefile()` helper. Fixes [#532](https://github.com/jasonacox/tinytuya/issues/532) via [#700](https://github.com/jasonacox/tinytuya/pull/700) by @uzlonewolf and @jasonacox.
+* API server: Added `isRegistered()` / `deviceError()` helpers to distinguish "Device offline" from "Device ID not found" in error responses.
+* Cloud: Preserve device mappings on transient Cloud API failure in `getdevices()` so a temporary outage no longer wipes the local device map by @jasonacox in [#692](https://github.com/jasonacox/tinytuya/pull/692).
+* IRRemoteControlDevice: Raise `RuntimeError` on undetected `control_type` in `send_command()` instead of silently failing by @jasonacox-sam in [#698](https://github.com/jasonacox/tinytuya/pull/698).
+* Contrib: New examples for `IRRemoteControlDevice` by @uzlonewolf in [#699](https://github.com/jasonacox/tinytuya/pull/699).
+* Contrib: Revert deprecated `Contrib/__init__.py` by @uzlonewolf in [#686](https://github.com/jasonacox/tinytuya/pull/686).
+* Docs: Clarify `set_version()` example — 3.3 is not the required version by @jasonacox-sam in [#695](https://github.com/jasonacox/tinytuya/pull/695).
+* Scanner: Improved messaging for devices with no IP address — now clearly indicates the device may be battery-powered or sleeping and that local control is not supported, instead of the generic "Error: No IP found" by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* Wizard: When the Tuya Cloud API returns a "permission deny" error (or error code 1010), the wizard now prints a targeted hint suggesting the user check their IoT Core service subscription at https://iot.tuya.com by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* README: Added troubleshooting notes clarifying battery-powered device limitations and warning against aggressive polling intervals that can cause devices to drop or reset their connection.
+* CLI: Refactored device-control functions into a new `cli.py` module to keep `__main__.py` focused on argument parsing and dispatch by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI: New `monitor` command — connects to a device with a persistent socket, prints the initial status, then listens for async updates with a heartbeat every 12 s and a full status refresh every 30 s by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI: New `version` subcommand — `tinytuya version` prints the installed TinyTuya version.
+* CLI: New `help` subcommand — `tinytuya help` prints a detailed usage summary with examples for all commands. Running `tinytuya` with no arguments also shows the full help.
+* CLI (`on`, `off`, `set`, `get`, `monitor`): `--id` and `--name` are now mutually exclusive and one is **required** (previously both were optional). `--version` omitted now triggers an auto-scan instead of silently defaulting to v3.3 by @uzlonewolf in [#689](https://github.com/jasonacox/tinytuya/pull/689).
+* CLI (`on`, `off`, `set`, `get`, `monitor`): Improved handling of device local keys that contain special shell characters (`$`, `#`, `=`, `:`, `!`) - re: [#688](https://github.com/jasonacox/tinytuya/issues/688) by @jasonacox in [#689](https://github.com/jasonacox/tinytuya/pull/689):
+  * If `--key` is omitted and the key is not found in `devices.json`, the CLI now **prompts interactively** for the key. Input at a terminal prompt bypasses shell interpretation entirely, so no quoting or escaping is needed.
+  * Added **key length validation** — Tuya local keys are always exactly 16 characters. If the resolved key is the wrong length (the most common symptom of a shell-escaping problem), a clear error is printed with platform-specific quoting tips for Linux/Mac and Windows CMD.
+
+## v1.17.6 - RFRemoteControlDevice Bug Fixes
+
+* Contrib: Fix `RFRemoteControlDevice` - three bugs that each independently caused `rfstudy_send` commands to be silently ignored by the device by @kongo09 in https://github.com/jasonacox/tinytuya/pull/684:
+  * `rf_decode_button`: fix missing `()` on `base64.b64decode` call — previously always returned `None`.
+  * `send_command`: build correct `rfstudy_send` payload (`feq` as int instead of `study_feq` as string, add `mode`/`rate` fields, inject `ver` into each key dict); study/exit commands are unaffected.
+  * `rf_send_button`: do not forward `study_feq` into `feq`; `feq=0` tells the device to use the frequency embedded in the code itself.
+* Adds regression tests for all three fixes.
+
+## v1.17.5 - CLI Device Control
+
+* Extended the command line interface with new device control and listing commands.
+  * `list` – List all devices from `devices.json` as a formatted table (default) or JSON (`--json`).
+  * `on` / `off` – Turn a device switch on or off, with optional `--dps N` to target a specific switch index (default: 1).
+  * `set` – Write a value to a DPS index (`--dps N --value VALUE`).
+  * `get` – Read device status; omit `--dps` for full status JSON or supply `--dps N` to retrieve a single plain scalar value.
+* All control commands (`on`, `off`, `set`, `get`) accept `--id ID` or `--name NAME` to identify the target device. When `--name` is used, the device ID is resolved via a case-insensitive lookup in `devices.json`.
+* Missing credentials (`--key`, `--ip`, `--version`) are automatically filled in from the matching `devices.json` entry.
+* Updated `API.md` and `README.md` to document all new commands and flags.
+
+* Contrib: Add `SoriaInverterDevice`, a new community-contributed module to support SORIA solar micro-inverters by @Markourai in https://github.com/jasonacox/tinytuya/pull/680
+
+* CoverDevice: Major rewrite to support 8 different device command types with automatic detection (credit for discovery: @make-all):
+  * Type 1: `["open", "close", "stop", "continue"]` - Most curtains, blinds, roller shades (DEFAULT)
+  * Type 2: `[true, false]` - Simple relays, garage doors, locks
+  * Type 3: `["0", "1", "2"]` - String-numeric position/state
+  * Type 4: `["00", "01", "02", "03"]` - Zero-prefixed numeric position/state
+  * Type 5: `["fopen", "fclose"]` - Directional binary (no stop)
+  * Type 6: `["on", "off", "stop"]` - Switch-lexicon
+  * Type 7: `["up", "down", "stop"]` - Vertical-motion (lifts, hoists)
+  * Type 8: `["ZZ", "FZ", "STOP"]` - Vendor-specific (Abalon-style, older standard)
+* Added `continue_cover()` method for device types that support it (Types 1 and 4)
+* Added `set_cover_type(type_id)` method to manually override auto-detection
+* Added `DEFAULT_COVER_TYPE` constant set to Type 1 (most comprehensive)
+* Device type is automatically detected on first command using priority ordering based on real-world frequency:
+  * Priority: Type 1 (most common) → Type 8 (second most common, older standard) → Type 3 → others
+  * Common DPS IDs: 1 (most common), 101 (second most common), 4 (dual-curtain second curtain)
+* Defaults to Type 1 if detection fails for best compatibility
+
+## v1.17.4 - Cloud Config
 
 - Cloud: Add `configFile` option to the Cloud constructor, allowing users to specify the config file location (default remains 'tinytuya.json') by @blackw1ng in https://github.com/jasonacox/tinytuya/pull/640
 

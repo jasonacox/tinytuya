@@ -231,11 +231,13 @@ class Cloud(object):
             )
         else:
             log.debug(
-                "POST: URL=%s HEADERS=%s DATA=%s", url, headers, body,
+                "%s: URL=%s HEADERS=%s DATA=%s", action, url, headers, body,
             )
-            response = requests.post(url, headers=headers, data=body)
+            # use the actual HTTP method (the signature is already computed with it);
+            # always sending POST here breaks PUT/DELETE endpoints (e.g. device rename)
+            response = requests.request(action, url, headers=headers, data=body)
             log.debug(
-                "POST RESPONSE: code=%d text=%s token=%s", response.status_code, response.text, self.token
+                "%s RESPONSE: code=%d text=%s token=%s", action, response.status_code, response.text, self.token
             )
 
         # Check to see if token is expired
@@ -249,7 +251,7 @@ class Cloud(object):
                 log.debug("Failed to renew token")
                 return None
             else:
-                return self._tuyaplatform(uri, action, post, ver, True)
+                return self._tuyaplatform(uri, action, post, ver, True, query, content_type)
 
         try:
             response_dict = json.loads(response.content.decode())
@@ -272,9 +274,10 @@ class Cloud(object):
         response_dict = self._tuyaplatform('token?grant_type=1')
 
         if not response_dict or 'success' not in response_dict or not response_dict['success']:
+            msg = response_dict.get('msg') if response_dict else 'no response'
             self.error = error_json(
                 ERR_CLOUDTOKEN,
-                "Cloud _gettoken() failed: %r" % response_dict['msg'],
+                "Cloud _gettoken() failed: %r" % msg,
             )
             return self.error
 
@@ -299,17 +302,15 @@ class Cloud(object):
         uri = 'devices/%s' % deviceid
         response_dict = self._tuyaplatform(uri)
 
-        if not response_dict['success']:
-            if 'code' not in response_dict:
-                response_dict['code'] = -1
-            if 'msg' not in response_dict:
-                response_dict['msg'] = 'Unknown Error'
+        if not response_dict or not response_dict.get('success'):
+            code = response_dict.get('code', -1) if response_dict else -1
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
             )
             return error_json(
                 ERR_CLOUD,
-                "Error from Tuya Cloud: Code %r: %r" % (response_dict['code'], response_dict['msg'])
+                "Error from Tuya Cloud: Code %r: %r" % (code, msg)
             )
 
         uid = response_dict['result']['uid']
@@ -519,10 +520,26 @@ class Cloud(object):
                 for dev in changed_devices:
                     if 'product_id' in dev and dev['product_id'] == productid:
                         dev['mapping'] = mappings[productid]
-                # also set unchanged devices just in case the mapping changed
-                for dev in unchanged_devices:
-                    if 'product_id' in dev and dev['product_id'] == productid:
-                        dev['mapping'] = mappings[productid]
+                # also set unchanged devices just in case the mapping changed,
+                # but only if the new mapping is non-empty (guard against overwriting
+                # a good cached mapping with an empty result from a transient API failure)
+                if mappings[productid]:
+                    for dev in unchanged_devices:
+                        if 'product_id' in dev and dev['product_id'] == productid:
+                            dev['mapping'] = mappings[productid]
+
+            # Fallback: restore old mapping for changed devices that got no mapping back
+            # (API failure, rate limit, etc.) — use the mapping from oldlist if available.
+            # Only fallback when the mapping is missing or explicitly None, so that an
+            # intentionally empty mapping {} (e.g. device with no DPs, cloud code 2009)
+            # is preserved rather than replaced with a potentially stale old mapping.
+            for dev in changed_devices:
+                if 'mapping' not in dev or dev['mapping'] is None:
+                    dev_id = dev.get('id')
+                    if dev_id and dev_id in old_devices:
+                        old_mapping = old_devices[dev_id].get('mapping')
+                        if old_mapping is not None:
+                            dev['mapping'] = old_mapping
 
         log.debug( 'changed: %d', len(changed_devices) )
         log.debug( 'unchanged: %d', len(unchanged_devices) )
@@ -595,9 +612,14 @@ class Cloud(object):
         uri = 'iot-03/devices/%s/%s' % (deviceid, param)
         response_dict = self._tuyaplatform(uri)
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -633,9 +655,14 @@ class Cloud(object):
         uri = 'devices/%s/specifications' % (deviceid)
         response_dict = self._tuyaplatform(uri, ver='v1.1')
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -653,9 +680,14 @@ class Cloud(object):
         uri += '%s/commands' % (deviceid)
         response_dict = self._tuyaplatform(uri,action='POST',post=commands)
 
-        if not response_dict['success']:
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
             log.debug(
-                "Error from Tuya Cloud: %r", response_dict['msg'],
+                "Error from Tuya Cloud: %r", msg,
+            )
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
             )
         return response_dict
 
@@ -673,8 +705,13 @@ class Cloud(object):
         uri = 'devices/%s' % (deviceid)
         response_dict = self._tuyaplatform(uri, ver='v1.0')
 
-        if not response_dict['success']:
-            log.debug("Error from Tuya Cloud: %r", response_dict['msg'])
+        if not response_dict or not response_dict.get('success'):
+            msg = response_dict.get('msg', 'Unknown Error') if response_dict else 'no response'
+            log.debug("Error from Tuya Cloud: %r", msg)
+            return error_json(
+                ERR_CLOUD,
+                "Error from Tuya Cloud: %r" % msg
+            )
         return(response_dict["result"]["online"])
 
     def getdevicelog(self, deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None):

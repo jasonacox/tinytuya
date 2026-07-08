@@ -25,6 +25,7 @@ except:
     HAVE_ARGCOMPLETE = False
 
 from . import wizard, scanner, version, SCANTIME, DEVICEFILE, SNAPSHOTFILE, CONFIGFILE, RAWFILE, set_debug
+from .cli import _run_list_command, _run_device_command, _monitor_device
 
 prog = 'python3 -m tinytuya' if sys.argv[0][-11:] == '__main__.py' else None
 description = 'TinyTuya [%s]' % (version,)
@@ -42,34 +43,56 @@ cmd_list = {
     'scan': 'Scan local network for Tuya devices',
     'devices': 'Scan all devices listed in device-file',
     'snapshot': 'Scan devices listed in snapshot-file',
-    'json': 'Scan devices listed in snapshot-file and display the result as JSON'
+    'json': 'Scan devices listed in snapshot-file and display the result as JSON',
+    'list': 'List devices from device-file',
+    'version': 'Display version information',
+    'help': 'Show detailed help and usage examples',
 }
+
+# Device control commands: on, off, set, get
+control_cmds = {
+    'on':  'Turn on a device switch',
+    'off': 'Turn off a device switch',
+    'set': 'Set a DPS value on a device',
+    'get': 'Read a DPS value from a device',
+    'monitor': 'Read status and monitor device for updates',
+}
+
+# Add device control commands to command list
+cmd_list.update(control_cmds)
+
 for sp in cmd_list:
     subparsers[sp] = subparser.add_parser(sp, help=cmd_list[sp])
     subparsers[sp].add_argument( '-debug', '-d', help='Enable debug messages', action='store_true', dest='debug2' )
 
-    if sp != 'json':
+    if sp not in ('json', 'list'):
         if sp != 'snapshot':
-            subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
+            if sp in control_cmds:
+                subparsers[sp].add_argument( '-maxtime', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, type=int, dest='max_time' )
+            else:
+                subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
             subparsers[sp].add_argument( '-force', '-f', metavar='0.0.0.0/24', help='Force network scan of device IP addresses. Auto-detects net/mask if none provided', action='append', nargs='*' )
             subparsers[sp].add_argument( '-no-broadcasts', help='Ignore broadcast packets when force scanning', action='store_true' )
 
         subparsers[sp].add_argument( '-nocolor', help='Disable color text output', action='store_true' )
         subparsers[sp].add_argument( '-yes', '-y', help='Answer "yes" to all questions', action='store_true' )
-        if sp != 'scan':
+        if sp != 'scan' and sp not in control_cmds:
             subparsers[sp].add_argument( '-no-poll', '-no', help='Answer "no" to "Poll?" (overrides -yes)', action='store_true' )
 
     if sp == 'wizard':
         help = 'JSON file to load/save devices from/to [Default: %s]' % DEVICEFILE
-        subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
+        subparsers[sp].add_argument( '-device-file', '--device-file', help=help, default=DEVICEFILE, metavar='FILE' )
         subparsers[sp].add_argument( '-raw-response-file', help='JSON file to save the raw server response to [Default: %s]' % RAWFILE, default=RAWFILE, metavar='FILE' )
     else:
         help = 'JSON file to load devices from [Default: %s]' % DEVICEFILE
-        subparsers[sp].add_argument( '-device-file', help=help, default=DEVICEFILE, metavar='FILE' )
+        subparsers[sp].add_argument( '-device-file', '--device-file', help=help, default=DEVICEFILE, metavar='FILE' )
 
     if sp == 'json':
         # Throw error if file does not exist
         subparsers[sp].add_argument( '-snapshot-file', help='JSON file to load snapshot from [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE', type=argparse.FileType('r') )
+    elif sp in control_cmds:
+        # Control commands do not use snapshot file
+        pass
     else:
         # May not exist yet, will be created
         subparsers[sp].add_argument( '-snapshot-file', help='JSON file to load/save snapshot from/to [Default: %s]' % SNAPSHOTFILE, default=SNAPSHOTFILE, metavar='FILE' )
@@ -79,13 +102,98 @@ cred_group = subparsers['wizard'].add_argument_group( 'Cloud API Credentials', '
 cred_group.add_argument( '-credentials-file', help='JSON file to load/save Cloud credentials from/to [Default: %s]' % CONFIGFILE, metavar='FILE' )
 cred_group.add_argument( '-key', help='Cloud API Key to use' )
 cred_group.add_argument( '-secret', help='Cloud API Secret to use' )
-cred_group.add_argument( '-region', help='Cloud API Region to use', choices=('cn', 'eu', 'eu-w', 'in', 'us', 'us-e') )
+cred_group.add_argument( '-region', help='Cloud API Region to use', choices=('cn', 'eu', 'eu-w', 'in', 'sg', 'us', 'us-e') )
 cred_group.add_argument( '-device', help='One or more Device ID(s) to use', action='append', nargs='+' )
 
 subparsers['wizard'].add_argument( '-dry-run', help='Do not actually connect to the Cloud', action='store_true' )
 
+# list command
+subparsers['list'].add_argument('--json', help='Display as JSON instead of a table', action='store_true')
+
+# control commands
+for sp in control_cmds:
+    dev_group = subparsers[sp].add_argument_group('Device', '--id or --name are required.  --id and --key are required if the --device-file/-device-file lookup fails')
+    name_id_group = dev_group.add_mutually_exclusive_group(required=True)
+    name_id_group.add_argument('--id',      help='Device ID', metavar='ID')
+    name_id_group.add_argument('--name',    help='Device name (looked up in device-file)', metavar='NAME')
+    dev_group.add_argument('--key',     help='Device local encryption key (prompted if omitted and not in device-file)', metavar='KEY')
+    dev_group.add_argument('--ip',      help='Device IP address (loaded from device-file if omitted or auto-discovered if set to "Auto")', metavar='IP')
+    dev_group.add_argument('--version', help='Tuya protocol version (auto-discovered if omitted, defaults to 3.3 if not found)', default=None, type=float, metavar='VER', dest='dev_version')
+
+    if sp in ('on', 'off'):
+        subparsers[sp].add_argument('--dps', help='Switch number [Default: 1]', default=1, type=int, metavar='N')
+    elif sp == 'get':
+        subparsers[sp].add_argument('--dps', help='DPS index to read (omit to return full status)', default=None, type=int, metavar='N')
+    elif sp == 'set':
+        subparsers[sp].add_argument('--dps', help='DPS index', required=True, type=int, metavar='N')
+        subparsers[sp].add_argument('--value', help='Value to set. Parsed as JSON if possible (e.g. true, 123, "text"), otherwise sent as a plain string.', required=True, metavar='VALUE')
+
 if HAVE_ARGCOMPLETE:
     argcomplete.autocomplete( parser )
+
+
+def _print_help():
+    print("""
+TinyTuya %s - Python module to interface with Tuya WiFi smart devices
+https://github.com/jasonacox/tinytuya
+
+Usage: python -m tinytuya <command> [options]
+
+Setup & Discovery Commands:
+  wizard       Launch Setup Wizard to get Device Local Keys from Tuya Cloud
+                 python -m tinytuya wizard
+  scan         Scan local network for Tuya devices (UDP broadcast)
+                 python -m tinytuya scan
+                 python -m tinytuya scan 30               # scan for 30 seconds
+  devices      Scan all devices listed in devices.json and show status
+                 python -m tinytuya devices
+  snapshot     Scan devices listed in snapshot.json and show status
+                 python -m tinytuya snapshot
+  json         Scan snapshot devices and return results as JSON
+                 python -m tinytuya json
+  list         List all devices from devices.json as a table
+                 python -m tinytuya list
+                 python -m tinytuya list --json           # output as JSON
+
+Device Control Commands (require --id or --name):
+  on           Turn on a device switch
+                 python -m tinytuya on --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya on --name "Kitchen Light"
+  off          Turn off a device switch
+                 python -m tinytuya off --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya off --name "Kitchen Light" --dps 2
+  set          Set a DPS value on a device
+                 python -m tinytuya set --id <DeviceID> --key <LocalKey> --dps 1 --value true
+                 python -m tinytuya set --name "Fan" --dps 3 --value 50
+  get          Read device status (or a single DPS value)
+                 python -m tinytuya get --id <DeviceID> --key <LocalKey>
+                 python -m tinytuya get --name "Sensor" --dps 8
+  monitor      Connect to device and monitor for live status updates
+                 python -m tinytuya monitor --id <DeviceID> --key <LocalKey>
+
+Info Commands:
+  version      Display the TinyTuya version
+                 python -m tinytuya version
+  help         Show this help message
+                 python -m tinytuya help
+
+Global Options:
+  -d, -debug   Enable debug output
+  -v           Display version and exit
+
+Device Control Options:
+  --id ID      Device ID (from devices.json)
+  --name NAME  Device name (case-insensitive lookup in devices.json)
+  --key KEY    Device local encryption key (16 chars)
+  --ip IP      Device IP address (auto-discovered if omitted)
+  --version N  Tuya protocol version (e.g. 3.3, 3.4, 3.5)
+  --dps N      DPS index for on/off/set/get (default: 1)
+  --value V    Value to set (parsed as JSON: true, false, 0-100, "text")
+
+Note: --key, --ip, and --version are loaded automatically from devices.json
+      if the device is found by --id or --name.
+""" % version)
+
 
 args = parser.parse_args()
 
@@ -97,33 +205,36 @@ if args.debug:
     print('Parsed args:', args)
     set_debug(True)
 
+
 if args.command:
     if args.debug2 and not args.debug:
         print('Parsed args:', args)
         set_debug(True)
 
-    if args.command == 'wizard' and args.raw_response_file:
-        wizard.RAWFILE = args.raw_response_file
+    # Scanner / wizard file setup – skip for device control commands, list, version, and help
+    if args.command not in control_cmds and args.command not in ('list', 'version', 'help'):
+        if args.command == 'wizard' and args.raw_response_file:
+            wizard.RAWFILE = args.raw_response_file
 
-    if args.device_file:
-        if type(args.device_file) == str:
-            scanner.DEVICEFILE = args.device_file
-            wizard.DEVICEFILE = args.device_file
-        else:
-            fname = args.device_file.name
-            args.device_file.close()
-            args.device_file = fname
-            scanner.DEVICEFILE = fname
-            wizard.DEVICEFILE = fname
+        if args.device_file:
+            if type(args.device_file) == str:
+                scanner.DEVICEFILE = args.device_file
+                wizard.DEVICEFILE = args.device_file
+            else:
+                fname = args.device_file.name
+                args.device_file.close()
+                args.device_file = fname
+                scanner.DEVICEFILE = fname
+                wizard.DEVICEFILE = fname
 
-    if args.snapshot_file:
-        if args.command == 'json':
-            scanner.SNAPSHOTFILE = args.snapshot_file.name
-            args.snapshot_file.close()
-            args.snapshot_file = scanner.SNAPSHOTFILE
-        else:
-            scanner.SNAPSHOTFILE = args.snapshot_file
-            wizard.SNAPSHOTFILE = args.snapshot_file
+        if args.snapshot_file:
+            if args.command == 'json':
+                scanner.SNAPSHOTFILE = args.snapshot_file.name
+                args.snapshot_file.close()
+                args.snapshot_file = scanner.SNAPSHOTFILE
+            else:
+                scanner.SNAPSHOTFILE = args.snapshot_file
+                wizard.SNAPSHOTFILE = args.snapshot_file
 
 if args.command == 'scan':
     scanner.scan( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes )
@@ -140,9 +251,19 @@ elif args.command == 'wizard':
     if args.device:
         creds['apiDeviceID'] = ','.join(sum(args.device, []))
     wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
+elif args.command == 'list':
+    _run_list_command(args)
+elif args.command == 'version':
+    print('TinyTuya version:', version)
+elif args.command == 'help':
+    _print_help()
+elif args.command == 'monitor':
+    _monitor_device(args)
+elif args.command in control_cmds:
+    _run_device_command(args)
 else:
-    # No command selected - show help
-    parser.print_help()
+    # No command selected - show detailed help
+    _print_help()
 
 # Entry_points/console_scripts endpoints require a function to be called
 def dummy():
