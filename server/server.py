@@ -329,10 +329,16 @@ def tuyalisten(port):
     while(running):
         if port == UDPPORTAPP and time.time() - last_broadcast > scanner.BROADCASTTIME:
             log.debug("Sending discovery request to all 3.5 devices on the network")
-            if HOST:
-                scanner.send_discovery_request(iface_list)
-            else:
-                scanner.send_discovery_request()
+            try:
+                if HOST:
+                    scanner.send_discovery_request(iface_list)
+                else:
+                    scanner.send_discovery_request()
+            except Exception as err:
+                # A transient error (e.g. network hiccup) must not kill this
+                # listener thread - otherwise 3.5 devices are never discovered
+                # again until the server is restarted.
+                log.error("Failed to send discovery request on port %d: %s", port, err)
             last_broadcast = time.time()
         try:
             data, addr = client.recvfrom(4048)
