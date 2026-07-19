@@ -1,0 +1,18 @@
+[run]
+branch = True
+source = tinytuya
+omit =
+    */__init__.py
+    tests/*
+    sandbox/*
+    build/*
+    setup.py
+    test.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.
+    if TYPE_CHECKING:
+    pass
+show_missing = True

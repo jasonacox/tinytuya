@@ -1,5 +1,27 @@
 # RELEASE NOTES
 
+## v2.0.0 - Async Architecture Introduction (BREAKING MAJOR VERSION)
+
+This major release introduces native asyncio-based device communication while fully preserving the existing synchronous API for backward compatibility.
+
+Highlights:
+* Version bump to 2.x to signal the new async subsystem (legacy sync classes unchanged).
+* New `DeviceAsync` class (`tinytuya/core/DeviceAsync.py`) — asyncio-native device communication (persistent connections, session-key negotiation, heartbeats, callbacks).
+* New async scanner (`tinytuya/scanner_async.py`).
+* Planning document `ASYNC.md` (vision, goals, milestones).
+* New pytest-based async test infrastructure (`tests/`, `pytest.ini`, `.coveragerc`, `codecov.yml`) and live-device test harness (`test-devices.py`).
+* Officially removed Python 2.7 support.
+
+Compatibility:
+* Existing imports and synchronous usage continue to work (API surface of 1.x retained, including all v1.20.0 fixes below).
+* Async classes live alongside current modules (no name collisions) and require explicit opt-in.
+
+Migration Guidance:
+* You can adopt async incrementally - no action required if you stay with the sync API.
+* In event loops, prefer `async with` / `await device.status()` patterns for concurrency gains.
+
+See `ASYNC.md` for roadmap details.
+
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
 Release rollup. The **Monitor reliability** changes below ship in this PR; the

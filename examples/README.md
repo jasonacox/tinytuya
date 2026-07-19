@@ -20,9 +20,9 @@ Tested devices:  Peteme Smart Light Bulbs, Wi-Fi - [link](https://www.amazon.com
 
 [monitor.py](monitor.py) - This script uses a loop to listen to a Tuya device for any state changes.  
 
-## Async Send and Receive
+## Non-blocking Send and Receive
 
-[async_send_receive.py](async_send_receive.py) - This demonstrates how you can make a persistent connection to a Tuya device, send commands and monitor for responses in an async way.
+[non_blocking_send_receive.py](non_blocking_send_receive.py) - This demonstrates how you can make a persistent connection to a Tuya device, send commands and monitor for responses without blocking.
 
 ## Send Raw DPS Values
 
@@ -49,7 +49,7 @@ turn_on('Dining Room')
 
 ## Multi-Threaded Example
 
-[threading.py](threading.py) - Example that uses python threading to connect to multiple devices and listen for updates.
+[multi-threading.py](multi-threading.py) - Example that uses python threading to connect to multiple devices and listen for updates.
 
 ## Multiple Device Select Example
 

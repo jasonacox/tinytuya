@@ -22,7 +22,6 @@ Credits
     The TuyAPI/CLI wizard inspired and informed this python version.
 """
 # Modules
-from __future__ import print_function
 import json
 from datetime import datetime
 import tinytuya
@@ -36,11 +35,6 @@ except ImportError:
 
 HAVE_COLOR = HAVE_COLORAMA or not sys.platform.startswith('win')
 
-# Backward compatibility for python2
-try:
-    input = raw_input
-except NameError:
-    pass
 
 # Colorama terminal color capability for all platforms
 if HAVE_COLORAMA:
