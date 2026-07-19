@@ -113,6 +113,10 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### p17 - Keep tuyalisten UDP Discovery Thread Alive
+
+* Wrapped `send_discovery_request()` in a `try/except` block so transient network errors (e.g. `OSError` during a brief outage) no longer kill the UDP listener thread permanently. Protocol 3.5 devices are now rediscovered after network interruptions without requiring a server restart. Fixes #726. (Credit: @mschlenstedt)
+
 ### p16 - Device File and Error Handling
 
 * Use centralized `tinytuya.load_devicefile()` to load `devices.json`, supporting both flat list and `{"devices": [...]}` wrapper formats. Fixes issue #532.
