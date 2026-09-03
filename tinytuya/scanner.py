@@ -1057,6 +1057,49 @@ class PollDevice(DeviceDetect):
                 self.message = self.options['termcolors'].dim + "    Status: %s" % result["dps"]
                 self.close()
 
+class StaticDevice(PollDevice):
+    """Poll a fully configured device which was not discovered over UDP."""
+
+    def close(self):
+        # A TCP connection alone does not prove the configured ID/key/version.
+        # Only a decoded status response makes a static device "found".
+        self.found = bool(
+            self.finished and not self.deviceinfo.get('err') and
+            self.deviceinfo.get('dps')
+        )
+        DeviceDetect.close(self)
+
+    def abort(self):
+        """Prefer a late UDP broadcast over the configured fallback."""
+        self.found = False
+        DeviceDetect.close(self)
+
+
+def _configured_device_info(item):
+    """Return normalized static poll data for a complete devices.json row."""
+    if not isinstance(item, dict):
+        return None
+    if not all(item.get(field) for field in ('id', 'key', 'ip', 'version')):
+        return None
+
+    try:
+        ip = ipaddress.ip_address(str(item['ip']))
+        version = float(item['version'])
+    except (TypeError, ValueError):
+        return None
+
+    if not isinstance(ip, ipaddress.IPv4Address):
+        return None
+    if ip.is_unspecified or ip.is_multicast:
+        return None
+    if version not in (3.1, 3.2, 3.3, 3.4, 3.5):
+        return None
+
+    deviceinfo = dict(item)
+    deviceinfo['ip'] = str(ip)
+    deviceinfo['version'] = version
+    deviceinfo['gwId'] = item['id']
+    return deviceinfo
 
 
 # Scan function shortcut
@@ -1174,8 +1217,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     # Lookup Tuya device info by (id) returning (name, key)
     def tuyaLookup(deviceid):
         for i in tuyadevices:
-            if "id" in i and i["id"] == deviceid:
-                return (i["name"], i["key"], i["mac"] if "mac" in i else "")
+            if isinstance(i, dict) and i.get("id") == deviceid:
+                return (i.get("name", ""), i.get("key", ""),
+                        i.get("mac", ""))
         return ("", "", "")
 
     havekeys = False
@@ -1254,6 +1298,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     networks = []
     scanned_devices = {}
     broadcasted_devices = {}
+    configured_devices = {}
     broadcast_messages = {}
     broadcasted_apps = {}
     devicelist = []
@@ -1291,8 +1336,19 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         'keylist': [],
     }
 
+    configured_candidates = []
+    if poll:
+        configured_candidates = [
+            deviceinfo for deviceinfo in
+            (_configured_device_info(item) for item in tuyadevices)
+            if deviceinfo
+        ]
+    configured_poll_index = 0
+    configured_poll_pending = bool(configured_candidates)
+
     for i in tuyadevices:
-        options['keylist'].append( KeyObj( i['id'], i['key'] ) )
+        if isinstance(i, dict) and i.get('id') and i.get('key'):
+            options['keylist'].append(KeyObj(i['id'], i['key']))
 
     wantips = [] if not wantips else list(wantips) #['192.168.1.3']
     wantids = [] if not wantids else list(wantids) #['abcdef']
@@ -1368,7 +1424,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         addr = client_bcast_addrs[bcast]
         client_ip_broadcast_list[addr] = { 'broadcast': bcast }
 
-    while ip_scan_running or scan_end_time > time.time() or device_end_time > time.time() or connect_next_round:
+    while (ip_scan_running or scan_end_time > time.time() or
+           device_end_time > time.time() or connect_next_round or
+           configured_poll_pending):
         if client:
             read_socks = [client, clients, clientapp]
         else:
@@ -1498,9 +1556,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if user_break_count == 1:
                 ip_scan_running = False
                 scan_end_time = 0
+                configured_poll_index = len(configured_candidates)
+                configured_poll_pending = False
+                for configured in configured_devices.values():
+                    if configured.sock:
+                        configured.stop()
             elif user_break_count == 2:
                 break
             else:
+                for configured in configured_devices.values():
+                    if configured.sock:
+                        configured.stop()
                 log.debug('Keyboard Interrupt - Exiting')
                 if verbose: print("\n**User Break** - Exiting")
                 sys.exit()
@@ -1558,6 +1624,13 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                     print(term.alertdim + "*  Payload missing required 'gwId' - from %r to port %r:%s %r (%r)\n" % (ip, tgt_port, term.normal, result, data))
                 log.debug("UDP Packet payload missing required 'gwId' - from %r port %r - %r", ip, tgt_port, data)
                 continue
+
+            # UDP always wins over the configured fallback, including when a
+            # device has moved to a different IP since devices.json was saved.
+            for configured in configured_devices.values():
+                if (configured.ip == ip or
+                        configured.deviceinfo.get('gwId') == result['gwId']):
+                    configured.abort()
 
             # check to see if we have seen this device before and add to devices array
             #if tinytuya.appenddevice(result, deviceslist) is False:
@@ -1667,9 +1740,85 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 if (not dev.remove) and (not dev.passive) and ((dev.timeo + 1.0) > device_end_time):
                     device_end_time = dev.timeo + 1.0
 
+        # UDP discovery is preferred.  Once that window (and any explicit
+        # force-scan) is complete, feed complete configured rows into the same
+        # select() state-machine in bounded batches.
+        if (configured_poll_pending and not user_break_count and
+                not ip_scan_running and scan_end_time <= time.time()):
+            known_ids = set(
+                dev.deviceinfo.get('gwId') for dev in
+                list(broadcasted_devices.values()) +
+                list(scanned_devices.values()) +
+                list(configured_devices.values())
+            )
+            active_socket_ids = set()
+            active_devices = (
+                list(devicelist) + list(broadcasted_devices.values()) +
+                list(scanned_devices.values()) +
+                list(configured_devices.values())
+            )
+            for active_device in active_devices:
+                if active_device.sock:
+                    active_socket_ids.add(id(active_device.sock))
+
+            # Broadcast polls discovered during this pass connect on the next
+            # pass, so reserve their slots before opening configured sockets.
+            reserved = sum(
+                1 for pending_ip in set(connect_next_round)
+                if (pending_ip in broadcasted_devices and
+                    not broadcasted_devices[pending_ip].sock)
+            )
+            want = max_parallel - len(active_socket_ids) - reserved
+            if want > 10:
+                want = 10
+            if want < 0:
+                want = 0
+
+            started = 0
+            while (configured_poll_index < len(configured_candidates) and
+                   started < want):
+                deviceinfo = configured_candidates[configured_poll_index]
+                configured_poll_index += 1
+                ip = deviceinfo['ip']
+                deviceid = deviceinfo['gwId']
+                if (ip in broadcasted_devices or ip in scanned_devices or
+                        ip in configured_devices or deviceid in known_ids):
+                    continue
+
+                dev = StaticDevice(ip, deviceinfo, options, ip in debug_ips)
+                configured_devices[ip] = dev
+                known_ids.add(deviceid)
+                devicelist.append(dev)
+                started += 1
+                try:
+                    dev.connect()
+                except Exception:
+                    log.debug("Unable to start configured poll for %s", ip)
+                    dev.close()
+                if dev.sock:
+                    check_end_time = time.time() + connect_timeout
+                    if check_end_time > device_end_time:
+                        device_end_time = check_end_time
+
+            configured_poll_pending = (
+                configured_poll_index < len(configured_candidates)
+            )
+
         if discover and (not user_break_count) and (not ip_force_wants_end) and time.time() >= client_ip_broadcast_timer:
             client_ip_broadcast_timer = time.time() + BROADCASTTIME
             send_discovery_request( client_ip_broadcast_list )
+
+    # Reconcile before display/counting: broadcast discovery is authoritative
+    # over configured fallback data by current IP or device ID.
+    broadcast_ids = set(
+        dev.deviceinfo.get('gwId') for dev in broadcasted_devices.values()
+    )
+    for ip, configured in configured_devices.items():
+        if (ip in broadcasted_devices or
+                configured.deviceinfo.get('gwId') in broadcast_ids):
+            configured.abort()
+        elif configured.sock:
+            configured.stop()
 
     for sock in read_socks:
         sock.close()
@@ -1731,7 +1880,33 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         if scanned_devices[ip].sock or not scanned_devices[ip].displayed:
             scanned_devices[ip].stop()
 
-    found_count = len(broadcasted_devices)+len(scanned_devices)
+    configured_found_count = 0
+    for ip in configured_devices:
+        dev = configured_devices[ip]
+        if not dev.found:
+            continue
+        configured_found_count += 1
+        ver_str = str(dev.deviceinfo['version'])
+        if ver_str not in ver_count:
+            ver_count[ver_str] = 1
+        else:
+            ver_count[ver_str] += 1
+
+        if not dev.deviceinfo['name']:
+            unknown_dev_count += 1
+        elif not dev.deviceinfo['key']:
+            no_key_count += 1
+
+        if verbose:
+            safe_deviceinfo = dict(dev.deviceinfo)
+            safe_deviceinfo['key'] = ''
+            _print_device_info(
+                safe_deviceinfo, 'Static Poll', term, dev.message
+            )
+            dev.displayed = True
+
+    found_count = (len(broadcasted_devices) + len(scanned_devices) +
+                   configured_found_count)
 
     if verbose:
         print(
@@ -1739,6 +1914,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             % (term.normal, found_count)
         )
         print( 'Broadcasted:', len(broadcasted_devices) )
+        if configured_found_count:
+            print('Configured:', configured_found_count)
         if ip_scan:
             key_found = gwid_found = err_found = invalid = unmatched = 0
             for ip in scanned_devices:
@@ -1792,6 +1969,17 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         dev['origin'] = 'forcescan'
         dkey = dev[k]
         if scanned_devices[ip].found and dkey not in devices:
+            devices[dkey] = dev
+
+    for ip in configured_devices:
+        configured = configured_devices[ip]
+        if not configured.found:
+            continue
+        dev = configured.deviceinfo
+        dev['ip'] = ip
+        dev['origin'] = 'static'
+        dkey = dev[k]
+        if dkey not in devices:
             devices[dkey] = dev
 
     if verbose and not can_end_early:
