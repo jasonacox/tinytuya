@@ -698,7 +698,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
 
     def _run_scan(self, configured, static_success=True, broadcast=None,
                   device_file=None, verbose=False, late_broadcast=False,
-                  static_inflight=False):
+                  static_inflight=False, poll_configured=True):
         from tinytuya import scanner
 
         class OfflineStaticDevice(scanner.StaticDevice):
@@ -781,6 +781,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                     show_timer=False,
                     tuyadevices=configured,
                     verbose=verbose,
+                    poll_configured=poll_configured,
                 )
 
         return result, OfflineStaticDevice.created
@@ -795,6 +796,36 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(result[configured['id']]['version'],
                          configured['version'])
         self.assertEqual(len(static_devices), 1)
+
+    def test_configured_poll_can_be_disabled_without_disabling_polling(self):
+        configured = self._configured()
+
+        result, static_devices = self._run_scan(
+            [configured], poll_configured=False
+        )
+
+        self.assertEqual(result, {})
+        self.assertEqual(static_devices, [])
+
+    def test_device_scan_forwards_configured_poll_opt_out(self):
+        from tinytuya import scanner
+
+        with patch.object(scanner, 'devices', return_value={}) as scan_devices:
+            tinytuya.deviceScan(poll_configured=False)
+
+        self.assertFalse(scan_devices.call_args[1]['poll_configured'])
+
+    def test_scan_cli_forwards_configured_poll_opt_out(self):
+        import runpy
+        import sys
+        from tinytuya import scanner
+
+        argv = ['tinytuya', 'scan', '0', '-no-poll-configured']
+        with patch.object(sys, 'argv', argv), \
+                patch.object(scanner, 'scan') as scan:
+            runpy.run_module('tinytuya', run_name='__main__')
+
+        self.assertFalse(scan.call_args[1]['poll_configured'])
 
     def test_broadcast_discovery_suppresses_configured_duplicate(self):
         configured = self._configured()
@@ -952,6 +983,18 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(static_devices, [])
         for key in invalid_keys:
             self.assertNotIn(key, emitted)
+
+    def test_unsupported_configured_version_is_logged_without_local_key(self):
+        from tinytuya import scanner
+
+        configured = self._configured(version=3.6)
+        with self.assertLogs(scanner.__name__, level='DEBUG') as captured:
+            deviceinfo = scanner._configured_device_info(configured)
+
+        emitted = '\n'.join(captured.output)
+        self.assertIsNone(deviceinfo)
+        self.assertIn('unsupported configured protocol version 3.6', emitted)
+        self.assertNotIn(configured['key'], emitted)
 
     def test_late_broadcast_by_id_invalidates_completed_static_poll(self):
         import io

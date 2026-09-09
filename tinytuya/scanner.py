@@ -1075,6 +1075,9 @@ class StaticDevice(PollDevice):
         DeviceDetect.close(self)
 
 
+STATIC_POLL_SUPPORTED_VERSIONS = (3.1, 3.2, 3.3, 3.4, 3.5)
+
+
 def _configured_device_info(item):
     """Return normalized static poll data for a complete devices.json row."""
     if not isinstance(item, dict):
@@ -1092,7 +1095,13 @@ def _configured_device_info(item):
         return None
     if ip.is_unspecified or ip.is_multicast:
         return None
-    if version not in (3.1, 3.2, 3.3, 3.4, 3.5):
+    # Protocol versions are represented as floats throughout TinyTuya. Exact
+    # membership is intentional while this tuple remains a pinned literal set.
+    if version not in STATIC_POLL_SUPPORTED_VERSIONS:
+        log.debug(
+            "Skipping configured device %s at %s: unsupported configured protocol version %s",
+            item['id'], ip, version,
+        )
         return None
 
     deviceinfo = dict(item)
@@ -1103,9 +1112,14 @@ def _configured_device_info(item):
 
 
 # Scan function shortcut
-def scan(scantime=None, color=True, forcescan=False, discover=True, assume_yes=False):
+def scan(scantime=None, color=True, forcescan=False, discover=True,
+         assume_yes=False, poll_configured=True):
     """Scans your network for Tuya devices with output to stdout"""
-    devices(verbose=True, scantime=scantime, color=color, poll=True, forcescan=forcescan, discover=discover, assume_yes=assume_yes)
+    devices(
+        verbose=True, scantime=scantime, color=color, poll=True,
+        forcescan=forcescan, discover=discover, assume_yes=assume_yes,
+        poll_configured=poll_configured,
+    )
 
 def _generate_ip(networks, verbose, term):
     for netblock in networks:
@@ -1171,9 +1185,9 @@ def _print_device_info( result, note, term, extra_message=None, verbose=True ):
 
 
 # Scan function
-def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None, 
+def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False, byID=False, show_timer=None,
             discover=True, wantips=None, wantids=None, snapshot=None, assume_yes=False, tuyadevices=None,
-            maxdevices=0): # pylint: disable=W0621
+            maxdevices=0, poll_configured=True): # pylint: disable=W0621
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -1192,6 +1206,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         assume_yes = True or False, do not prompt to confirm auto-detected network ranges
         tuyadevices = contents of devices.json, to prevent re-loading it if we already have it
         maxdevices = Stop scanning after this many devices are found.  0 for no limit
+        poll_configured = True or False, poll complete devices.json rows by their configured IP
 
     Response:
         devices = Dictionary of all devices found
@@ -1337,7 +1352,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     }
 
     configured_candidates = []
-    if poll:
+    if poll and poll_configured:
         configured_candidates = [
             deviceinfo for deviceinfo in
             (_configured_device_info(item) for item in tuyadevices)
