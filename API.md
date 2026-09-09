@@ -39,8 +39,8 @@ Subclasses add device-specific helpers on top.
 
 ## Module-Level Functions
 
-### `deviceScan(verbose=False, maxretry=15, color=True, poll=True, forcescan=False)`
-Scans the local network for Tuya devices and returns a dictionary of results.
+### `deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=True)`
+Scans the local network for Tuya devices and returns a dictionary of results. After UDP discovery, complete `devices.json` rows are polled at their configured IP by default; set `poll_configured=False` to skip that fallback without disabling status polling for devices found normally.
 
 ```python
 import tinytuya
@@ -49,8 +49,8 @@ for ip, info in devices.items():
     print(ip, info.get('gwId'), info.get('version'))
 ```
 
-### `scan(maxretry=15, color=True, poll=True, forcescan=False)`
-Interactive scan that prints discovered devices to stdout.
+### `scan(maxretry=None, color=True, forcescan=False, poll_configured=True)`
+Interactive scan that prints discovered devices to stdout. Set `poll_configured=False` to skip direct polling of complete static-IP rows from `devices.json`.
 
 ```python
 tinytuya.scan()
@@ -896,7 +896,8 @@ TinyTuya ships a built-in CLI available as `tinytuya` (pipx) or `python -m tinyt
 
 ```bash
 tinytuya wizard    # Interactive setup – fetches local keys from Tuya Cloud
-tinytuya scan      # Broadcast scan to find devices on the LAN
+tinytuya scan      # Broadcast scan plus configured static-IP fallback
+                    # Add -no-poll-configured to skip the static fallback
 tinytuya devices   # Poll all devices listed in devices.json
 tinytuya snapshot  # Poll devices listed in snapshot.json
 tinytuya json      # Same as snapshot but outputs raw JSON
