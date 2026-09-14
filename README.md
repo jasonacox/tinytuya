@@ -713,6 +713,12 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 ### Scan Tool 
 The function `tinytuya.scan()` listens on UDP ports 6666, 6667, and 7000 and identifies Tuya devices broadcasting their Address, Device ID, Product ID, and Version. After the UDP window it also polls complete `devices.json` rows (ID, local key, IPv4 address, and supported protocol version) at their configured IP, allowing silent devices to be found. The `tinytuya.deviceScan()` function returns all found devices and their stats as a dictionary. Set `poll_configured=False`, or use the CLI option `-no-poll-configured`, to skip the configured-IP fallback when a device file contains stale addresses.
 
+Configured polling waits for explicit force scans to finish, respects `maxdevices`
+and requested ID/IP early stops, and skips malformed credentials. Snapshot commands
+(`snapshot` and `snapshotjson`) poll only the addresses in the saved snapshot; they
+do not add the configured-IP fallback. When requested IPs are missing, configured
+polling is tried before the implicit force scan of those IPs.
+
 You can run the scanner from the command line using these interactive commands:
   ```bash
   # Listen for Tuya Devices and match to devices.json if available

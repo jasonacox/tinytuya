@@ -698,7 +698,9 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
 
     def _run_scan(self, configured, static_success=True, broadcast=None,
                   device_file=None, verbose=False, late_broadcast=False,
-                  static_inflight=False, poll_configured=True):
+                  static_inflight=False, poll_configured=True, stale_read=False,
+                  on_static_connect=None,
+                  **scan_options):
         from tinytuya import scanner
 
         class OfflineStaticDevice(scanner.StaticDevice):
@@ -713,6 +715,9 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                     self.sock = MagicMock()
                     self.write = True
                     self.timeo = scanner.time.time() + 1.0
+                if on_static_connect:
+                    on_static_connect(self)
+                if static_inflight:
                     return
                 if static_success:
                     self.finished = True
@@ -727,6 +732,11 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                     # completed result so a late UDP packet can supersede it.
                     self.sock = MagicMock()
 
+            def read_data(self):
+                if stale_read:
+                    raise AssertionError('dispatched a closed static socket')
+                super(OfflineStaticDevice, self).read_data()
+
             def write_data(self):
                 self.finished = bool(static_success)
                 if static_success:
@@ -740,6 +750,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             device.remove = True
 
         udp_sockets = [MagicMock(), MagicMock(), MagicMock()]
+        self.last_udp_sockets = udp_sockets
         ready = [udp_sockets[0]] if broadcast and not late_broadcast else []
         late_ready = [udp_sockets[0]] if broadcast and late_broadcast else []
         if broadcast:
@@ -753,7 +764,10 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             if ready:
                 return ([ready.pop(0)], [], [])
             if late_ready and OfflineStaticDevice.created:
-                return ([late_ready.pop(0)], [], [])
+                sockets = [late_ready.pop(0)]
+                if stale_read:
+                    sockets.append(OfflineStaticDevice.created[0].sock)
+                return (sockets, [], [])
             if write_socks:
                 return ([], [write_socks[0]], [])
             return ([], [], [])
@@ -782,9 +796,294 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                     tuyadevices=configured,
                     verbose=verbose,
                     poll_configured=poll_configured,
+                    **scan_options
                 )
 
         return result, OfflineStaticDevice.created
+
+    def test_interrupt_on_first_select_returns_cleanly(self):
+        from tinytuya import scanner
+
+        sockets = [MagicMock(), MagicMock(), MagicMock()]
+        with patch.object(scanner.socket, 'socket', side_effect=sockets), \
+                patch.object(scanner.select, 'select', side_effect=KeyboardInterrupt), \
+                patch.object(scanner, 'get_ip_to_broadcast', return_value={}), \
+                patch.object(scanner.time, 'sleep'):
+            result = scanner.devices(scantime=0, show_timer=False,
+                                     tuyadevices=[self._configured()])
+        self.assertEqual(result, {})
+        for sock in sockets:
+            sock.close.assert_called()
+
+    def test_interrupt_during_static_construction_closes_existing_sockets(self):
+        from tinytuya import scanner
+
+        rows = [self._configured(), self._configured(ip='192.0.2.12')]
+        rows[1]['id'] = 'second-device'
+        original_init = scanner.PollDevice.__init__
+        opened = []
+        def interrupt_second(device, *args):
+            if opened:
+                raise KeyboardInterrupt()
+            original_init(device, *args)
+
+        def open_socket(device):
+            opened.append(device.sock)
+
+        with patch.object(scanner.PollDevice, '__init__', interrupt_second):
+            with self.assertRaises(KeyboardInterrupt):
+                self._run_scan(rows, static_inflight=True, on_static_connect=open_socket)
+        for sock in self.last_udp_sockets:
+            sock.close.assert_called()
+        self.assertEqual(len(opened), 1)
+        opened[0].close.assert_called()
+
+    def test_interrupt_during_static_connect_closes_all_sockets(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        opened = []
+        def interrupt_connect(device):
+            device.sock = MagicMock()
+            opened.append(device.sock)
+            raise KeyboardInterrupt()
+
+        with self.assertRaises(KeyboardInterrupt):
+            self._run_scan([row], on_static_connect=interrupt_connect)
+        self.assertEqual(len(opened), 1)
+        opened[0].close.assert_called()
+        for sock in self.last_udp_sockets:
+            sock.close.assert_called()
+
+    def test_force_result_consumes_configured_poll_budget(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        class FoundForceDevice(scanner.DeviceDetect):
+            def __init__(self, *args):
+                super(FoundForceDevice, self).__init__(*args)
+                self.sock = MagicMock()
+                self.write = True
+                self.timeo = scanner.time.time() + 10
+
+            def write_data(self):
+                self.scanned = self.found = True
+                self.deviceinfo['gwId'] = 'force-device'
+                self.close()
+
+        with patch.object(scanner, 'ForceScannedDevice', FoundForceDevice):
+            result, created = self._run_scan(
+                [row], forcescan=['192.0.2.99/32'], maxdevices=1
+            )
+        self.assertEqual(list(result), ['force-device'])
+        self.assertEqual(created, [])
+
+    def test_static_waits_for_active_force_scan_to_drain(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        class SlowForceDevice(scanner.DeviceDetect):
+            created = []
+
+            def __init__(self, *args):
+                super(SlowForceDevice, self).__init__(*args)
+                self.created.append(self)
+                self.sock = MagicMock()
+                self.write = True
+                self.timeo = scanner.time.time() + 10
+                self.rounds = 0
+
+            def write_data(self):
+                self.rounds += 1
+                if self.rounds == 2:
+                    self.close()
+
+        drained_at_start = []
+        def check_drained(device):
+            del device
+            drained_at_start.append(
+                bool(SlowForceDevice.created) and
+                all(dev.remove for dev in SlowForceDevice.created)
+            )
+
+        with patch.object(scanner, 'ForceScannedDevice', SlowForceDevice):
+            result, created = self._run_scan(
+                [row], forcescan=[row['ip'] + '/32'],
+                on_static_connect=check_drained
+            )
+        self.assertEqual(drained_at_start, [True])
+        self.assertEqual(len(created), 1)
+        self.assertIn(row['id'], result)
+
+    def test_udp_and_static_read_ready_together_skip_closed_socket(self):
+        row = self._configured()
+        broadcast = {
+            'gwId': row['id'], 'ip': '192.0.2.11',
+            'version': '3.5', 'productKey': 'offline-product',
+        }
+        result, created = self._run_scan(
+            [row], broadcast=broadcast, late_broadcast=True,
+            static_inflight=True, stale_read=True
+        )
+        self.assertEqual(result[row['id']]['origin'], 'broadcast')
+        self.assertIsNone(created[0].sock)
+
+    def test_aborted_static_read_does_not_reconnect(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        options = {
+            'connect_timeout': 1, 'data_timeout': 1, 'retries': 2,
+            'termcolors': scanner.TermColors(*tinytuya.termcolor(False)),
+            'verbose': False, 'tuyadevices': [row], 'keylist': [],
+        }
+        dev = scanner.StaticDevice(row['ip'], scanner._configured_device_info(row), options, False)
+        dev.sock = MagicMock()
+        dev.abort()
+        with patch.object(dev, 'connect') as connect:
+            dev.read_data()
+        connect.assert_not_called()
+        self.assertFalse(dev.found)
+        self.assertIsNone(dev.sock)
+
+    def test_snapshot_commands_disable_configured_fallback(self):
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+
+        for command in (scanner.snapshot, scanner.snapshotjson):
+            with self.subTest(command=command.__name__), \
+                    patch.object(scanner, 'load_snapshotfile',
+                                 return_value={'devices': []}), \
+                    patch.object(scanner, 'devices', return_value={}) as scan, \
+                    redirect_stdout(io.StringIO()):
+                if command is scanner.snapshot:
+                    command(color=False, assume_yes=True)
+                else:
+                    command()
+                self.assertIs(scan.call_args[1].get('poll_configured'), False)
+
+    def test_static_wanted_device_stops_before_unrelated_configured_ips(self):
+        first = self._configured()
+        second = self._configured(ip='192.0.2.12')
+        second['id'] = 'another-configured-device'
+        for target in ({'wantids': [first['id']]}, {'wantips': [first['ip']]}):
+            with self.subTest(target=target):
+                result, created = self._run_scan([first, second], **target)
+                self.assertEqual(list(result), [first['id']])
+                self.assertEqual(len(created), 1)
+
+    def test_static_success_removes_wanted_id(self):
+        import io
+        from contextlib import redirect_stdout
+
+        configured = self._configured()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            result, _ = self._run_scan(
+                [configured], wantids=[configured['id']], verbose=True
+            )
+        self.assertIn(configured['id'], result)
+        self.assertNotIn('Did not find', output.getvalue())
+
+    def test_failed_static_poll_releases_maxdevices_slot(self):
+        first = self._configured()
+        second = self._configured(ip='192.0.2.12')
+        second['id'] = 'second-device'
+        def fail_first(device):
+            if device.ip == first['ip']:
+                raise OSError('offline fixture: refused connection')
+        result, created = self._run_scan(
+            [first, second], maxdevices=1, on_static_connect=fail_first
+        )
+        self.assertEqual(list(result), [second['id']])
+        self.assertEqual(len(created), 2)
+
+    def test_broadcast_and_static_share_maxdevices_budget(self):
+        rows = [self._configured(), self._configured(ip='192.0.2.12')]
+        rows[1]['id'] = 'second-device'
+        broadcast = {
+            'gwId': 'broadcast-device', 'ip': '192.0.2.11',
+            'version': '3.5', 'productKey': 'offline-product',
+        }
+        result, created = self._run_scan(rows, broadcast=broadcast, maxdevices=2)
+        self.assertEqual(set(result), {'broadcast-device', rows[0]['id']})
+        self.assertEqual(len(created), 1)
+
+    def test_static_successes_respect_maxdevices(self):
+        rows = [self._configured(ip='192.0.2.%d' % n) for n in range(20, 24)]
+        for n, row in enumerate(rows):
+            row['id'] = 'configured-%d' % n
+        for inflight in (False, True):
+            with self.subTest(inflight=inflight):
+                result, created = self._run_scan(
+                    rows, maxdevices=1, static_inflight=inflight
+                )
+                self.assertEqual(list(result), [rows[0]['id']])
+                self.assertEqual(len(created), 1)
+
+    def test_udp_early_stop_does_not_start_configured_polls(self):
+        configured = self._configured()
+        broadcast = {
+            'gwId': 'another-device', 'ip': '192.0.2.11',
+            'version': '3.5', 'productKey': 'offline-product',
+        }
+        for stop in ({'maxdevices': 1}, {'wantids': ['another-device']},
+                     {'wantips': ['192.0.2.11']}):
+            with self.subTest(stop=stop):
+                result, created = self._run_scan(
+                    [configured], broadcast=broadcast, **stop
+                )
+                self.assertEqual(list(result), ['another-device'])
+                self.assertEqual(created, [])
+
+    def test_verbose_snapshot_skips_malformed_rows(self):
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+
+        valid = self._configured()
+        rows = [None, 'bad-row', {}, {'key': LOCAL_KEY}, {'id': ['bad']}, valid]
+        with redirect_stdout(io.StringIO()):
+            result, created = self._run_scan(rows, verbose=True)
+        self.assertEqual(list(result), [valid['id']])
+        self.assertEqual(len(created), 1)
+
+    def test_force_key_lookup_skips_malformed_rows(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        dev = scanner.ForceScannedDevice.__new__(scanner.ForceScannedDevice)
+        dev.options = {'tuyadevices': [None, {}, {'key': row['key']}, row]}
+        dev.deviceinfo = {'key': row['key']}
+        dev.device = MagicMock()
+        dev.key_found = False
+        dev.found_key()
+        self.assertTrue(dev.key_found)
+        self.assertEqual(dev.deviceinfo['gwId'], row['id'])
+
+    def test_broadcast_lookup_skips_non_string_key(self):
+        row = self._configured()
+        bad = dict(row, key=123)
+        broadcast = {
+            'gwId': row['id'], 'ip': row['ip'],
+            'version': '3.5', 'productKey': 'offline-product',
+        }
+        result, _ = self._run_scan([bad, row], broadcast=broadcast)
+        self.assertEqual(result[row['id']]['key'], row['key'])
+
+    def test_non_string_credentials_are_skipped(self):
+        from tinytuya import scanner
+
+        for field in ('id', 'key'):
+            for value in (123, ['invalid'], {'invalid': True}):
+                with self.subTest(field=field, value=value):
+                    item = self._configured()
+                    item[field] = value
+                    self.assertIsNone(scanner._configured_device_info(item))
+                    result, created = self._run_scan([item])
+                    self.assertEqual(result, {})
+                    self.assertEqual(created, [])
 
     def test_configured_device_is_polled_without_udp_discovery(self):
         configured = self._configured()

@@ -49,6 +49,12 @@ for ip, info in devices.items():
     print(ip, info.get('gwId'), info.get('version'))
 ```
 
+The underlying `scanner.devices()` fallback respects `maxdevices` and requested
+ID/IP early termination. Explicit force scans drain before configured polls start;
+configured polling precedes the implicit force scan of missing requested IPs.
+`snapshot()` and `snapshotjson()` disable this fallback and retain snapshot-only
+address scope.
+
 ### `scan(maxretry=None, color=True, forcescan=False, poll_configured=True)`
 Interactive scan that prints discovered devices to stdout. Set `poll_configured=False` to skip direct polling of complete static-IP rows from `devices.json`.
 
