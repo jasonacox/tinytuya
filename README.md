@@ -99,7 +99,11 @@ TinyTuya has a built-in setup Wizard that uses the Tuya IoT Cloud Platform to ge
         - Click "Service API" tab
         - Click "**Go to Authorize**" button
         - Select the API Groups from the dropdown and click `Subscribe` ([screenshot](https://user-images.githubusercontent.com/38729644/128742724-9ed42673-7765-4e21-94c8-76022de8937a.png))
-    * **RENEWAL:** The subscription to the `IoT Core` service expires after some time. By default, when you subscribe to it for the first time, it will last for one month. Once expired, the setup wizard won't be able to communicate with the Tuya account anymore, so it needs to be renewed. As of November 12th 2024, it can be renewed for a duration of 1, 3 or 6 months by simply filling in a form with some basic information (e.g. purpose of the project, type of developer).
+    * **RENEWAL:** The `IoT Core` subscription is a free trial that expires after one month. Once expired, the Setup Wizard won't be able to communicate with your Tuya account anymore, so it needs to be renewed to fetch *Local_Keys* for new devices:
+      1. Sign into [iot.tuya.com](https://iot.tuya.com/) with the credentials you used to create your Tuya project.
+      2. Click **Cloud** in the left pane, then **Project Management** ([screenshot](https://github.com/user-attachments/assets/7f868f62-794d-473e-9ddb-4f3a2b32dc74)).
+      3. Click **Upgrade IoT Core Plan**, choose **Trial edition** ($0.00) and click **Buy Now** ([screenshot](https://github.com/user-attachments/assets/01fb97c9-8240-4090-8272-9cf966e373ce)).
+      4. Tuya may warn that you cannot select the trial edition again. Dismiss the warning and look for the **IoT Core** button labelled **Extend trial period**. Tap it and fill in the short questionnaire (duration of 1, 3 or 6 months, purpose of the project, type of developer, etc.). After several minutes, refresh the page - the trial extension is usually approved by then.
 
 4. WIZARD - Run Setup Wizard:
     * From your Linux/Mac/Win PC run the TinyTuya Setup **Wizard** to fetch the *Local_Keys* for all of your registered devices:
