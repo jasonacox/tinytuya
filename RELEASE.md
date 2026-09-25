@@ -21,6 +21,7 @@ are listed here so the release changelog is complete.
 
 ### Bug fixes (see bug-fix PR)
 * Cloud token-refresh retry preserves the query string; Cloud helpers return error dicts instead of raising on failed/empty responses.
+* Scanner: Fully configured `devices.json` entries (ID, local key, IPv4 address, and protocol version) are now polled in bounded parallel batches after UDP discovery, allowing non-broadcasting devices to be found while late broadcasts remain authoritative and duplicate-free. Applications can disable the configured-IP fallback with `poll_configured=False`; CLI scans can use `-no-poll-configured` when the device file contains stale addresses. Malformed credential rows are skipped across scanner lookups and snapshot assembly; configured polls respect early-stop/device limits, drain explicit force scans first, and close sockets on interruption. Snapshot-only commands do not contact additional configured IPs. PR #735 by @merodahero.
 * `set_timer()` selects the timer DP numerically; timeout errors report `ERR_TIMEOUT`; `received_wrong_cid_queue` is bounded; truncated frames raise `DecodeError`; `error_json()` handles unknown codes; `BulbDevice` rgb8 hue offset fixed; scanner no longer mutates caller dicts; and more.
 
 ## v1.19.0 - Monitor Class, IPv6, and Community Fixes
