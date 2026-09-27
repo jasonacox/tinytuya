@@ -1,4 +1,3 @@
-
 # TinyTuya Module
 # -*- coding: utf-8 -*-
 
@@ -16,3 +15,5 @@ from .header import *
 from .core import *
 from .core import __version__
 from .core import __author__
+
+from .DeviceAsync import *

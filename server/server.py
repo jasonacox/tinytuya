@@ -34,7 +34,6 @@ Description
 """
 
 # Modules
-from __future__ import print_function
 import threading
 import time
 import logging
