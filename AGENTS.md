@@ -4,7 +4,7 @@ TinyTuya is a Python library to control Tuya-based WiFi smart devices over the l
 
 ## Quick Facts
 
-- **Language/support**: Python 3.10–3.15 (the CI matrix; `python_requires=">=3.10"` in `setup.py`). Code must run on 3.10, so no 3.11+ features (`except*`, `tomllib`, `typing.Self`, ...). Python 2 shims (`IS_PY2`, `from __future__`) are dead code — do not extend them; removing them is welcome.
+- **Language/support**: Python 3.10–3.15 (the CI matrix; `python_requires=">=3.10"` in `setup.py`). Code must run on 3.10, so no 3.11+ features (`except*`, `tomllib`, `typing.Self`, ...). Python 2 and pre-3.7 shims (`IS_PY2`, `from __future__`, `sys.hexversion`/`OrderedDict` fallbacks) are dead code — do not extend or copy them; removing them is welcome (keep `IS_PY2` as an alias, it is public).
 - **Version source of truth**: `version_tuple` in `tinytuya/core/core.py`. Bump only as part of a release, together with a `RELEASE.md` entry.
 - **Dependencies**: `requests`, `colorama`, and exactly one AES backend (cryptography / PyCryptodome / pyaes / PyCrypto), auto-selected in `tinytuya/core/crypto_helper.py`. Do not add hard dependencies. Never import a crypto library outside `crypto_helper.py` — use `AESCipher`, and gate GCM-dependent features on `CRYPTOLIB_HAS_GCM`.
 
@@ -25,18 +25,32 @@ CI lives in `.github/workflows/`; everything must stay green:
 - `.github/dependabot.yml` proposes monthly bumps for Actions and the pylint pin. Bump the pin deliberately and fix any new findings in the same PR; never unpin.
 - Adding or dropping a Python version means updating the `ci.yml` matrix, the support line above, and `python_requires` plus the version classifiers in `setup.py` together.
 
-- Add regression tests to `tests.py` (unittest + `MagicMock` sockets — see existing tests for the pattern of mocking `_get_socket`/`send`/`receive`). Tests must run offline.
+- Add regression tests to `tests.py` (unittest + `MagicMock` sockets — see existing tests for the pattern of mocking `_get_socket`/`send`/`receive`). Tests must run offline. CI runs only `python -m tests` and `testcontrib.py` — tests in other files or runners (e.g. pytest suites) never run in CI.
+- Test fixtures for `devices.json` rows must use the schema the wizard actually writes (`product_id`, not `productKey`; see `DEVICEFILE_SAVE_VALUES` in `core/const.py`). Hand-written fixtures with extra fields hide `KeyError`s on real user files.
+- Lint and test a PR as merged onto current `master`, not just its branch — an old base can fail (or pass) for reasons unrelated to the change. Never get CI green with `--ignore`, blanket `disable`, or excluding files; a narrow `# pylint: disable-next=<msg>` for a verified false positive is fine.
 - Contrib device classes get exercised by `testcontrib.py`.
 - For protocol work, `tools/fake-v35-device.py` emulates a v3.5 device locally; `tools/broadcast-relay.py` helps with discovery testing.
 
 ## Code Conventions
 
 - **Error handling**: runtime device/cloud failures return `error_json()` dicts (`{"Error", "Err", "Payload"}`) — codes and messages live in `tinytuya/core/error_helper.py` (900–914). Do not raise exceptions for network/device failures in library paths; reserve exceptions for programmer errors and `DecodeError` for framing. New error codes go in the table there *and* in the README error table.
-- **Logging**: use the module `log = logging.getLogger(...)` objects; secrets (local keys, session keys, cloud apiSecret, tokens) must never appear in log output at any level, in `__repr__`, or in printed output. Guard expensive log formatting (e.g. hexlify) with `log.isEnabledFor(logging.DEBUG)`.
+- **Logging**: use the module `log = logging.getLogger(__name__)` objects; never rewrite logger names (users filter on them). Library code must not configure logging (handlers, formatters, `basicConfig`) — only the explicit `set_debug()` helper may. Per-device context goes in the message or a `LoggerAdapter`, not in per-instance logger names. No `print()` in library modules; only the CLI, wizard, and scanner user-facing output may print. Secrets (local keys, session keys, cloud apiSecret, tokens) must never appear in log output at any level, in `__repr__`, or in printed output. Guard expensive log formatting (e.g. hexlify) with `log.isEnabledFor(logging.DEBUG)`.
 - **Style**: no type annotations are used in this codebase — match that. 4-space indents, descriptive lowercase function names, existing docstring style (signature summary at module/class top). Keep the comment density of surrounding code. Code must pass `pylint -E`.
 - **Public API stability**: `tinytuya/__init__.py` wildcard-exports the core; a great deal of downstream code (Home Assistant integrations, forks, tutorials) depends on existing names, argument orders, and the error-dict shape. Never rename or reorder existing public parameters; add new parameters with defaults at the end. Deprecate softly (keep aliases) rather than removing.
 - **Protocol changes**: anything touching `message_helper.py`, `header.py`, `crypto_helper.py`, or `_encode_message`/`_decode_payload`/session negotiation in `XenonDevice.py` must be reflected in PROTOCOL.md in the same PR.
+- **Wildcard exports**: any new module pulled in by a `from .X import *` in `tinytuya/__init__.py` or `tinytuya/core/__init__.py` must define `__all__`, so it cannot shadow existing names (e.g. `log`).
+- **Network defaults**: new behavior that sends extra traffic to devices (polling, probing, retries) is opt-in on library APIs (`deviceScan()`, `Device` methods); the CLI may opt in. Existing callers must not see new traffic or slower calls after upgrading.
+- **Scanner**: new scanner features go in the `DeviceDetect` state-machine classes or small helpers, not the `scanner.devices()` main loop (see DESIGN.md). Do not re-indent large existing blocks; wrap them in a function instead so the diff stays reviewable.
+- **One protocol implementation**: framing, crypto, session-key negotiation, and payload generation exist once (in `XenonDevice.py` and the `core/*_helper.py` modules). Alternative I/O layers (`Monitor`, any async API) call into that shared logic and own only socket I/O — never copy it, or wire fixes have to land twice and drift.
+- **asyncio code** (when present): do not create `asyncio.Lock`/`Event`/`Queue` in `__init__` (they bind to the wrong loop on Python < 3.10); let `CancelledError` propagate; never block the event loop; isolate user-callback exceptions so one callback cannot kill the others.
 - **Device quirks**: express per-version/per-dev_type command differences via the `payload_dict` template overlays in `XenonDevice.py`, not scattered `if version ==` branches.
+
+## Pull Request Scope
+
+- One concern per PR. Documentation PRs do not change behavior, move modules, rename constants, or bump versions — split those out.
+- New public classes (e.g. a new device type) ship opt-in, with offline tests in `tests.py` and docs, and do not change default CLI or scanner output in the same PR.
+- Stale branches that conflict with since-refactored modules (e.g. the old monolithic `core.py`) are ported as a fresh PR off `master`, crediting the original author, rather than resolving years-old conflicts.
+- Version bumps and major-version (breaking) changes happen only in a release PR. Breaking changes need a migration note in RELEASE.md and README and must keep soft-deprecated aliases where possible.
 
 ## Adding a Contrib Device Module
 
@@ -57,7 +71,7 @@ When behavior changes, update the matching docs in the same change:
 | Public API (methods, args, defaults) | `README.md` function lists + `tinytuya/__init__.py` docstring |
 | Wire protocol / framing / crypto | `PROTOCOL.md` |
 | Architecture / module boundaries | `DESIGN.md` |
-| Any user-visible change | `RELEASE.md` (bullet with PR # and author credit) |
+| Any user-visible change | `RELEASE.md` (one- or two-sentence bullet with PR # and author credit, under the feature or bug-fix grouping it belongs to) |
 | New error code | `error_helper.py` + README error table |
 | Contrib module | `Contrib/README.md` + `examples/Contrib/` |
 
