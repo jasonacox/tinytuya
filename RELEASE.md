@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## Unreleased
+
+### Security
+* Debug logs no longer include the device local key or the v3.4/v3.5 session key; scanner debug output names the device a key belongs to instead of the key. Via [#743](https://github.com/jasonacox/tinytuya/pull/743) by @jasonacox.
+
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
 Release rollup. The **Monitor reliability** changes below ship in this PR; the
