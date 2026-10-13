@@ -868,7 +868,7 @@ class ForceScannedDevice(DeviceDetect):
                 self.displayed = True
             else:
                 if self.debug:
-                    print('ForceScannedDevice: v3.x brute force ran out of keys, restarting without skipping any', self.ip, 'last key from', self.cur_key.gwId)
+                    print('ForceScannedDevice: v3.x brute force ran out of keys, restarting without skipping any', self.ip, 'starting with key from', self.cur_key.gwId)
                 self.connect()
         else:
             if self.debug:
