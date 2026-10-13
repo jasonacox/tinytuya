@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Keep GitHub Actions (checkout, setup-python, codeql-action) current
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+  # Propose pylint bumps in requirements-dev.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    allow:
+      - dependency-name: "pylint"

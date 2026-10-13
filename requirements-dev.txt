@@ -1,0 +1,2 @@
+# Development and CI tooling. Pinned so lint results only change when the pin is bumped deliberately.
+pylint==4.1.3

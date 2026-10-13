@@ -166,7 +166,7 @@ class _AESCipher_pyaes(_AESCipher_Base):
             # GCM required for 3.5 devices
             raise NotImplementedError( 'pyaes does not support GCM, please install PyCryptodome' )
 
-        # pylint: disable-next=used-before-assignment
+        # pylint: disable-next=used-before-assignment,possibly-used-before-assignment
         cipher = pyaes.blockfeeder.Encrypter(
             pyaes.AESModeOfOperationECB(self.key),
             pyaes.PADDING_DEFAULT if pad else pyaes.PADDING_NONE

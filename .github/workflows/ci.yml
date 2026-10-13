@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: "Pylint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pylint (errors only)
+        run: pylint --recursive y -E tinytuya/
+
+  test:
+    name: "Test Python ${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ ubuntu-latest ]
+        include:
+          # Python 3.7 builds are not available for ubuntu-24.04+
+          - python-version: "3.7"
+            os: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Byte-compile all modules (catches syntax not valid on this Python)
+        run: python -m compileall -q tinytuya
+      - name: Unit tests
+        run: python -m tests
+      - name: Smoke test (test.py usage path)
+        run: python test.py
+      - name: Contrib tests
+        run: python testcontrib.py
+
+  crypto:
+    name: "Crypto backend ${{ matrix.backend }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Exactly one AES backend is installed per job so crypto_helper.py
+        # selects it; requirements.txt is skipped because it pulls in cryptography
+        include:
+          - { backend: cryptography,  expected: pyca/cryptography }
+          - { backend: pycryptodome,  expected: PyCryptodome }
+          - { backend: pycryptodomex, expected: PyCryptodomex }
+          - { backend: pyaes,         expected: pyaes }
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests colorama ${{ matrix.backend }}
+      - name: Verify selected backend
+        env:
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          python -c "
+          import os
+          from tinytuya.core.crypto_helper import AESCipher as c
+          print(c.CRYPTOLIB, c.CRYPTOLIB_VER, 'GCM' if c.CRYPTOLIB_HAS_GCM else 'no GCM')
+          assert c.CRYPTOLIB == os.environ['EXPECTED'], 'expected ' + os.environ['EXPECTED']
+          "
+      - name: Unit tests
+        run: python -m tests
+
+  package:
+    name: "Build package"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+      - name: Check package metadata
+        run: twine check --strict dist/*
+      - name: Install wheel and import
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp && python -c "import tinytuya; print(tinytuya.__version__)"
