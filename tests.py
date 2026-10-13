@@ -538,6 +538,36 @@ class TestSessionCrypto(unittest.TestCase):
             d._receive()
 
 
+class TestNoSecretsInLogs(unittest.TestCase):
+    """Local keys and session keys must never appear in log output, even at DEBUG."""
+
+    def assertNoSecrets(self, records, secrets):
+        for record in records:
+            message = record.getMessage()
+            for secret in secrets:
+                for form in (repr(secret), secret.hex(), secret.decode('latin1')):
+                    self.assertNotIn(form, message)
+
+    def test_session_key_negotiation_does_not_log_keys(self):
+        versions = [3.4]
+        if mh.AESCipher.CRYPTOLIB_HAS_GCM:
+            versions.append(3.5)
+        for version in versions:
+            d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=version)
+            d.local_nonce = b'A' * 16
+            d.remote_nonce = b'B' * 16
+            with self.assertLogs('tinytuya', level='DEBUG') as captured:
+                self.assertTrue(d._negotiate_session_key_generate_finalize())
+            self.assertNoSecrets(captured.records, [LOCAL_KEY.encode('latin1'), d.local_key])
+
+    def test_status_payload_error_does_not_log_key(self):
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+        d._send_receive = MagicMock(return_value=tinytuya.error_json(tinytuya.ERR_PAYLOAD))
+        with self.assertLogs('tinytuya', level='DEBUG') as captured:
+            d.status()
+        self.assertNoSecrets(captured.records, [LOCAL_KEY.encode('latin1')])
+
+
 import socket as _socket_mod
 from tinytuya.core.Monitor import Monitor, _accepts_nowait
 
