@@ -955,7 +955,6 @@ class XenonDevice(object):
             self.local_key = ''.join(k)
         else:
             self.local_key = bytes( [ a^b for (a,b) in zip(self.local_nonce,self.remote_nonce) ] )
-        log.debug("Session nonce XOR'd: %r", self.local_key)
 
         cipher = AESCipher(self.real_local_key)
         if self.version == 3.4:
@@ -965,7 +964,7 @@ class XenonDevice(object):
             log.debug("Session IV: %r", iv)
             self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=iv )[12:28]
 
-        log.debug("Session key negotiate success! session key: %r", self.local_key)
+        log.debug("Session key negotiate success!")
         return True
 
     # adds protocol header (if needed) and encrypts
@@ -1082,7 +1081,7 @@ class XenonDevice(object):
                 payload = self.generate_payload(query_type)
                 data = self._send_receive(payload)
             elif data["Err"] == str(ERR_PAYLOAD):
-                log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
+                log.debug("Status request returned an error, is version %r and the local key correct?", self.version)
 
         return data
 

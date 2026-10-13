@@ -408,7 +408,7 @@ class DeviceDetect(object):
 
     def v34_negotiate_sess_key_start( self ):
         if self.debug:
-            print('v3.4/5 trying key', self.ip, self.device.real_local_key)
+            print('v3.4/5 trying key for', self.device.id, 'at', self.ip)
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
         if self.try_v35_with_v34 and self.device.version == 3.4:
@@ -868,16 +868,16 @@ class ForceScannedDevice(DeviceDetect):
                 self.displayed = True
             else:
                 if self.debug:
-                    print('ForceScannedDevice: v3.x brute force ran out of keys, restarting without skipping any', self.ip, self.cur_key.key)
+                    print('ForceScannedDevice: v3.x brute force ran out of keys, restarting without skipping any', self.ip, 'starting with key from', self.cur_key.gwId)
                 self.connect()
         else:
             if self.debug:
-                print('ForceScannedDevice: v3.x brute force trying next key', self.ip, self.cur_key.key)
+                print('ForceScannedDevice: v3.x brute force trying next key', self.ip, 'key from', self.cur_key.gwId)
             self.connect()
 
     def brute_force_found_key( self ):
         if self.debug:
-            print('ForceScannedDevice: v3.x brute forced key', self.cur_key.key, 'for', self.ip)
+            print('ForceScannedDevice: v3.x brute forced key from', self.cur_key.gwId, 'for', self.ip)
         self.brute_force_data = []
         self.read = True
         self.write = False
