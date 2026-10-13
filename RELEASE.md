@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## Unreleased
+
+### Security
+* Turning on debug logging no longer switches v3.5 (AES-GCM) messages to a fixed IV; the fixed IV for packet analysis is now an explicit, warned opt-in via `set_debug(True, static_iv=True)`. Via [#745](https://github.com/jasonacox/tinytuya/pull/745) by @jasonacox.
+
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
 Release rollup. The **Monitor reliability** changes below ship in this PR; the
