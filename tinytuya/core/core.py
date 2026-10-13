@@ -133,9 +133,10 @@ def hex2bin(x):
 def set_debug(toggle=True, color=True, static_iv=False):
     """Enable tinytuya verbose logging
 
-    static_iv=True makes v3.5 (AES-GCM) messages reuse one fixed IV so packet
-    captures are byte-for-byte reproducible.  This breaks GCM security and is
-    meant only for protocol troubleshooting on a trusted network.
+    static_iv=True makes v3.5 (AES-GCM) messages use one fixed, known IV to aid
+    packet analysis (sequence numbers, timestamps and tags still vary).  This
+    breaks GCM security and is meant only for protocol troubleshooting on a
+    trusted network.
     """
     color = color and HAVE_COLOR
     AESCipher.STATIC_DEBUG_IV = bool(toggle and static_iv)

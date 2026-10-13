@@ -387,7 +387,7 @@ Field breakdown:
 * `SSSSSSSS` – 32‑bit sequence number (big‑endian). Device responses advance a global counter (not per‑request echo).
 * `MMMMMMMM` – 32‑bit command ID
 * `LLLLLLLL` – 32‑bit length counting from the first byte of IV through (and including) the final 16‑byte GCM Tag; DOES NOT include footer
-* `(II*12)` – 12‑byte IV / nonce (unique per packet). TinyTuya generates it with `os.urandom(12)`; `set_debug(static_iv=True)` substitutes the fixed `0123456789ab` for reproducible packet captures, which reuses the nonce and is insecure.
+* `(II*12)` – 12‑byte IV / nonce (unique per packet). TinyTuya generates it with `os.urandom(12)`; `set_debug(static_iv=True)` substitutes the fixed `0123456789ab` to aid packet analysis (frames still differ by sequence number, payload timestamp and tag), which reuses the nonce and is insecure.
 * `DD..DD` – Encrypted payload (ciphertext). First 4 bytes (after decrypt) may be a 32‑bit return code followed by JSON/version header data.
 * `(TT*16)` – 16‑byte AES‑GCM authentication Tag
 * `00009966` – 4‑byte footer (big‑endian 0x00009966)
