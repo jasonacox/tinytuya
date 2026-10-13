@@ -43,6 +43,10 @@ log = logging.getLogger(__name__)
 
 # Cryptography Helpers
 class _AESCipher_Base(object):
+    # Opt-in for protocol troubleshooting only: every GCM message reuses one
+    # fixed IV, which breaks GCM security.  Set via set_debug(static_iv=True).
+    STATIC_DEBUG_IV = False
+
     def __init__(self, key):
         self.key = key
 
@@ -51,8 +55,8 @@ class _AESCipher_Base(object):
         if not cls.CRYPTOLIB_HAS_GCM:
             raise NotImplementedError( 'Crypto library does not support GCM' )
         if iv is True:
-            if log.isEnabledFor( logging.DEBUG ):
-                # Debug mode: fixed IV for troubleshooting and packet analysis
+            if cls.STATIC_DEBUG_IV:
+                # Explicit opt-in: fixed IV for packet analysis/troubleshooting
                 iv = b'0123456789ab'
             else:
                 # GCM nonce: must be unique per (key, message).  A time-derived

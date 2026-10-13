@@ -130,9 +130,15 @@ def hex2bin(x):
     else:
         return bytes.fromhex(x)
 
-def set_debug(toggle=True, color=True):
-    """Enable tinytuya verbose logging"""
+def set_debug(toggle=True, color=True, static_iv=False):
+    """Enable tinytuya verbose logging
+
+    static_iv=True makes v3.5 (AES-GCM) messages reuse one fixed IV so packet
+    captures are byte-for-byte reproducible.  This breaks GCM security and is
+    meant only for protocol troubleshooting on a trusted network.
+    """
     color = color and HAVE_COLOR
+    AESCipher.STATIC_DEBUG_IV = bool(toggle and static_iv)
     if toggle:
         if color:
             logging.basicConfig(
@@ -148,6 +154,8 @@ def set_debug(toggle=True, color=True):
             log.debug("Warning: Crypto library does not support AES-GCM, v3.5 devices will not work!")
         else:
             log.debug("Using %s %s for crypto, GCM is supported", AESCipher.CRYPTOLIB, AESCipher.CRYPTOLIB_VER)
+        if AESCipher.STATIC_DEBUG_IV:
+            log.warning("set_debug(static_iv=True): v3.5 messages use a fixed IV - encryption is NOT secure, use only for troubleshooting")
     else:
         log.setLevel(logging.NOTSET)
 

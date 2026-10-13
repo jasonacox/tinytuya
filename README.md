@@ -182,7 +182,7 @@ TinyTuya Base Functions
     devices = deviceScan()                        # Returns dictionary of devices found on local network
     scan()                                        # Interactive scan of local network
     wizard                                        # Interactive setup wizard (run via: python -m tinytuya wizard)
-    set_debug(toggle, color)                      # Activate verbose debugging output
+    set_debug(toggle, color, static_iv)           # Activate verbose debugging output (static_iv=True: insecure fixed v3.5 IV for packet analysis only)
     pack_message(msg, hmac_key)                   # Packs a TuyaMessage(), encrypting or adding a CRC if required 
     unpack_message(data, hmac_key, header, 
                     no_retcode)                   # Unpacks a TuyaMessage() 

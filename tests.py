@@ -509,13 +509,30 @@ class TestSessionCrypto(unittest.TestCase):
         cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
         if not cipher.CRYPTOLIB_HAS_GCM:
             self.skipTest("crypto backend has no GCM support")
-        if log.isEnabledFor(logging.DEBUG):
-            self.skipTest("debug mode uses a fixed IV for packet troubleshooting")
+        # tests.py runs with DEBUG logging on; debug logging alone must not change the IV
+        self.assertTrue(log.isEnabledFor(logging.DEBUG))
         iv1 = cipher.get_encryption_iv(True)
         iv2 = cipher.get_encryption_iv(True)
         self.assertEqual(len(iv1), 12)
         self.assertEqual(len(iv2), 12)
         self.assertNotEqual(iv1, iv2, "GCM IV must be random per message")
+
+    def test_static_iv_only_when_explicitly_requested(self):
+        cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
+        if not cipher.CRYPTOLIB_HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
+        try:
+            with self.assertLogs('tinytuya', level='WARNING'):
+                tinytuya.set_debug(True, static_iv=True)
+            self.assertEqual(cipher.get_encryption_iv(True), b'0123456789ab')
+            tinytuya.set_debug(True)
+            self.assertNotEqual(cipher.get_encryption_iv(True), cipher.get_encryption_iv(True))
+            tinytuya.set_debug(True, static_iv=True)
+            tinytuya.set_debug(False)
+            self.assertFalse(mh.AESCipher.STATIC_DEBUG_IV, "turning debug off must clear static_iv")
+        finally:
+            mh.AESCipher.STATIC_DEBUG_IV = False
+            log.setLevel(logging.DEBUG)
 
     def test_receive_rejects_gcm_auth_failure(self):
         key = LOCAL_KEY.encode('latin1')

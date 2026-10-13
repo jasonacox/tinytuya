@@ -38,7 +38,7 @@
         turn_on(switch=1, nowait)          # Turn on device / switch #
         turn_off(switch=1, nowait)         # Turn off
         set_timer(num_secs, nowait)        # Set timer for num_secs
-        set_debug(toggle, color)           # Activate verbose debugging output
+        set_debug(toggle, color, static_iv) # Activate verbose debugging output (static_iv: insecure fixed GCM IV for packet analysis)
         set_sendWait(num_secs)             # Time to wait after sending commands before pulling response
         detect_available_dps()             # Return list of DPS available from device
         generate_payload(command, data)    # Generate TuyaMessage payload for command with data
