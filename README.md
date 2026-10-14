@@ -711,7 +711,19 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 ```
 
 ### Scan Tool 
-The function `tinytuya.scan()` listens on UDP ports 6666, 6667, and 7000 and identifies Tuya devices broadcasting their Address, Device ID, Product ID, and Version. After the UDP window it also polls complete `devices.json` rows (ID, local key, IPv4 address, and supported protocol version) at their configured IP, allowing silent devices to be found. The `tinytuya.deviceScan()` function returns all found devices and their stats as a dictionary. Set `poll_configured=False`, or use the CLI option `-no-poll-configured`, to skip the configured-IP fallback when a device file contains stale addresses.
+The function `tinytuya.scan()` listens on UDP ports 6666, 6667, and 7000 and identifies Tuya devices broadcasting their Address, Device ID, Product ID, and Version. The `tinytuya.deviceScan()` function returns found devices and their stats as a dictionary. Library calls default to `poll_configured=False`; opt in with `poll_configured=True` to poll complete `devices.json` rows (ID, local key, IPv4 address, and supported protocol version) at their configured IP after UDP discovery, allowing silent devices to be found. CLI `scan`, `devices` and `wizard` commands explicitly enable this fallback by default; use `-no-poll-configured` to skip it for stale addresses.
+
+```python
+scan(maxretry=None, color=True, forcescan=False, poll_configured=False)
+deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=False)
+```
+
+The library helpers `scanner.scan`, `scanner.devices`, `scanner.poll_and_display`,
+`scanner.alldevices` and `wizard.wizard` likewise accept a final
+`poll_configured=False` parameter. Requested ID/IP sets use bounded parallel
+polls of matching configured rows, sharing the scanner's socket limit and
+existing ten-starts-per-loop cap. Protocol versions in static and broadcast
+results are strings.
 
 Configured polling waits for explicit force scans to finish, respects `maxdevices`
 and requested ID/IP early stops, and skips malformed credentials. Snapshot commands
