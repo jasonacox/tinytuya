@@ -225,7 +225,7 @@ def termcolor(color=True):
 
 
 # Scan function shortcut
-def scan(maxretry=None, color=True, forcescan=False, poll_configured=True):
+def scan(maxretry=None, color=True, forcescan=False, poll_configured=False):
     """Scans your network for Tuya devices with output to stdout"""
     from .. import scanner
     scanner.scan(
@@ -236,7 +236,7 @@ def scan(maxretry=None, color=True, forcescan=False, poll_configured=True):
 
 # Scan function
 def deviceScan(verbose=False, maxretry=None, color=True, poll=True,
-               forcescan=False, byID=False, poll_configured=True):
+               forcescan=False, byID=False, poll_configured=False):
     """Scans your network for Tuya devices and returns dictionary of devices discovered
         devices = tinytuya.deviceScan(verbose)
 
@@ -246,7 +246,7 @@ def deviceScan(verbose=False, maxretry=None, color=True, poll=True,
         color = True or False, print output in color [Default: True]
         poll = True or False, poll dps status for devices if possible
         forcescan = True or False, force network scan for device IP addresses
-        poll_configured = True or False, poll complete devices.json rows by configured IP
+        poll_configured = True or False [Default: False], poll complete devices.json rows by configured IP
 
     Response:
         devices = Dictionary of all devices found

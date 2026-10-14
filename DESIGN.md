@@ -101,6 +101,18 @@ Commands in `NO_PROTOCOL_HEADER_CMDS` (header.py) — DP_QUERY, DP_QUERY_NEW, UP
 
 Devices broadcast on UDP 6666 (3.1, plaintext) and 6667 (3.2+, AES-ECB under the well-known key `MD5("yGAdlopoPVldABfn")`); newer 3.5 devices stay silent until solicited via an app-style broadcast on UDP 7000 (6699/GCM frames, same key). `scanner.devices()` runs a single-threaded `select()` loop that listens on all three ports and can optionally "force scan" TCP 6668 across address ranges, brute-forcing version/key from `devices.json`. `udp_helper.decrypt_udp()` transparently handles raw-ECB, 55AA-framed, and 6699-GCM broadcast formats.
 
+Configured-IP discovery is an optional authenticated fallback after the UDP
+window and explicit force scans drain. `_ConfiguredPollScheduler` feeds
+`StaticDevice` (a `PollDevice` state machine) into the same select loop, owning
+candidate selection, ID/IP deduplication and socket/result-slot reservations.
+It shares `max_parallel` and the existing ten-starts-per-loop cap; requested
+ID/IP sets select only matching rows, without serializing large lists. Only a
+decoded status response counts as a static result, and UDP discovery at the
+same IP or for the same ID supersedes it. Library APIs default to opt-out; CLI
+discovery commands opt in explicitly. Snapshot-only commands remain opt-out.
+The loop is a local function called inside a cleanup `try/finally`, so all
+state-machine and listener sockets are closed on normal exit or interruption.
+
 ## Cloud
 
 `Cloud` is a self-contained REST client for the Tuya IoT Platform: HMAC-SHA256 request signing (key + token + timestamp, alphabetically sorted query params), automatic token fetch/refresh, and helpers for device lists, DP mappings, logs, and commands. The wizard composes `Cloud` (to fetch local keys) with `scanner` (to find IPs) and writes `tinytuya.json` (credentials), `devices.json` (keys), and `tuya-raw.json` (raw API dump).

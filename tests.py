@@ -713,7 +713,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
     def _run_scan(self, configured, static_success=True, broadcast=None,
                   device_file=None, verbose=False, late_broadcast=False,
                   static_inflight=False, poll_configured=True, stale_read=False,
-                  on_static_connect=None,
+                  on_static_connect=None, cli=False, broadcast_ready=None,
                   **scan_options):
         from tinytuya import scanner
 
@@ -777,7 +777,8 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             del read_socks, error_socks, timeout
             if ready:
                 return ([ready.pop(0)], [], [])
-            if late_ready and OfflineStaticDevice.created:
+            if late_ready and (OfflineStaticDevice.created or
+                               (broadcast_ready and broadcast_ready())):
                 sockets = [late_ready.pop(0)]
                 if stale_read:
                     sockets.append(OfflineStaticDevice.created[0].sock)
@@ -800,6 +801,13 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             # scanner calls tinytuya.decrypt_udp, not a local alias.
             with patch.object(tinytuya, 'decrypt_udp',
                               return_value=json.dumps(broadcast or {})):
+                if cli:
+                    import runpy
+                    import sys
+                    with patch.object(sys, 'argv', ['tinytuya', 'scan', '0', '-nocolor']), \
+                            patch.object(tinytuya, 'load_devicefile', return_value=configured):
+                        runpy.run_module('tinytuya', run_name='__main__')
+                    return {}, OfflineStaticDevice.created
                 result = scanner.devices(
                     scantime=0,
                     color=False,
@@ -814,6 +822,200 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                 )
 
         return result, OfflineStaticDevice.created
+
+    def test_wizard_row_verbose_cli_preserves_product_metadata(self):
+        import io
+        from contextlib import redirect_stdout
+
+        row = self._configured()
+        row.pop('name')
+        row['product_id'] = 'offline-wizard-product'
+        output = io.StringIO()
+        with redirect_stdout(output):
+            _, created = self._run_scan([row], cli=True)
+        self.assertEqual(len(created), 1)
+        self.assertIn('Product ID = offline-wizard-product', output.getvalue())
+        self.assertIn('Static Poll', output.getvalue())
+        self.assertNotIn(row['key'], output.getvalue())
+        self.assertNotIn('productKey', row)
+        self.assertNotIn('mac', row)
+        self.assertNotIn('name', row)
+
+    def test_requested_configured_polls_batch_only_requested_rows(self):
+        from tinytuya import scanner
+
+        rows = []
+        for index in range(4):
+            row = self._configured(ip='192.0.2.%d' % (90 + index))
+            row['id'] = 'requested-%d' % index
+            rows.append(row)
+        started = []
+        peaks = []
+        def record(device):
+            started.append(device)
+            peaks.append(sum(not dev.remove for dev in started))
+        wanted = [row['id'] for row in rows[1:]]
+        with patch.object(scanner, 'max_parallel', 2):
+            result, created = self._run_scan(
+                rows, wantids=wanted, static_inflight=True,
+                on_static_connect=record,
+            )
+        self.assertEqual(set(result), set(wanted))
+        self.assertEqual([dev.deviceinfo['gwId'] for dev in created], wanted)
+        self.assertEqual(max(peaks), 2)
+        self.assertEqual(wanted, [row['id'] for row in rows[1:]])
+
+    def test_force_maxdevices_preserves_late_udp_without_configured_candidates(self):
+        from tinytuya import scanner
+
+        class FoundForceDevice(scanner.DeviceDetect):
+            completed = False
+
+            def __init__(self, *args):
+                super(FoundForceDevice, self).__init__(*args)
+                self.sock = MagicMock()
+                self.write = True
+                self.timeo = scanner.time.time() + 10
+
+            def write_data(self):
+                self.scanned = self.found = True
+                self.deviceinfo['gwId'] = 'force-device'
+                type(self).completed = True
+                self.close()
+
+        broadcast = {'gwId': 'late-udp', 'ip': '192.0.2.11',
+                     'version': '3.5', 'productKey': 'offline-product'}
+        for enabled, row in ((False, self._configured()),
+                             (True, {'id': 'incomplete', 'key': LOCAL_KEY})):
+            with self.subTest(enabled=enabled), \
+                    patch.object(scanner, 'ForceScannedDevice', FoundForceDevice):
+                FoundForceDevice.completed = False
+                result, created = self._run_scan(
+                    [row], forcescan=['192.0.2.99/32'], maxdevices=1,
+                    poll_configured=enabled, broadcast=broadcast,
+                    late_broadcast=True,
+                    broadcast_ready=lambda: FoundForceDevice.completed,
+                )
+                self.assertEqual(set(result), {'force-device', 'late-udp'})
+                self.assertEqual(created, [])
+
+    def test_library_configured_poll_defaults_are_opt_in(self):
+        import inspect
+        from tinytuya import scanner, wizard
+
+        for function in (tinytuya.deviceScan, tinytuya.scan, scanner.devices,
+                         scanner.scan, scanner.poll_and_display,
+                         scanner.alldevices, wizard.wizard):
+            with self.subTest(function=function.__name__):
+                self.assertIs(inspect.signature(function).parameters[
+                    'poll_configured'].default, False)
+        with patch.object(scanner, 'devices', return_value={}) as devices:
+            tinytuya.deviceScan()
+            self.assertIs(devices.call_args[1]['poll_configured'], False)
+            tinytuya.deviceScan(poll_configured=True)
+            self.assertIs(devices.call_args[1]['poll_configured'], True)
+        with patch.object(scanner, 'scan') as scan:
+            tinytuya.scan()
+            self.assertIs(scan.call_args[1]['poll_configured'], False)
+            tinytuya.scan(poll_configured=True)
+            self.assertIs(scan.call_args[1]['poll_configured'], True)
+
+    def test_interactive_cli_explicitly_enables_configured_polling(self):
+        import runpy
+        import sys
+        from tinytuya import scanner, wizard
+
+        for command, module, target in (('scan', scanner, 'scan'),
+                                        ('devices', scanner, 'alldevices'),
+                                        ('wizard', wizard, 'wizard')):
+            for flag in ([], ['-no-poll-configured']):
+                with self.subTest(command=command, flag=flag), \
+                        patch.object(sys, 'argv', ['tinytuya', command] + flag), \
+                        patch.object(module, target) as run:
+                    runpy.run_module('tinytuya', run_name='__main__')
+                    self.assertIs(run.call_args[1]['poll_configured'], not bool(flag))
+
+    def test_credentials_validation_is_shared_and_strict(self):
+        from tinytuya import scanner
+
+        row = self._configured()
+        self.assertTrue(scanner._has_credentials(row))
+        for invalid in (None, [], 'row', {}, {'id': 1, 'key': LOCAL_KEY},
+                        {'id': 'device', 'key': True},
+                        {'id': 'device', 'key': ''}):
+            self.assertFalse(scanner._has_credentials(invalid))
+
+    def test_large_stale_requested_set_uses_bounded_parallel_batches(self):
+        from tinytuya import scanner
+
+        rows = []
+        for index in range(15):
+            row = self._configured(ip='192.0.2.%d' % (100 + index))
+            row['id'] = 'stale-device-%d' % index
+            rows.append(row)
+        started, peaks = [], []
+        def record(device):
+            started.append(device)
+            peaks.append(sum(not dev.remove for dev in started))
+        with patch.object(scanner, 'max_parallel', 3):
+            result, created = self._run_scan(
+                rows, wantids=[row['id'] for row in rows],
+                static_inflight=True, static_success=False,
+                on_static_connect=record,
+            )
+        self.assertEqual(result, {})
+        self.assertEqual(len(created), len(rows))
+        self.assertEqual(max(peaks), 3)
+        self.assertTrue(all(dev.remove and dev.sock is None for dev in created))
+
+    def test_poll_and_display_and_interactive_wrappers_forward_opt_in(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+        from tinytuya import scanner, wizard
+
+        row = self._configured()
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), redirect_stdout(io.StringIO()), \
+                    patch.object(scanner, 'devices', return_value={}) as scan:
+                scanner.poll_and_display([row], color=False, poll_configured=enabled)
+                self.assertIs(scan.call_args[1]['poll_configured'], enabled)
+                self.assertEqual(scan.call_args[1]['wantids'], [row['id']])
+            with redirect_stdout(io.StringIO()), \
+                    patch.object(tinytuya, 'load_devicefile', return_value=[row]), \
+                    patch.object(scanner, 'poll_and_display', return_value=[]) as poll:
+                scanner.alldevices(color=False, assume_yes=True, poll_configured=enabled)
+                self.assertIs(poll.call_args[1]['poll_configured'], enabled)
+                with tempfile.TemporaryDirectory() as tempdir, \
+                        patch.object(wizard, 'CONFIGFILE', tempdir + '/config.json'), \
+                        patch.object(wizard, 'DEVICEFILE', tempdir + '/devices.json'), \
+                        patch.object(scanner, 'SNAPSHOTFILE'):
+                    wizard.wizard(color=False, nocloud=True, assume_yes=True,
+                                  poll_configured=enabled)
+                    self.assertIs(poll.call_args[1]['poll_configured'], enabled)
+
+    def test_configured_batch_start_cap_and_duplicate_rows(self):
+        from tinytuya import scanner
+
+        rows = []
+        for index in range(25):
+            row = self._configured(ip='192.0.2.%d' % (150 + index))
+            row['id'] = 'batch-device-%d' % index
+            rows.append(row)
+        duplicate_id = dict(rows[0], ip='192.0.2.200')
+        duplicate_ip = dict(rows[1], id='duplicate-ip')
+        starts_per_pass = []
+        original_start = scanner._ConfiguredPollScheduler.start
+        def record_start(scheduler, *args):
+            before = len(scheduler.devices)
+            end_time = original_start(scheduler, *args)
+            starts_per_pass.append(len(scheduler.devices) - before)
+            return end_time
+        with patch.object(scanner._ConfiguredPollScheduler, 'start', record_start):
+            result, created = self._run_scan(rows + [duplicate_id, duplicate_ip])
+        self.assertEqual(len(result), 25)
+        self.assertEqual(len(created), 25)
+        self.assertEqual(starts_per_pass, [10, 10, 5])
 
     def test_interrupt_on_first_select_returns_cleanly(self):
         from tinytuya import scanner
@@ -1107,7 +1309,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertIn(configured['id'], result)
         self.assertEqual(result[configured['id']]['origin'], 'static')
         self.assertEqual(result[configured['id']]['version'],
-                         configured['version'])
+                         str(configured['version']))
         self.assertEqual(len(static_devices), 1)
 
     def test_configured_poll_can_be_disabled_without_disabling_polling(self):
@@ -1262,8 +1464,9 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             self.assertIsNot(deviceinfo, configured)
             self.assertEqual(deviceinfo['ip'], '192.0.2.40')
             self.assertIsInstance(deviceinfo['ip'], str)
-            self.assertIsInstance(deviceinfo['version'], float)
-            self.assertIn(deviceinfo['version'], (3.1, 3.2, 3.3, 3.4, 3.5))
+            self.assertIsInstance(deviceinfo['version'], str)
+            self.assertEqual(deviceinfo['version'], str(version))
+            self.assertIn(float(deviceinfo['version']), (3.1, 3.2, 3.3, 3.4, 3.5))
 
     def test_invalid_candidates_are_skipped_before_socket_construction(self):
         import io
@@ -1423,6 +1626,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                 discover=True,
                 show_timer=False,
                 tuyadevices=configured,
+                poll_configured=True,
             )
 
         self.assertEqual(set(result), {item['id'] for item in configured})
@@ -1474,6 +1678,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                 discover=True,
                 show_timer=False,
                 tuyadevices=[configured],
+                poll_configured=True,
             )
 
         self.assertEqual(len(InterruptStaticDevice.created), 1)

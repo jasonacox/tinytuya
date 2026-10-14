@@ -39,8 +39,8 @@ Subclasses add device-specific helpers on top.
 
 ## Module-Level Functions
 
-### `deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=True)`
-Scans the local network for Tuya devices and returns a dictionary of results. After UDP discovery, complete `devices.json` rows are polled at their configured IP by default; set `poll_configured=False` to skip that fallback without disabling status polling for devices found normally.
+### `deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=False)`
+Scans the local network for Tuya devices and returns a dictionary of results. Set `poll_configured=True` to poll complete `devices.json` rows at their configured IP after UDP discovery; library calls default to UDP discovery without this fallback. This is independent of status polling for devices found normally.
 
 ```python
 import tinytuya
@@ -55,8 +55,17 @@ configured polling precedes the implicit force scan of missing requested IPs.
 `snapshot()` and `snapshotjson()` disable this fallback and retain snapshot-only
 address scope.
 
-### `scan(maxretry=None, color=True, forcescan=False, poll_configured=True)`
-Interactive scan that prints discovered devices to stdout. Set `poll_configured=False` to skip direct polling of complete static-IP rows from `devices.json`.
+### `scan(maxretry=None, color=True, forcescan=False, poll_configured=False)`
+Interactive scan that prints discovered devices to stdout. Set `poll_configured=True` to include complete static-IP rows from `devices.json`; library calls default to `False`.
+
+The library helpers `scanner.scan()`, `scanner.devices()`,
+`scanner.poll_and_display()`, `scanner.alldevices()` and `wizard.wizard()` also
+accept a final `poll_configured=False` parameter. The CLI `scan`, `devices` and
+`wizard` commands explicitly enable configured polling unless
+`-no-poll-configured` is supplied. Requested ID/IP sets are polled in bounded
+parallel batches containing only matching configured rows; the existing shared
+socket limit and ten-starts-per-loop cap apply. Static and broadcast results
+both expose protocol versions as strings.
 
 ```python
 tinytuya.scan()

@@ -73,7 +73,7 @@ for sp in cmd_list:
                 subparsers[sp].add_argument( 'max_time', help='Maximum time to find Tuya devices [Default: %s]' % SCANTIME, nargs='?', type=int )
             subparsers[sp].add_argument( '-force', '-f', metavar='0.0.0.0/24', help='Force network scan of device IP addresses. Auto-detects net/mask if none provided', action='append', nargs='*' )
             subparsers[sp].add_argument( '-no-broadcasts', help='Ignore broadcast packets when force scanning', action='store_true' )
-            if sp == 'scan':
+            if sp in ('scan', 'devices', 'wizard'):
                 subparsers[sp].add_argument(
                     '-no-poll-configured', '--no-poll-configured',
                     help='Skip static-IP polling of configured devices',
@@ -252,7 +252,7 @@ if args.command == 'scan':
 elif args.command == 'snapshot':
     scanner.snapshot( color=(not args.nocolor), assume_yes=args.yes, skip_poll=args.no_poll )
 elif args.command == 'devices':
-    scanner.alldevices( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll )
+    scanner.alldevices( scantime=args.max_time, color=(not args.nocolor), forcescan=args.force, discover=(not args.no_broadcasts), assume_yes=args.yes, skip_poll=args.no_poll, poll_configured=(not args.no_poll_configured) )
 elif args.command == 'json':
     scanner.snapshotjson()
 elif args.command == 'wizard':
@@ -261,7 +261,7 @@ elif args.command == 'wizard':
     creds = { 'file': args.credentials_file, 'apiKey': args.key, 'apiSecret': args.secret, 'apiRegion': args.region, 'apiDeviceID': None }
     if args.device:
         creds['apiDeviceID'] = ','.join(sum(args.device, []))
-    wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds )
+    wizard.wizard( color=(not args.nocolor), retries=args.max_time, forcescan=args.force, nocloud=args.dry_run, assume_yes=args.yes, discover=(not args.no_broadcasts), skip_poll=args.no_poll, credentials=creds, poll_configured=(not args.no_poll_configured) )
 elif args.command == 'list':
     _run_list_command(args)
 elif args.command == 'version':
