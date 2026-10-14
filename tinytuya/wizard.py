@@ -57,7 +57,7 @@ DEFAULT_NETWORK = tinytuya.DEFAULT_NETWORK
 TCPTIMEOUT = tinytuya.TCPTIMEOUT    # Seconds to wait for socket open for scanning
 TCPPORT = tinytuya.TCPPORT          # Tuya TCP Local Port
 
-def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=False, discover=True, credentials=None, skip_poll=None):
+def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=False, discover=True, credentials=None, skip_poll=None, poll_configured=False):
     """
     TinyTuya Setup Wizard Tuya based WiFi smart devices
 
@@ -289,7 +289,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
         answer = input(subbold + '\nPoll local devices? ' + normal + '(Y/n): ')
     if answer.lower().find('n') < 0:
         tinytuya.scanner.SNAPSHOTFILE = SNAPSHOTFILE
-        result = tinytuya.scanner.poll_and_display( tuyadevices, color=color, scantime=retries, snapshot=True, forcescan=forcescan )
+        result = tinytuya.scanner.poll_and_display( tuyadevices, color=color, scantime=retries, snapshot=True, forcescan=forcescan, poll_configured=poll_configured )
         iplist = {}
         found = 0
         for itm in result:

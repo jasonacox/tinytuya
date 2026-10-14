@@ -19,6 +19,9 @@ are listed here so the release changelog is complete.
 * AES-GCM message nonces and the v3.4/v3.5 session-key client nonce now use `os.urandom` instead of a time-derived/constant value, eliminating nonce/IV reuse under a session key. Wire-compatible.
 * 6699/GCM frames that fail their authentication tag are rejected instead of being passed on as raw ciphertext.
 
+### Discovery feature
+* Configured-IP polling finds non-broadcasting devices from complete `devices.json` rows in bounded parallel batches, preserving UDP authority and snapshot-only scope. Library APIs opt in with `poll_configured=True`; CLI `scan`, `devices` and `wizard` enable it by default with `-no-poll-configured` to opt out (PR #735 by @merodahero).
+
 ### Bug fixes (see bug-fix PR)
 * Cloud token-refresh retry preserves the query string; Cloud helpers return error dicts instead of raising on failed/empty responses.
 * `set_timer()` selects the timer DP numerically; timeout errors report `ERR_TIMEOUT`; `received_wrong_cid_queue` is bounded; truncated frames raise `DecodeError`; `error_json()` handles unknown codes; `BulbDevice` rgb8 hue offset fixed; scanner no longer mutates caller dicts; and more.

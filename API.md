@@ -39,8 +39,8 @@ Subclasses add device-specific helpers on top.
 
 ## Module-Level Functions
 
-### `deviceScan(verbose=False, maxretry=15, color=True, poll=True, forcescan=False)`
-Scans the local network for Tuya devices and returns a dictionary of results.
+### `deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=False)`
+Scans the local network for Tuya devices and returns a dictionary of results. Set `poll_configured=True` to poll complete `devices.json` rows at their configured IP after UDP discovery; library calls default to UDP discovery without this fallback. This is independent of status polling for devices found normally.
 
 ```python
 import tinytuya
@@ -49,8 +49,23 @@ for ip, info in devices.items():
     print(ip, info.get('gwId'), info.get('version'))
 ```
 
-### `scan(maxretry=15, color=True, poll=True, forcescan=False)`
-Interactive scan that prints discovered devices to stdout.
+The underlying `scanner.devices()` fallback respects `maxdevices` and requested
+ID/IP early termination. Explicit force scans drain before configured polls start;
+configured polling precedes the implicit force scan of missing requested IPs.
+`snapshot()` and `snapshotjson()` disable this fallback and retain snapshot-only
+address scope.
+
+### `scan(maxretry=None, color=True, forcescan=False, poll_configured=False)`
+Interactive scan that prints discovered devices to stdout. Set `poll_configured=True` to include complete static-IP rows from `devices.json`; library calls default to `False`.
+
+The library helpers `scanner.scan()`, `scanner.devices()`,
+`scanner.poll_and_display()`, `scanner.alldevices()` and `wizard.wizard()` also
+accept a final `poll_configured=False` parameter. The CLI `scan`, `devices` and
+`wizard` commands explicitly enable configured polling unless
+`-no-poll-configured` is supplied. Requested ID/IP sets are polled in bounded
+parallel batches containing only matching configured rows; the existing shared
+socket limit and ten-starts-per-loop cap apply. Static and broadcast results
+both expose protocol versions as strings.
 
 ```python
 tinytuya.scan()
@@ -896,7 +911,8 @@ TinyTuya ships a built-in CLI available as `tinytuya` (pipx) or `python -m tinyt
 
 ```bash
 tinytuya wizard    # Interactive setup – fetches local keys from Tuya Cloud
-tinytuya scan      # Broadcast scan to find devices on the LAN
+tinytuya scan      # Broadcast scan plus configured static-IP fallback
+                    # Add -no-poll-configured to skip the static fallback
 tinytuya devices   # Poll all devices listed in devices.json
 tinytuya snapshot  # Poll devices listed in snapshot.json
 tinytuya json      # Same as snapshot but outputs raw JSON
