@@ -505,17 +505,31 @@ class TestSessionCrypto(unittest.TestCase):
         self.assertEqual(len(second), 16)
         self.assertNotEqual(first, second, "client nonce must differ between negotiations")
 
+    def _set_crypto_log_level(self, level):
+        # tests.py enables DEBUG for all of tinytuya, which switches on the fixed
+        # debug IV; pin the crypto_helper logger so each mode is tested explicitly
+        clog = logging.getLogger('tinytuya.core.crypto_helper')
+        self.addCleanup(clog.setLevel, clog.level)
+        clog.setLevel(level)
+
     def test_gcm_iv_is_random_and_12_bytes(self):
         cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
         if not cipher.CRYPTOLIB_HAS_GCM:
             self.skipTest("crypto backend has no GCM support")
-        if log.isEnabledFor(logging.DEBUG):
-            self.skipTest("debug mode uses a fixed IV for packet troubleshooting")
+        self._set_crypto_log_level(logging.INFO)
         iv1 = cipher.get_encryption_iv(True)
         iv2 = cipher.get_encryption_iv(True)
         self.assertEqual(len(iv1), 12)
         self.assertEqual(len(iv2), 12)
         self.assertNotEqual(iv1, iv2, "GCM IV must be random per message")
+
+    def test_gcm_iv_is_fixed_in_debug_mode(self):
+        # deliberate troubleshooting aid (see AGENTS.md safety rails)
+        cipher = mh.AESCipher(LOCAL_KEY.encode('latin1'))
+        if not cipher.CRYPTOLIB_HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
+        self._set_crypto_log_level(logging.DEBUG)
+        self.assertEqual(cipher.get_encryption_iv(True), b'0123456789ab')
 
     def test_receive_rejects_gcm_auth_failure(self):
         key = LOCAL_KEY.encode('latin1')
