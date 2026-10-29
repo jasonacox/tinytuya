@@ -4,7 +4,7 @@ TinyTuya is a Python library to control Tuya-based WiFi smart devices over the l
 
 ## Quick Facts
 
-- **Language/support**: Python 3.10–3.15 (the CI matrix; `python_requires=">=3.10"` in `setup.py`). Code must run on 3.10, so no 3.11+ features (`except*`, `tomllib`, `typing.Self`, ...). Python 2 and pre-3.7 shims (`IS_PY2`, `from __future__`, `sys.hexversion`/`OrderedDict` fallbacks) are dead code — do not extend or copy them; removing them is welcome (keep `IS_PY2` as an alias, it is public).
+- **Language/support**: Python 3.10–3.15 (the CI matrix; `python_requires=">=3.10"` in `setup.py`). Code must run on 3.10, so no 3.11+ features (`except*`, `tomllib`, `typing.Self`, ...). Python 2 and pre-3.10 shims (`IS_PY2`, `from __future__`, `sys.hexversion`/`OrderedDict` fallbacks) are dead code — do not extend or copy them; removing them is welcome (keep `IS_PY2` as an alias, it is public).
 - **Version source of truth**: `version_tuple` in `tinytuya/core/core.py`. Bump only as part of a release, together with a `RELEASE.md` entry.
 - **Dependencies**: `requests`, `colorama`, and exactly one AES backend (cryptography / PyCryptodome / pyaes / PyCrypto), auto-selected in `tinytuya/core/crypto_helper.py`. Do not add hard dependencies. Never import a crypto library outside `crypto_helper.py` — use `AESCipher`, and gate GCM-dependent features on `CRYPTOLIB_HAS_GCM`.
 
@@ -42,7 +42,7 @@ CI lives in `.github/workflows/`; everything must stay green:
 - **Network defaults**: new behavior that sends extra traffic to devices (polling, probing, retries) is opt-in on library APIs (`deviceScan()`, `Device` methods); the CLI may opt in. Existing callers must not see new traffic or slower calls after upgrading.
 - **Scanner**: new scanner features go in the `DeviceDetect` state-machine classes or small helpers, not the `scanner.devices()` main loop (see DESIGN.md). Do not re-indent large existing blocks; wrap them in a function instead so the diff stays reviewable.
 - **One protocol implementation**: framing, crypto, session-key negotiation, and payload generation exist once (in `XenonDevice.py` and the `core/*_helper.py` modules). New I/O layers (e.g. any async API) must call into that shared logic and own only socket I/O — never copy it, or wire fixes have to land twice and drift. `Monitor._process_buffer()` is the one known exception (it duplicates `_receive()` framing; tracked as debt in DESIGN.md / #713) — shrink it, don't extend the pattern.
-- **asyncio code** (when present): do not create `asyncio.Lock`/`Event`/`Queue` in `__init__` (they bind to the wrong loop on Python < 3.10); let `CancelledError` propagate; never block the event loop; isolate user-callback exceptions so one callback cannot kill the others.
+- **asyncio code** (when present): let `CancelledError` propagate; never block the event loop; isolate user-callback exceptions so one callback cannot kill the others.
 - **Device quirks**: express per-version/per-dev_type command differences via the `payload_dict` template overlays in `XenonDevice.py`, not scattered `if version ==` branches.
 
 ## Pull Request Scope
