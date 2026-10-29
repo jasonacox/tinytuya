@@ -32,16 +32,12 @@ jobs:
 
   test:
     name: "Test Python ${{ matrix.python-version }}"
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-        os: [ ubuntu-latest ]
-        include:
-          # Python 3.7 builds are not available for ubuntu-24.04+
-          - python-version: "3.7"
-            os: ubuntu-22.04
+        # Keep in sync with python_requires in setup.py and the AGENTS.md support line
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
