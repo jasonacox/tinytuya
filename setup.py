@@ -1,11 +1,6 @@
+from importlib.metadata import version as get_distribution, PackageNotFoundError as DistributionNotFound
+
 import setuptools
-try:
-    from importlib.metadata import version as _pkg_version, PackageNotFoundError as DistributionNotFound
-    def get_distribution(name):
-        _pkg_version(name)  # raises DistributionNotFound if not installed
-        return name
-except ImportError:
-    from pkg_resources import DistributionNotFound, get_distribution
 
 from tinytuya import __version__
 
@@ -46,10 +41,19 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url='https://github.com/jasonacox/tinytuya',
     packages=setuptools.find_packages(exclude=("sandbox",)),
+    # pip on older Pythons keeps installing the last release that supported them
+    python_requires=">=3.10",
     install_requires=INSTALL_REQUIRES,
     entry_points={"console_scripts": ["tinytuya=tinytuya.__main__:dummy"]},
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+        "Programming Language :: Python :: 3.15",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],

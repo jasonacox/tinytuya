@@ -4,7 +4,7 @@ TinyTuya is a Python library to control Tuya-based WiFi smart devices over the l
 
 ## Quick Facts
 
-- **Language/support**: Python 3.7–3.14 (the CI matrix; 3.7 runs on `ubuntu-22.04` because newer runner images lack it). Do not use syntax newer than 3.7 (no walrus in hot paths reviewed for 3.7, no `match`, no 3.8+-only typing). Python 2 shims (`IS_PY2`, `from __future__`) are dead code — do not extend them; removing them is welcome.
+- **Language/support**: Python 3.10–3.15 (the CI matrix; `python_requires=">=3.10"` in `setup.py`). Code must run on 3.10, so no 3.11+ features (`except*`, `tomllib`, `typing.Self`, ...). Python 2 shims (`IS_PY2`, `from __future__`) are dead code — do not extend them; removing them is welcome.
 - **Version source of truth**: `version_tuple` in `tinytuya/core/core.py`. Bump only as part of a release, together with a `RELEASE.md` entry.
 - **Dependencies**: `requests`, `colorama`, and exactly one AES backend (cryptography / PyCryptodome / pyaes / PyCrypto), auto-selected in `tinytuya/core/crypto_helper.py`. Do not add hard dependencies. Never import a crypto library outside `crypto_helper.py` — use `AESCipher`, and gate GCM-dependent features on `CRYPTOLIB_HAS_GCM`.
 
@@ -20,10 +20,10 @@ pylint --recursive y -E tinytuya/    # errors-only lint, matches CI (use the pin
 
 CI lives in `.github/workflows/`; everything must stay green:
 
-- `ci.yml` — **Pylint** (errors only, Python 3.12, pylint pinned in `requirements-dev.txt`); **Test** on Python 3.7–3.14 (`compileall`, `tests.py`, `test.py` smoke, `testcontrib.py`); **Crypto backend** runs `tests.py` once per AES backend (cryptography, pycryptodome, pycryptodomex, pyaes) with only that backend installed; **Build package** builds the sdist/wheel and runs `twine check`.
+- `ci.yml` — **Pylint** (errors only, Python 3.12, pylint pinned in `requirements-dev.txt`); **Test** on Python 3.10–3.15 (`compileall`, `tests.py`, `test.py` smoke, `testcontrib.py`); **Crypto backend** runs `tests.py` once per AES backend (cryptography, pycryptodome, pycryptodomex, pyaes) with only that backend installed; **Build package** builds the sdist/wheel and runs `twine check`.
 - `codeql-analysis.yml` — CodeQL security scanning (push, PR, weekly).
 - `.github/dependabot.yml` proposes monthly bumps for Actions and the pylint pin. Bump the pin deliberately and fix any new findings in the same PR; never unpin.
-- Adding or dropping a Python version means updating the `ci.yml` matrix and the support line above together.
+- Adding or dropping a Python version means updating the `ci.yml` matrix, the support line above, and `python_requires` plus the version classifiers in `setup.py` together.
 
 - Add regression tests to `tests.py` (unittest + `MagicMock` sockets — see existing tests for the pattern of mocking `_get_socket`/`send`/`receive`). Tests must run offline.
 - Contrib device classes get exercised by `testcontrib.py`.
