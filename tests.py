@@ -777,7 +777,10 @@ class FakeTuyaDevice(object):
             raise self.send_error
         self._rx += data
         out = b''
-        while len(self._rx) >= 16:
+        while len(self._rx) >= 4:
+            fmt = mh.H.MESSAGE_HEADER_FMT_6699 if self._rx[:4] == mh.H.PREFIX_6699_BIN else mh.H.MESSAGE_HEADER_FMT_55AA
+            if len(self._rx) < struct.calcsize(fmt):
+                break  # wait for the rest of the header (18 bytes for 6699, 16 for 55AA)
             header = mh.parse_header(self._rx)
             if len(self._rx) < header.total_length:
                 break
@@ -799,9 +802,12 @@ class FakeTuyaDevice(object):
     def _open(self, cmd, payload):
         cipher = mh.AESCipher(self.key)
         if self.version < 3.2:
-            if payload.startswith(b'3.1'):
-                return cipher.decrypt(payload[19:], decode_text=False)  # skip "3.1" + MD5 slice
-            return payload
+            if cmd != CT.CONTROL:
+                return payload  # 3.1 sends everything but CONTROL in the clear
+            enc = payload[19:]
+            if payload[:19] != self._envelope_31(enc):
+                raise ValueError('3.1 CONTROL lacks the "3.1" + MD5 envelope')
+            return cipher.decrypt(enc, decode_text=False)
         want_header = cmd not in mh.H.NO_PROTOCOL_HEADER_CMDS
         if self.version < 3.4:
             # the 3.2/3.3 header is sent in the clear, ahead of the ciphertext
@@ -830,8 +836,12 @@ class FakeTuyaDevice(object):
         if not header:
             return body  # v3.1 query replies are plaintext
         enc = cipher.encrypt(body)
+        return self._envelope_31(enc) + enc
+
+    def _envelope_31(self, enc):
+        """The "3.1" + MD5-slice prefix of an encrypted 3.1 CONTROL payload."""
         md5 = hashlib.md5(b'data=' + enc + b'||lpv=3.1||' + self.key).hexdigest()
-        return b'3.1' + md5[8:24].encode() + enc
+        return b'3.1' + md5[8:24].encode()
 
     def _frame(self, cmd, payload, seqno, retcode=0, data=True):
         if self.version >= 3.5:
@@ -1056,6 +1066,15 @@ class _RoundTrip(object):
         fake.noise = b'\x01\x02\x03junk'
         self.assertEqual(d.status()['dps'], {'1': True})
         self.assertEqual(len(fake.requests), 1, 'resynced without a retry')
+
+    def test_requests_fed_one_byte_at_a_time(self):
+        # a streaming transport may hand the device any fragment, even a partial header
+        d, fake = self.make()
+        whole = fake.receive_bytes
+        fake.receive_bytes = lambda data: b''.join(whole(data[i:i + 1]) for i in range(len(data)))
+        self.assertEqual(d.set_value(2, 5)['dps'], {'2': 5})
+        self.assertEqual(d.status()['dps'], {'1': False, '2': 5})
+        self.assertEqual(fake.dropped, 0)
 
 
 class TestWireV31(_RoundTrip, _WireTestCase):
