@@ -1997,10 +1997,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             no_key_count += 1
 
         if verbose:
-            safe_deviceinfo = dict(dev.deviceinfo)
-            safe_deviceinfo['key'] = ''
             _print_device_info(
-                safe_deviceinfo, 'Static Poll', term, dev.message
+                dev.deviceinfo, 'Static Poll', term, dev.message
             )
             dev.displayed = True
 

@@ -836,7 +836,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(len(created), 1)
         self.assertIn('Product ID = offline-wizard-product', output.getvalue())
         self.assertIn('Static Poll', output.getvalue())
-        self.assertNotIn(row['key'], output.getvalue())
+        self.assertIn('Local Key = ' + row['key'], output.getvalue())
         self.assertNotIn('productKey', row)
         self.assertNotIn('mac', row)
         self.assertNotIn('name', row)
@@ -1420,7 +1420,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(device.device.version, configured['version'])
         device.close()
 
-    def test_configured_path_does_not_print_or_log_local_key(self):
+    def test_configured_path_prints_local_key(self):
         import io
         from contextlib import redirect_stdout
         from tinytuya import scanner
@@ -1436,7 +1436,8 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertIn('Static Poll', emitted)
         self.assertIn('Found 1 devices', emitted)
         self.assertIn('Versions: 3.5: 1', emitted)
-        self.assertNotIn(configured['key'], emitted)
+        self.assertIn('Local Key = ' + configured['key'], output.getvalue())
+        self.assertEqual(result[configured['id']]['key'], configured['key'])
 
     def test_multiple_configured_devices_share_the_scan_loop(self):
         first = self._configured()
@@ -1481,13 +1482,11 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
             ('192.0.2.43', 'not-a-version'),
         )
         configured = []
-        invalid_keys = []
         for index, (ip, version) in enumerate(invalid_specs):
             item = self._configured(ip=ip, version=version)
             item['id'] = 'invalid-device-%04d' % index
             item['key'] = 'badkey%010d' % index
             configured.append(item)
-            invalid_keys.append(item['key'])
 
         output = io.StringIO()
         with redirect_stdout(output), \
@@ -1497,10 +1496,9 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         emitted = output.getvalue() + '\n'.join(captured.output)
         self.assertEqual(result, {})
         self.assertEqual(static_devices, [])
-        for key in invalid_keys:
-            self.assertNotIn(key, emitted)
+        self.assertIn('Found 0 devices', emitted)
 
-    def test_unsupported_configured_version_is_logged_without_local_key(self):
+    def test_unsupported_configured_version_is_logged(self):
         from tinytuya import scanner
 
         configured = self._configured(version=3.6)
@@ -1510,7 +1508,6 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         emitted = '\n'.join(captured.output)
         self.assertIsNone(deviceinfo)
         self.assertIn('unsupported configured protocol version 3.6', emitted)
-        self.assertNotIn(configured['key'], emitted)
 
     def test_late_broadcast_by_id_invalidates_completed_static_poll(self):
         import io
