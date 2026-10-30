@@ -1425,5 +1425,409 @@ class TestCloud(unittest.TestCase):
         self.assertEqual(len(self.server.calls), 3)
 
 
+# ---------------------------------------------------------------------------
+# Contract tests: API.md and the mechanically checkable AGENTS.md rules.
+# Known deviations are listed for discussion, not encoded as correct: each
+# gets its own @expectedFailure test asserting the documented behavior, so it
+# turns into an "unexpected success" (a failure) once fixed and the entry
+# must then be deleted.
+# ---------------------------------------------------------------------------
+
+import ast
+import functools
+import glob
+import inspect
+import os
+import re
+
+REPO = os.path.dirname(os.path.abspath(__file__))
+
+
+def _read(*path):
+    with open(os.path.join(REPO, *path), encoding='utf-8') as f:
+        return f.read()
+
+
+def _add_deviation_tests(cls, deviations, check):
+    """Attach one @expectedFailure test per known deviation to `cls`."""
+    for key in sorted(deviations):
+        def test(self, key=key):
+            check(self, key)
+        test.__doc__ = deviations[key]
+        name = 'test_deviation_' + re.sub(r'\W+', '_', key).strip('_')
+        setattr(cls, name, unittest.expectedFailure(test))
+
+
+_API_SECTIONS = {
+    'Module-Level Functions': tinytuya, 'XenonDevice (Base Class)': tinytuya.XenonDevice,
+    'Device': tinytuya.Device, 'OutletDevice': tinytuya.OutletDevice, 'BulbDevice': tinytuya.BulbDevice,
+    'CoverDevice': tinytuya.CoverDevice, 'Cloud': tinytuya.Cloud,
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _api_md_sections():
+    """{'## heading': [(lineno, line), ...]} for API.md."""
+    sections, current = {}, None
+    for lineno, line in enumerate(_read('API.md').splitlines(), 1):
+        if line.startswith('## '):
+            current = sections.setdefault(line[3:].strip(), [])
+        elif current is not None:
+            current.append((lineno, line))
+    return sections
+
+
+def _params_from_def(text):
+    """[(name, default)] from a documented parameter list, defaults evaluated."""
+    args = ast.parse('def f(%s): pass' % text).body[0].args
+    first_default = len(args.args) - len(args.defaults)
+    return [(a.arg, ast.literal_eval(args.defaults[i - first_default]) if i >= first_default else inspect.Parameter.empty)
+            for i, a in enumerate(args.args)]
+
+
+@functools.lru_cache(maxsize=None)
+def _api_md_signatures():
+    """{'Owner.name': (lineno, owner, name, [(param, default)])} for every
+    documented signature heading plus the XenonDevice constructor block."""
+    found = {}
+    for section, lines in _api_md_sections().items():
+        owner = _API_SECTIONS.get(section)
+        if owner is None:
+            continue
+        owner_name = getattr(owner, '__name__', 'tinytuya')
+        for lineno, line in lines:
+            m = re.match(r'^#{3,4} `(?:\w+\.)?(\w+)\((.*)\)`\s*$', line)
+            if m:
+                found['%s.%s' % (owner_name, m.group(1))] = (lineno, owner, m.group(1), _params_from_def(m.group(2)))
+    # the constructor is documented as a commented call in a code block
+    lines = _api_md_sections()['XenonDevice (Base Class)']
+    start = next(i for i, (_, line) in enumerate(lines) if line.startswith('XenonDevice('))
+    end = next(i for i in range(start, len(lines)) if lines[i][1].startswith(')'))
+    text = ' '.join(line.split('#')[0].strip() for _, line in lines[start + 1:end])
+    found['XenonDevice.__init__'] = (lines[start][0], tinytuya.XenonDevice, '__init__', _params_from_def(text))
+    return found
+
+
+def _signature_problem(key):
+    """None when the code matches API.md for this entry, else a description."""
+    lineno, owner, name, documented = _api_md_signatures()[key]
+    obj = getattr(owner, name, None)
+    if obj is None or (inspect.isclass(owner) and name not in vars(owner) and name != '__init__'
+                       and not any(name in vars(base) for base in owner.__mro__[1:] if base is not object)):
+        return 'API.md:%d documents %s, which does not exist' % (lineno, key)
+    actual = [(p.name, p.default) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
+    if actual != documented:
+        return 'API.md:%d documents %s%r, code has %r' % (lineno, key, documented, actual)
+    return None
+
+
+# file:line in the code for each, so the list can be acted on directly
+API_SIGNATURE_DEVIATIONS = {
+    'tinytuya.deviceScan': 'core/core.py:235 has maxretry=None and an undocumented byID=False',
+    'tinytuya.scan': 'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter',
+    'XenonDevice.__init__': 'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0',
+    'XenonDevice.add_dps_to_request': 'XenonDevice.py:1154 names the parameter dp_indicies, not index',
+    'XenonDevice.heartbeat': 'documented under XenonDevice, but only Device (core/Device.py:43) has it',
+    'XenonDevice.updatedps': 'documented under XenonDevice with index=[1]; core/Device.py:63 is Device.updatedps(index=None)',
+    'BulbDevice.set_musicmode': 'no such method (BulbDevice.py:24 docstring lists it too)',
+    'CoverDevice.open_cover': 'CoverDevice.py:236 defaults switch=None, not 1',
+    'CoverDevice.close_cover': 'CoverDevice.py defaults switch=None, not 1',
+    'CoverDevice.stop_cover': 'CoverDevice.py defaults switch=None, not 1',
+    'Cloud.setregion': 'Cloud.py:128 defaults apiRegion=None; API.md shows it required',
+    'Cloud.getstatus': 'Cloud.py defaults deviceid=None (returns ERR_PARAMS); API.md shows it required',
+    'Cloud.getfunctions': 'Cloud.py defaults deviceid=None; API.md shows it required',
+    'Cloud.getproperties': 'Cloud.py defaults deviceid=None; API.md shows it required',
+    'Cloud.getdps': 'Cloud.py defaults deviceid=None; API.md shows it required',
+    'Cloud.sendcommand': 'Cloud.py defaults deviceid=None, commands=None; API.md shows them required',
+    'Cloud.getconnectstatus': 'Cloud.py defaults deviceid=None; API.md shows it required',
+    'Cloud.getdevicelog': 'Cloud.py defaults deviceid=None; API.md shows it required',
+}
+
+API_CONTRIB_DEVIATIONS = {
+    'FloorFanDevice': 'missing from the API.md Contrib Modules table',
+    'SoriaInverterDevice': 'missing from the API.md Contrib Modules table',
+    'TowelRailHeaterDevice': 'missing from the API.md Contrib Modules table',
+}
+
+
+def _contrib_modules():
+    return sorted(os.path.basename(p)[:-3] for p in glob.glob(os.path.join(REPO, 'tinytuya', 'Contrib', '*Device.py')))
+
+
+def _api_md_contrib_table():
+    return re.findall(r'^\| `(\w+)` \| `(\w+)` \|', '\n'.join(l for _, l in _api_md_sections()['Contrib Modules']), re.M)
+
+
+class TestApiContract(unittest.TestCase):
+    """API.md is the public contract (AGENTS.md: Public API stability)."""
+
+    def test_signatures_match_api_md(self):
+        signatures = _api_md_signatures()
+        self.assertGreater(len(signatures), 60, 'API.md headings no longer parse')
+        for key in API_SIGNATURE_DEVIATIONS:
+            self.assertIn(key, signatures, 'stale deviation entry')
+        for key in sorted(set(signatures) - set(API_SIGNATURE_DEVIATIONS)):
+            with self.subTest(key=key):
+                self.assertIsNone(_signature_problem(key))
+
+    def test_device_classes_accept_documented_constructor(self):
+        # API.md: "All device classes share the constructor signature" of XenonDevice
+        kwargs = {name: default for name, default in _api_md_signatures()['XenonDevice.__init__'][3][1:]}
+        kwargs.update(address='192.0.2.10', local_key=LOCAL_KEY, version=3.3)
+        for cls in (tinytuya.Device, tinytuya.OutletDevice, tinytuya.BulbDevice, tinytuya.CoverDevice):
+            with self.subTest(cls=cls.__name__):
+                d = cls('DEVICE_ID_HERE', **kwargs)
+                self.assertEqual((d.id, d.address, d.version, d.port), ('DEVICE_ID_HERE', '192.0.2.10', 3.3, 6668))
+
+    def test_cloud_constructor_accepts_documented_keywords(self):
+        params = inspect.signature(tinytuya.Cloud).parameters
+        for name in ('apiRegion', 'apiKey', 'apiSecret', 'apiDeviceID', 'configFile'):
+            self.assertIn(name, params)
+
+    def test_cloud_region_table(self):
+        rows = re.findall(r'^\| (`[\w-]+`(?: / `[\w-]+`)*) \| (.+?) \|$',
+                          '\n'.join(l for _, l in _api_md_sections()['Cloud']), re.M)
+        self.assertEqual(len(rows), 7)
+        c = tinytuya.Cloud(apiRegion='us', apiKey=API_KEY, apiSecret=API_SECRET, initial_token='TOKEN')
+        hosts = []
+        for codes, _center in rows:
+            row_hosts = set()
+            for code in re.findall(r'`([\w-]+)`', codes):
+                c.setregion(code)
+                row_hosts.add(c.urlhost)
+            self.assertEqual(len(row_hosts), 1, 'aliases on one row must share a data center: %s' % codes)
+            hosts.append(row_hosts.pop())
+        self.assertEqual(len(set(hosts)), len(hosts), 'each documented region needs its own host')
+
+    def test_setter_defaults(self):
+        # attribute behind each setter and the default API.md states for it
+        attrs = {'set_socketNODELAY': 'socketNODELAY', 'set_socketRetryLimit': 'socketRetryLimit',
+                 'set_socketRetryDelay': 'socketRetryDelay', 'set_socketTimeout': 'connection_timeout',
+                 'set_sendWait': 'sendWait', 'set_retry': 'retry'}
+        text = '\n'.join(l for _, l in _api_md_sections()['XenonDevice (Base Class)'])
+        d = tinytuya.Device('DEVICE_ID_HERE', '192.0.2.10', LOCAL_KEY, version=3.3)
+        for setter, attr in attrs.items():
+            with self.subTest(setter=setter):
+                default = re.search(r'#### `%s\(.*?Default: `([^`]+)`' % setter, text, re.S).group(1)
+                self.assertEqual(getattr(d, attr), ast.literal_eval(default))
+        self.assertFalse(d.socketPersistent, 'API.md: close after each command (False, default)')
+
+    def test_error_code_table(self):
+        documented = {int(code): name for code, name in re.findall(
+            r'^\| (\d{3}) \| `(ERR_\w+)` \|', '\n'.join(l for _, l in _api_md_sections()['Error Codes']), re.M)}
+        actual = {code: name for name, code in vars(tinytuya).items() if name.startswith('ERR_') and isinstance(code, int)}
+        self.assertEqual(documented, actual)
+        self.assertEqual(set(actual), {k for k in tinytuya.error_codes if k is not None})
+
+    def test_find_device_result_shape(self):
+        # API.md: {'ip', 'version', 'id', 'product_id', 'data'}, found or not
+        keys = {'ip', 'version', 'id', 'product_id', 'data'}
+        self.assertEqual(set(tinytuya.find_device()), keys)
+        from tinytuya import scanner
+        found = {'DEVICE_ID_HERE': {'ip': '192.0.2.10', 'version': '3.3', 'productKey': 'p1'}}
+        for reply in ({}, found):
+            with patch.object(scanner, 'devices', return_value=reply):
+                self.assertEqual(set(tinytuya.find_device(dev_id='DEVICE_ID_HERE')), keys)
+        with patch.object(scanner, 'devices', return_value=found):
+            self.assertEqual(tinytuya.find_device(dev_id='DEVICE_ID_HERE')['product_id'], 'p1')
+
+    def test_contrib_table_lists_real_classes(self):
+        import importlib
+        table = _api_md_contrib_table()
+        self.assertGreater(len(table), 10)
+        for module, cls in table:
+            with self.subTest(module=module):
+                self.assertTrue(inspect.isclass(getattr(importlib.import_module('tinytuya.Contrib.' + module), cls)))
+        listed = {m for m, _ in table}
+        for module in sorted(set(_contrib_modules()) - set(API_CONTRIB_DEVIATIONS)):
+            with self.subTest(module=module):
+                self.assertIn(module, listed)
+
+
+_add_deviation_tests(TestApiContract, API_SIGNATURE_DEVIATIONS,
+                     lambda self, key: self.assertIsNone(_signature_problem(key)))
+_add_deviation_tests(TestApiContract, {'contrib_' + k: v for k, v in API_CONTRIB_DEVIATIONS.items()},
+                     lambda self, key: self.assertIn(key[len('contrib_'):], {m for m, _ in _api_md_contrib_table()}))
+
+
+def _library_sources():
+    """{repo-relative path: AST} for every module in the tinytuya package."""
+    paths = sorted(glob.glob(os.path.join(REPO, 'tinytuya', '**', '*.py'), recursive=True))
+    return {os.path.relpath(p, REPO).replace(os.sep, '/'): ast.parse(_read(p), p) for p in paths}
+
+
+def _calls(tree, names):
+    """(lineno, name) of calls to any of `names` (plain or attribute calls)."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, 'attr', None)
+            if name in names:
+                yield node.lineno, name
+
+
+# AGENTS.md: "only the CLI, wizard, and scanner user-facing output may print"
+PRINT_ALLOWED = {'tinytuya/__main__.py', 'tinytuya/cli.py', 'tinytuya/wizard.py', 'tinytuya/scanner.py'}
+PRINT_DEVIATIONS = {
+    'tinytuya/Cloud.py': 'Cloud.py:39-41 print a WARN banner at import time when requests is missing',
+    'tinytuya/Contrib/IRRemoteControlDevice.py': 'IRRemoteControlDevice.py:930,968 print on every call of pulses_to_space_encoded_head_key(); 413-494 sit in an "if False:" block',
+    'tinytuya/Contrib/WiFiDualMeterDevice.py': 'WiFiDualMeterDevice.py:217-242: print_all() is a public method that prints',
+}
+HEXLIFY_DEVIATIONS = {
+    'tinytuya/core/XenonDevice.py:_negotiate_session_key_generate_step_3': 'XenonDevice.py:944 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard',
+    'tinytuya/core/message_helper.py:unpack_message': 'message_helper.py:150 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard',
+}
+# AGENTS.md binds __all__ only for *new* wildcard-exported modules; these predate the rule
+WILDCARD_WITHOUT_ALL = {
+    'crypto_helper', 'message_helper', 'exceptions', 'error_helper', 'const', 'XenonDevice',
+    'udp_helper', 'Device', 'command_types', 'header', 'core',
+}
+# AGENTS.md's Contrib checklist (README section, example, testcontrib) binds new modules
+CONTRIB_PREDATES_CHECKLIST = {
+    'AtorchTemperatureControllerDevice', 'BlanketDevice', 'ClimateDevice', 'ColorfulX7Device', 'DoorbellDevice',
+    'FloorFanDevice', 'IRRemoteControlDevice', 'InverterHeatPumpDevice', 'PresenceDetectorDevice',
+    'RFRemoteControlDevice', 'SocketDevice', 'SoriaInverterDevice', 'ThermostatDevice',
+    'TowelRailHeaterDevice', 'WiFiDualMeterDevice',
+}
+
+
+def _unguarded_hexlify(path, tree):
+    """'path:function' of log calls that hexlify outside an isEnabledFor() check."""
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        func = getattr(node, 'func', None)
+        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == 'log'):
+            continue
+        if not any(getattr(getattr(n, 'func', None), 'attr', None) == 'hexlify' for arg in node.args for n in ast.walk(arg)):
+            continue
+        p, guarded = node, False
+        while p in parents and not isinstance(p, ast.FunctionDef):
+            p = parents[p]
+            guarded = guarded or (isinstance(p, ast.If) and 'isEnabledFor' in ast.unparse(p.test))
+        if not guarded:
+            yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
+
+
+class TestAgentsRules(unittest.TestCase):
+    """Mechanically checkable AGENTS.md rules (AST/inspect, not text matching)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sources = _library_sources()
+        cls.unguarded_hexlify = {site for path, tree in cls.sources.items() for site in _unguarded_hexlify(path, tree)}
+
+    def test_no_print_in_library_modules(self):
+        for path, tree in self.sources.items():
+            if path in PRINT_ALLOWED or path in PRINT_DEVIATIONS:
+                continue
+            with self.subTest(path=path):
+                self.assertEqual(list(_calls(tree, {'print'})), [])
+
+    def test_logging_configured_only_by_set_debug(self):
+        config = {'basicConfig', 'addHandler', 'removeHandler', 'setFormatter', 'dictConfig', 'fileConfig',
+                  'StreamHandler', 'FileHandler', 'NullHandler', 'Formatter'}
+        for path, tree in self.sources.items():
+            set_debug = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'set_debug']
+            allowed = {line for f in set_debug for line in range(f.lineno, f.end_lineno + 1)}
+            with self.subTest(path=path):
+                self.assertEqual([c for c in _calls(tree, config) if c[0] not in allowed], [])
+
+    def test_loggers_named_by_module(self):
+        for path, tree in self.sources.items():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and getattr(node.func, 'attr', None) == 'getLogger':
+                    with self.subTest(path=path, line=node.lineno):
+                        self.assertEqual(ast.unparse(node.args[0]) if node.args else None, '__name__')
+
+    def test_hexlify_logging_is_guarded(self):
+        self.assertEqual(self.unguarded_hexlify - set(HEXLIFY_DEVIATIONS), set())
+        self.assertEqual(set(HEXLIFY_DEVIATIONS) - self.unguarded_hexlify, set(), 'stale deviation entry')
+
+    def test_crypto_imported_only_in_crypto_helper(self):
+        crypto = {'cryptography', 'Crypto', 'Cryptodome', 'pyaes'}
+        for path, tree in self.sources.items():
+            if path == 'tinytuya/core/crypto_helper.py':
+                continue
+            for node in ast.walk(tree):
+                names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+                        [node.module or ''] if isinstance(node, ast.ImportFrom) and not node.level else []
+                for name in names:
+                    with self.subTest(path=path, line=node.lineno):
+                        self.assertNotIn(name.split('.')[0], crypto)
+
+    def test_no_type_annotations(self):
+        for path, tree in self.sources.items():
+            annotated = [n.lineno for n in ast.walk(tree)
+                         if (isinstance(n, ast.arg) and n.annotation is not None) or isinstance(n, ast.AnnAssign)
+                         or (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.returns is not None)]
+            with self.subTest(path=path):
+                self.assertEqual(annotated, [])
+
+    def test_new_wildcard_modules_define_all(self):
+        for init in ('tinytuya/__init__.py', 'tinytuya/core/__init__.py'):
+            package = os.path.dirname(init)
+            for node in self.sources[init].body:
+                if isinstance(node, ast.ImportFrom) and node.level and any(a.name == '*' for a in node.names):
+                    path = '%s/%s.py' % (package, node.module.replace('.', '/'))
+                    if path not in self.sources:
+                        path = '%s/%s/__init__.py' % (package, node.module.replace('.', '/'))
+                    defines_all = any(isinstance(n, ast.Assign) and any(getattr(t, 'id', None) == '__all__' for t in n.targets)
+                                      for n in self.sources[path].body)
+                    with self.subTest(module=path):
+                        self.assertTrue(defines_all or node.module in WILDCARD_WITHOUT_ALL or path == 'tinytuya/core/__init__.py')
+
+    def test_error_codes_listed_in_readme(self):
+        readme = dict((int(c), (n, m)) for c, n, m in re.findall(r'^\* (\d{3}) \((ERR_\w+)\) - (.+)$', _read('README.md'), re.M))
+        codes = {k: v for k, v in tinytuya.error_codes.items() if k is not None}
+        self.assertEqual(set(readme), set(codes))
+        for code, (name, message) in readme.items():
+            self.assertEqual(getattr(tinytuya, name), code)
+            self.assertEqual(message, codes[code])
+
+    def test_supported_python_versions_in_sync(self):
+        setup = ast.parse(_read('setup.py'))
+        kw = {k.arg: k.value for n in ast.walk(setup) if isinstance(n, ast.Call) and getattr(n.func, 'attr', None) == 'setup' for k in n.keywords}
+        classifiers = {c.split(':: ')[-1] for c in ast.literal_eval(kw['classifiers']) if re.search(r':: 3\.\d+$', c)}
+        ci = re.search(r'python-version: \[([^\]]+)\]', _read('.github', 'workflows', 'ci.yml')).group(1)
+        matrix = set(re.findall(r'"(3\.\d+)"', ci))
+        low, high = re.search(r'Python (3\.\d+)–(3\.\d+)', _read('AGENTS.md')).groups()
+        self.assertEqual(classifiers, matrix)
+        self.assertEqual(ast.literal_eval(kw['python_requires']), '>=' + low)
+        key = lambda v: int(v.split('.')[1])
+        self.assertEqual((min(matrix, key=key), max(matrix, key=key)), (low, high))
+        self.assertEqual(len(matrix), key(high) - key(low) + 1, 'no gaps in the test matrix')
+
+    def test_no_new_hard_dependencies(self):
+        setup = ast.parse(_read('setup.py'))
+        install = next(ast.literal_eval(n.value) for n in setup.body if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', None) == 'INSTALL_REQUIRES')
+        self.assertEqual(install, ['requests', 'colorama'])  # plus one auto-chosen AES backend
+        reqs = {re.split(r'[<>=\s#]', l.strip())[0] for l in _read('requirements.txt').splitlines() if l.strip() and not l.startswith('#')}
+        self.assertEqual(reqs, {'cryptography', 'requests', 'colorama'})
+
+    def test_version_from_version_tuple(self):
+        from tinytuya.core import core
+        self.assertEqual(tinytuya.__version__, '%d.%d.%d' % core.version_tuple)
+
+    def test_is_py2_alias_kept(self):
+        self.assertIs(tinytuya.IS_PY2, False)
+
+    def test_new_contrib_modules_follow_checklist(self):
+        readme = _read('tinytuya', 'Contrib', 'README.md')
+        examples = ''.join(_read(p) for p in glob.glob(os.path.join(REPO, 'examples', 'Contrib', '*.py')))
+        testcontrib = _read('testcontrib.py')
+        self.assertEqual(CONTRIB_PREDATES_CHECKLIST - set(_contrib_modules()), set(), 'stale entry')
+        for module in sorted(set(_contrib_modules()) - CONTRIB_PREDATES_CHECKLIST):
+            with self.subTest(module=module):
+                self.assertRegex(readme, r'(?m)^### %s$' % module)
+                self.assertIn(module, examples)
+                self.assertIn(module, testcontrib)
+
+
+_add_deviation_tests(TestAgentsRules, PRINT_DEVIATIONS,
+                     lambda self, path: self.assertEqual(list(_calls(self.sources[path], {'print'})), []))
+_add_deviation_tests(TestAgentsRules, HEXLIFY_DEVIATIONS,
+                     lambda self, site: self.assertNotIn(site, self.unguarded_hexlify))
+
+
 if __name__ == '__main__':
     unittest.main()
