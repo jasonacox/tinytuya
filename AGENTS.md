@@ -20,7 +20,7 @@ pylint --recursive y -E tinytuya/    # errors-only lint, matches CI (use the pin
 
 CI lives in `.github/workflows/`; everything must stay green:
 
-- `ci.yml` — **Pylint** (errors only, Python 3.12, pylint pinned in `requirements-dev.txt`); **Test** on Python 3.10–3.15 (`compileall`, `tests.py`, `test.py` smoke, `testcontrib.py`); **Crypto backend** runs `tests.py` once per AES backend (cryptography, pycryptodome, pycryptodomex, pyaes) with only that backend installed; **Coverage** reports line coverage of `tests.py` + `testcontrib.py` (report only, no threshold); **Build package** builds the sdist/wheel and runs `twine check`.
+- `ci.yml` — **Pylint** (errors only, Python 3.12, pylint pinned in `requirements-dev.txt`); **Test** on Python 3.10–3.15 (`compileall`, `tests.py`, `test.py` smoke, `testcontrib.py`); **Crypto backend** runs `tests.py` once per AES backend (cryptography, pycryptodome, pycryptodomex, pyaes) with only that backend installed; **Coverage** reports line coverage of `tests.py` + `testcontrib.py` and fails below the `--fail-under` floor in `ci.yml` (raise the floor as coverage grows; never lower it to pass); **Build package** builds the sdist/wheel and runs `twine check`.
 - `codeql-analysis.yml` — CodeQL security scanning (push, PR, weekly).
 - `.github/dependabot.yml` proposes monthly bumps for Actions and the pylint pin. Bump the pin deliberately and fix any new findings in the same PR; never unpin.
 - Adding or dropping a Python version means updating the `ci.yml` matrix, the support line above, and `python_requires` plus the version classifiers in `setup.py` together.
