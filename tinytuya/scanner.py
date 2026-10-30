@@ -1174,8 +1174,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     # Lookup Tuya device info by (id) returning (name, key)
     def tuyaLookup(deviceid):
         for i in tuyadevices:
-            if "id" in i and i["id"] == deviceid:
-                return (i["name"], i["key"], i["mac"] if "mac" in i else "")
+            if isinstance(i, dict) and i.get("id") == deviceid:
+                key = i.get("key")
+                return (i.get("name") or "", key if isinstance(key, str) else "", i.get("mac") or "")
         return ("", "", "")
 
     havekeys = False
@@ -1292,7 +1293,9 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     }
 
     for i in tuyadevices:
-        options['keylist'].append( KeyObj( i['id'], i['key'] ) )
+        # skip malformed devices.json rows instead of crashing the scan
+        if isinstance(i, dict) and isinstance(i.get('id'), str) and isinstance(i.get('key'), str):
+            options['keylist'].append( KeyObj( i['id'], i['key'] ) )
 
     wantips = [] if not wantips else list(wantips) #['192.168.1.3']
     wantids = [] if not wantids else list(wantids) #['abcdef']
@@ -1494,6 +1497,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             log.debug('Keyboard Interrupt')
             if verbose: print("\n**User Break**")
             user_break_count += 1
+            rd = wr = [] # nothing from this pass is ready
 
             if user_break_count == 1:
                 ip_scan_running = False
@@ -1514,8 +1518,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         for sock in rd:
             # this sock is not a UDP listener
             if sock is not client and sock is not clients and sock is not clientapp:
-                # may not exist if user-interrupted
-                if sock in all_socks:
+                # may not exist if user-interrupted; skip if the device reconnected while handling its write event
+                if sock in all_socks and all_socks[sock].sock is sock:
                     all_socks[sock].read_data()
                 continue
 
@@ -1799,6 +1803,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         devicesarray = list(devices.values())
         # Add devices from devices.json even if they didn't poll
         for item in tuyadevices:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
             k = item["id"]
             if not any(d['gwId'] == k for d in devicesarray):
                 # operate on a shallow copy so we do not mutate the caller's dict
