@@ -723,8 +723,8 @@ class FakeTuyaDevice(object):
     returns the bytes the device answers with, so any I/O layer (the sync
     socket shim below, or a future asyncio transport) can drive it.  Frames it
     cannot authenticate or decrypt, or that break the version-header rule
-    (3.2+ commands outside HEADERLESS carry it), or use the other version's
-    frame prefix are dropped.
+    (3.2+ commands outside HEADERLESS carry it), or lack this version's frame
+    prefix and suffix are dropped.
 
     Knobs: dps / children ({cid: dps}) hold state; device22 answers DP_QUERY
     with "data unvalid"; raw_reply replaces the status body of query replies;
@@ -864,7 +864,11 @@ class FakeTuyaDevice(object):
         return noise + frame
 
     def _handle(self, frame, header):
-        if header.prefix != (mh.H.PREFIX_6699_VALUE if self.version >= 3.5 else mh.H.PREFIX_55AA_VALUE):
+        if self.version >= 3.5:
+            prefix, suffix = mh.H.PREFIX_6699_VALUE, mh.H.SUFFIX_6699_BIN
+        else:
+            prefix, suffix = mh.H.PREFIX_55AA_VALUE, mh.H.SUFFIX_55AA_BIN
+        if header.prefix != prefix or not frame.endswith(suffix):  # unpack_message() only logs a bad suffix
             self.dropped += 1
             return b''
         msg = mh.unpack_message(frame, hmac_key=self.key if self.version >= 3.4 else None, header=header, no_retcode=True)
@@ -1175,6 +1179,15 @@ class TestWireBehavior(_WireTestCase):
 
     def test_header_skip_list_matches_protocol_md(self):
         self.assertEqual(set(mh.H.NO_PROTOCOL_HEADER_CMDS), FakeTuyaDevice.HEADERLESS)
+
+    def test_fake_drops_a_bad_frame_suffix(self):
+        fake = FakeTuyaDevice(3.3)
+        fake.connect()
+        msg = mh.TuyaMessage(1, CT.DP_QUERY, None, mh.AESCipher(fake.key).encrypt(b'{}', False), 0, True, mh.H.PREFIX_55AA_VALUE, False)
+        frame = mh.pack_message(msg)
+        self.assertEqual(fake.receive_bytes(frame[:-4] + bytes(4)), b'')
+        self.assertEqual((fake.dropped, fake.requests), (1, []))
+        self.assertNotEqual(fake.receive_bytes(frame), b'', 'the same frame with its suffix is answered')
 
     def test_fake_drops_the_other_versions_frame_prefix(self):
         frames = {3.5: mh.TuyaMessage(1, CT.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_55AA_VALUE, False)}
@@ -1530,11 +1543,17 @@ def _api_md_sections():
 
 
 def _params_from_def(text):
-    """[(name, default)] from a documented parameter list, defaults evaluated."""
-    args = ast.parse('def f(%s): pass' % text).body[0].args
-    first_default = len(args.args) - len(args.defaults)
-    return [(a.arg, ast.literal_eval(args.defaults[i - first_default]) if i >= first_default else inspect.Parameter.empty)
-            for i, a in enumerate(args.args)]
+    """[(name, default, kind)] from a documented parameter list, defaults evaluated."""
+    args, P = ast.parse('def f(%s): pass' % text).body[0].args, inspect.Parameter
+    positional = [(a, P.POSITIONAL_ONLY) for a in args.posonlyargs] + [(a, P.POSITIONAL_OR_KEYWORD) for a in args.args]
+    defaults = [P.empty] * (len(positional) - len(args.defaults)) + [ast.literal_eval(d) for d in args.defaults]
+    params = [(a.arg, default, kind) for (a, kind), default in zip(positional, defaults)]
+    if args.vararg:
+        params.append((args.vararg.arg, P.empty, P.VAR_POSITIONAL))
+    params += [(a.arg, P.empty if d is None else ast.literal_eval(d), P.KEYWORD_ONLY) for a, d in zip(args.kwonlyargs, args.kw_defaults)]
+    if args.kwarg:
+        params.append((args.kwarg.arg, P.empty, P.VAR_KEYWORD))
+    return params
 
 
 @functools.lru_cache(maxsize=None)
@@ -1561,12 +1580,12 @@ def _api_md_signatures():
 
 
 def _code_params(owner, name):
-    """[(param, default)] of owner.name in the code, or None when it does not exist."""
+    """[(param, default, kind)] of owner.name in the code, or None when it does not exist."""
     obj = getattr(owner, name, None)
     if obj is None or (inspect.isclass(owner) and name not in vars(owner) and name != '__init__'
                        and not any(name in vars(base) for base in owner.__mro__[1:] if base is not object)):
         return None
-    return [(p.name, p.default) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
+    return [(p.name, p.default, p.kind) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
 
 
 def _signature_problem(key):
@@ -1654,7 +1673,7 @@ class TestApiContract(unittest.TestCase):
 
     def test_device_classes_accept_documented_constructor(self):
         # API.md: "All device classes share the constructor signature" of XenonDevice
-        kwargs = {name: default for name, default in _api_md_signatures()['XenonDevice.__init__'][3][1:]}
+        kwargs = {name: default for name, default, _ in _api_md_signatures()['XenonDevice.__init__'][3][1:]}
         kwargs.update(address='192.0.2.10', local_key=LOCAL_KEY, version=3.3)
         for cls in (tinytuya.Device, tinytuya.OutletDevice, tinytuya.BulbDevice, tinytuya.CoverDevice):
             with self.subTest(cls=cls.__name__):
@@ -1800,8 +1819,10 @@ def _unguarded_hexlify(path, tree):
             continue
         p, guarded = node, False
         while p in parents and not isinstance(p, ast.FunctionDef):
-            p = parents[p]
-            guarded = guarded or (isinstance(p, ast.If) and 'isEnabledFor' in ast.unparse(p.test))
+            child, p = p, parents[p]
+            # only the body of `if log.isEnabledFor(logging.DEBUG):` counts, not its else or another level
+            guarded = guarded or (isinstance(p, ast.If) and child in p.body
+                                  and ast.unparse(p.test) == 'log.isEnabledFor(logging.DEBUG)')
         if not guarded:
             yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
 
