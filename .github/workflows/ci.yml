@@ -92,6 +92,25 @@ jobs:
       - name: Unit tests
         run: python -m tests
 
+  coverage:
+    name: "Coverage (report only)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt coverage
+      - name: Measure coverage (no threshold yet)
+        run: |
+          coverage run --source=tinytuya -m tests
+          coverage run -a --source=tinytuya testcontrib.py
+          coverage report --sort=cover
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
   package:
     name: "Build package"
     runs-on: ubuntu-latest
