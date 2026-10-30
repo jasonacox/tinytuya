@@ -4,9 +4,9 @@ import logging
 
 import unittest
 try:
-    from unittest.mock import MagicMock  # Python 3
+    from unittest.mock import MagicMock, patch  # Python 3
 except ImportError:
-    from mock import MagicMock  # py2 use https://pypi.python.org/pypi/mock
+    from mock import MagicMock, patch  # py2 use https://pypi.python.org/pypi/mock
 import json
 import struct
 
@@ -694,6 +694,1425 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
         self.assertTrue(_accepts_nowait(lambda x, **kw: None))
         self.assertFalse(_accepts_nowait(lambda x: None))
+
+
+# ---------------------------------------------------------------------------
+# Wire-path tests: real Device API -> framing -> crypto -> fake device -> back
+# ---------------------------------------------------------------------------
+
+import hashlib
+import hmac as _hmac_mod
+import sys
+import types
+import zlib
+
+from tinytuya.core import command_types as CT
+
+# tinytuya.core re-exports classes over some module names, so patch via sys.modules
+_xenon_mod = sys.modules['tinytuya.core.XenonDevice']
+_device_mod = sys.modules['tinytuya.core.Device']
+_cloud_mod = sys.modules['tinytuya.Cloud']
+
+HAS_GCM = bool(mh.AESCipher.CRYPTOLIB_HAS_GCM)
+WRONG_KEY = 'fedcba9876543210'
+
+
+# PROTOCOL.md "Command IDs".  Kept apart from command_types (like HEADERLESS below) so a
+# wrong ID in the library fails the round trips instead of agreeing with itself.
+CMD = types.SimpleNamespace(
+    SESS_KEY_NEG_START=0x03, SESS_KEY_NEG_RESP=0x04, SESS_KEY_NEG_FINISH=0x05, CONTROL=0x07, STATUS=0x08,
+    HEART_BEAT=0x09, DP_QUERY=0x0A, CONTROL_NEW=0x0D, DP_QUERY_NEW=0x10, UPDATEDPS=0x12, UDP_NEW=0x13,
+    BOARDCAST_LPV34=0x23, REQ_DEVINFO=0x25, LAN_EXT_STREAM=0x40)
+
+
+class FakeTuyaDevice(object):
+    """Device side of the Tuya LAN protocol (3.1/3.3/3.4/3.5), per PROTOCOL.md.
+
+    Transport-agnostic: connect() starts a TCP session and receive_bytes(data)
+    returns the bytes the device answers with, so any I/O layer (the sync
+    socket shim below, or a future asyncio transport) can drive it.  It frames
+    and parses 55AA/6699 itself, from PROTOCOL.md, so a framing change made on
+    both sides of message_helper still fails; only AES comes from AESCipher.
+    Frames it cannot authenticate or decrypt, or that break the version-header rule
+    (3.2+ commands outside HEADERLESS carry it), or lack this version's frame
+    prefix and suffix are dropped.
+
+    Knobs: dps / children ({cid: dps}) hold state; device22 answers DP_QUERY
+    with "data unvalid"; raw_reply replaces the status body of query replies;
+    retcode is put in CONTROL acks; silent records requests but never answers;
+    corrupt_tags sends that many data replies with a broken GCM tag; push()
+    queues unsolicited STATUS updates; noise is junk sent ahead of the next
+    reply; connect_error / send_error are raised by connect() / receive_bytes();
+    forge_hmac answers session negotiation with a bad HMAC (an impostor).
+    """
+
+    NONCE = b'fedcba9876543210'
+    # PROTOCOL.md "Version Header": commands sent without it.  Kept apart from
+    # header.NO_PROTOCOL_HEADER_CMDS so a change to that list fails the round trips.
+    HEADERLESS = frozenset((CMD.DP_QUERY, CMD.DP_QUERY_NEW, CMD.UPDATEDPS, CMD.HEART_BEAT, CMD.SESS_KEY_NEG_START,
+                            CMD.SESS_KEY_NEG_RESP, CMD.SESS_KEY_NEG_FINISH, CMD.LAN_EXT_STREAM))
+    # PROTOCOL.md "Packet Format": 55AA = prefix, seq, cmd, length (from the retcode/payload
+    # through the footer); 6699 = prefix, 2 reserved bytes, seq, cmd, length (IV through tag),
+    # with those 14 bytes after the prefix as the GCM AAD, then a footer outside the length.
+    PREFIX_55AA, SUFFIX_55AA, HEADER_55AA = b'\x00\x00\x55\xaa', b'\x00\x00\xaa\x55', 16
+    PREFIX_6699, SUFFIX_6699, HEADER_6699 = b'\x00\x00\x66\x99', b'\x00\x00\x99\x66', 18
+
+    def __init__(self, version, local_key=LOCAL_KEY, dev_id='DEVICE_ID_HERE', dps=None, children=None, device22=False):
+        self.version = float(version)
+        self.vbytes = str(self.version).encode('latin1')
+        self.real_key = local_key.encode('latin1')
+        self.key = self.real_key
+        self.dev_id = dev_id
+        self.dps = dict(dps) if dps else {'1': False, '2': 0}
+        self.children = children or {}
+        self.device22 = device22
+        self.raw_reply = None
+        self.retcode = 0
+        self.silent = False
+        self.corrupt_tags = 0
+        self.noise = b''
+        self.connect_error = None
+        self.send_error = None
+        self.forge_hmac = False
+        self.requests = []      # (cmd, decoded JSON) for every data command received
+        self.dropped = 0        # frames rejected for any of the reasons above
+        self.connections = 0
+        self.negotiations = 0
+        self._pushes = []
+        self._rx = b''
+        self._seqno = 100       # v3.5 devices use a global counter, not the request seqno
+        self._client_nonce = None
+
+    def connect(self):
+        if self.connect_error:
+            raise self.connect_error
+        self.connections += 1
+        self.key = self.real_key
+        self._rx = b''
+
+    def push(self, dps, cid=None):
+        self._pushes.append(self._status(dps, cid))
+
+    def receive_bytes(self, data):
+        if self.send_error:
+            raise self.send_error
+        self._rx += data
+        out = b''
+        while len(self._rx) >= 4:
+            is_6699 = self._rx[:4] == self.PREFIX_6699
+            if not is_6699 and self._rx[:4] != self.PREFIX_55AA:
+                self.dropped += 1   # not a frame start: discard what we have
+                self._rx = b''
+                break
+            header_len = self.HEADER_6699 if is_6699 else self.HEADER_55AA
+            if len(self._rx) < header_len:
+                break  # wait for the rest of the header
+            total = header_len + struct.unpack('>I', self._rx[header_len - 4:header_len])[0] + (4 if is_6699 else 0)
+            if len(self._rx) < total:
+                break
+            frame, self._rx = self._rx[:total], self._rx[total:]
+            out += self._handle(frame)
+        return out
+
+    def _status(self, dps, cid=None):
+        if self.version >= 3.4:
+            body = {'protocol': 4, 't': 1700000000, 'data': {'dps': dps}}
+            if cid:
+                body['data']['cid'] = cid
+        else:
+            body = {'devId': self.dev_id, 'dps': dps}
+            if cid:
+                body['cid'] = cid
+        return json.dumps(body).encode()
+
+    def _open(self, cmd, payload):
+        cipher = mh.AESCipher(self.key)
+        if self.version < 3.2:
+            if cmd != CMD.CONTROL:
+                return payload  # 3.1 sends everything but CONTROL in the clear
+            enc = payload[19:]
+            if payload[:19] != self._envelope_31(enc):
+                raise ValueError('3.1 CONTROL lacks the "3.1" + MD5 envelope')
+            return cipher.decrypt(enc, decode_text=False)
+        want_header = cmd not in self.HEADERLESS
+        if self.version < 3.4:
+            # the 3.2/3.3 header is sent in the clear, ahead of the ciphertext
+            if payload.startswith(self.vbytes + 12 * b'\x00') != want_header:
+                raise ValueError('version header rule broken')
+            return cipher.decrypt(payload[15 if want_header else 0:], False, decode_text=False)
+        if self.version < 3.5:
+            payload = cipher.decrypt(payload, False, decode_text=False)
+        # 3.4/3.5 carry the header inside the encryption (3.5: the GCM frame layer)
+        if want_header:
+            if not payload.startswith(self.vbytes + 12 * b'\x00'):
+                raise ValueError('version header missing')
+            payload = payload[15:]
+        return payload
+
+    def _seal(self, body, header=False):
+        """Encrypt a reply payload the way this protocol version does."""
+        hdr = self.vbytes + 12 * b'\x00' if header else b''
+        if not body or self.version >= 3.5:
+            return hdr + body if body else b''
+        cipher = mh.AESCipher(self.key)
+        if self.version >= 3.4:
+            return cipher.encrypt(hdr + body, False)
+        if self.version >= 3.2:
+            return hdr + cipher.encrypt(body, False)
+        if not header:
+            return body  # v3.1 query replies are plaintext
+        enc = cipher.encrypt(body)
+        return self._envelope_31(enc) + enc
+
+    def _envelope_31(self, enc):
+        """The "3.1" + MD5-slice prefix of an encrypted 3.1 CONTROL payload."""
+        md5 = hashlib.md5(b'data=' + enc + b'||lpv=3.1||' + self.key).hexdigest()
+        return b'3.1' + md5[8:24].encode()
+
+    def _mac(self, data):
+        """55AA integrity field: HMAC-SHA256 for 3.4, CRC32 before that."""
+        if self.version >= 3.4:
+            return _hmac_mod.new(self.key, data, hashlib.sha256).digest()
+        return struct.pack('>I', zlib.crc32(data) & 0xFFFFFFFF)
+
+    def _frame(self, cmd, payload, seqno, retcode=0, data=True):
+        """A device->client frame; the retcode leads the payload (inside the GCM ciphertext for 6699)."""
+        body = struct.pack('>I', retcode) + payload
+        if self.version >= 3.5:
+            self._seqno += 1
+            header = struct.pack('>4sHIII', self.PREFIX_6699, 0, self._seqno, cmd, 12 + len(body) + 16)
+            iv = struct.pack('>III', self._seqno, cmd, 0x5a5a5a5a)  # unique per frame
+            sealed = mh.AESCipher(self.key).encrypt(body, use_base64=False, pad=False, iv=iv, header=header[4:])
+            if data and self.corrupt_tags:
+                self.corrupt_tags -= 1
+                sealed = sealed[:-1] + bytes([sealed[-1] ^ 1])
+            frame = header + sealed + self.SUFFIX_6699
+        else:
+            header = struct.pack('>4sIII', self.PREFIX_55AA, seqno, cmd, len(body) + len(self._mac(b'')) + 4)
+            frame = header + body + self._mac(header + body) + self.SUFFIX_55AA
+        noise, self.noise = self.noise, b''
+        return noise + frame
+
+    def _unframe(self, frame):
+        """(seqno, cmd, payload) of a client->device frame (no retcode), or ValueError."""
+        if self.version >= 3.5:
+            if frame[:4] != self.PREFIX_6699 or frame[-4:] != self.SUFFIX_6699:
+                raise ValueError('not a 6699 frame')
+            seqno, cmd = struct.unpack('>II', frame[6:14])
+            iv, ciphertext, tag = frame[18:30], frame[30:-20], frame[-20:-4]
+            try:
+                payload = mh.AESCipher(self.key).decrypt(ciphertext, use_base64=False, decode_text=False, iv=iv,
+                                                        header=frame[4:18], tag=tag)
+            except Exception:  # each backend raises its own InvalidTag/ValueError
+                raise ValueError('bad GCM tag')
+            return seqno, cmd, payload
+        mac_len = len(self._mac(b''))
+        if frame[:4] != self.PREFIX_55AA or frame[-4:] != self.SUFFIX_55AA:
+            raise ValueError('not a 55AA frame')
+        if frame[-4 - mac_len:-4] != self._mac(frame[:-4 - mac_len]):
+            raise ValueError('bad CRC/HMAC')
+        seqno, cmd = struct.unpack('>II', frame[4:12])
+        return seqno, cmd, frame[16:-4 - mac_len]
+
+    def _handle(self, frame):
+        try:
+            seqno, cmd, payload = self._unframe(frame)
+            payload = self._open(cmd, payload)
+            if cmd == CMD.SESS_KEY_NEG_START:
+                return self._negotiate_start(payload, seqno)
+            if cmd == CMD.SESS_KEY_NEG_FINISH:
+                return self._negotiate_finish(payload)
+            request = json.loads(payload) if payload else {}
+        except ValueError:
+            self.dropped += 1
+            return b''
+        self.requests.append((cmd, request))
+        if self.silent:
+            return b''
+        out = b''.join(self._frame(CMD.STATUS, self._seal(p, True), seqno) for p in self._pushes)
+        self._pushes = []
+        return out + self._reply(cmd, seqno, request)
+
+    def _negotiate_start(self, client_nonce, seqno):
+        self._client_nonce = client_nonce
+        body = self.NONCE + _hmac_mod.new(self.real_key, client_nonce, hashlib.sha256).digest()
+        if self.forge_hmac:
+            body = body[:16] + bytes(32)
+        return self._frame(CMD.SESS_KEY_NEG_RESP, self._seal(body), seqno, data=False)
+
+    def _negotiate_finish(self, rkey_hmac):
+        if rkey_hmac != _hmac_mod.new(self.real_key, self.NONCE, hashlib.sha256).digest():
+            raise ValueError('client HMAC of the device nonce is wrong')
+        tmp = bytes(a ^ b for (a, b) in zip(self._client_nonce, self.NONCE))
+        cipher = mh.AESCipher(self.real_key)
+        if self.version >= 3.5:
+            self.key = cipher.encrypt(tmp, use_base64=False, pad=False, iv=self._client_nonce[:12])[12:28]
+        else:
+            self.key = cipher.encrypt(tmp, False, pad=False)
+        self.negotiations += 1
+        return b''
+
+    def _reply(self, cmd, seqno, request):
+        data = request.get('data') if isinstance(request.get('data'), dict) else {}
+        cid = request.get('cid') or data.get('cid')
+        state = self.children[cid] if cid else self.dps
+        if cmd in (CMD.DP_QUERY, CMD.DP_QUERY_NEW):
+            if self.device22 and cmd == CMD.DP_QUERY:
+                return self._frame(cmd, self._seal(b'json obj data unvalid'), seqno)
+            body = self.raw_reply if self.raw_reply is not None else self._status(state, cid)
+            return self._frame(cmd, self._seal(body), seqno)
+        if cmd in (CMD.CONTROL, CMD.CONTROL_NEW):
+            dps = data.get('dps', request.get('dps', {}))
+            if self.device22 and cmd == CMD.CONTROL_NEW and all(v is None for v in dps.values()):
+                # device22 status query: answer with the requested DPs only
+                found = {k: state[k] for k in dps if k in state}
+                return self._frame(cmd, self._seal(self._status(found, cid)), seqno)
+            state.update(dps)
+            # empty ack carrying the retcode, then a STATUS push with the new values
+            ack = self._frame(cmd, b'', seqno, self.retcode)
+            return ack + self._frame(CMD.STATUS, self._seal(self._status(dps, cid), True), seqno)
+        if cmd == CMD.HEART_BEAT:
+            return self._frame(cmd, b'', seqno)
+        return b''
+
+
+class _FakeSocket(object):
+    """In-memory TCP socket wired to a FakeTuyaDevice.  recv() on an empty
+    buffer raises socket.timeout immediately, so no test waits on a clock."""
+
+    def __init__(self, device, chunk=None):
+        self.device = device
+        self.chunk = chunk
+        self.rx = b''
+
+    def setsockopt(self, *args):
+        pass
+
+    def settimeout(self, timeout):
+        pass
+
+    def connect(self, address):
+        self.device.connect()
+
+    def sendall(self, data):
+        self.rx += self.device.receive_bytes(data)
+
+    def recv(self, length):
+        if not self.rx:
+            raise _socket_mod.timeout('timed out')
+        length = min(length, self.chunk or length)
+        data, self.rx = self.rx[:length], self.rx[length:]
+        return data
+
+    def close(self):
+        pass
+
+
+class _FakeClock(object):
+    """Stand-in for the time module: sleep() advances time instantly."""
+
+    def __init__(self):
+        self.now = 1700000000.0
+        self.slept = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        self.slept += seconds
+
+
+class _WireTestCase(unittest.TestCase):
+    """Base for tests that run the real Device API against a FakeTuyaDevice."""
+
+    VERSION = None
+
+    def setUp(self):
+        self.clock = _FakeClock()
+        self._patch(_xenon_mod, 'time', self.clock)
+        self._patch(_device_mod, 'time', self.clock)
+        self._patch(_xenon_mod, 'DEVICEFILE', '/nonexistent/devices.json')
+
+    def _patch(self, target, name, value):
+        p = patch.object(target, name, value)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def attach(self, fake, chunk=None):
+        """Route every socket the library opens to `fake`."""
+        names = ('AF_INET', 'AF_INET6', 'SOCK_STREAM', 'IPPROTO_TCP', 'TCP_NODELAY', 'timeout')
+        sockmod = types.SimpleNamespace(**{n: getattr(_socket_mod, n) for n in names})
+        sockmod.socket = lambda family, kind: _FakeSocket(fake, chunk)
+        self._patch(_xenon_mod, 'socket', sockmod)
+        return fake
+
+    def make(self, version=None, local_key=LOCAL_KEY, dev_id='DEVICE_ID_HERE', chunk=None, **fake_kw):
+        version = version or self.VERSION
+        if version >= 3.5 and not HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
+        fake = self.attach(FakeTuyaDevice(version, dev_id=dev_id, **fake_kw), chunk)
+        d = tinytuya.Device(dev_id, '192.0.2.10', local_key, version=version)
+        self.addCleanup(d.close)
+        return d, fake
+
+
+class _RoundTrip(object):
+    """Public API round trips; mixed into one TestCase per protocol version."""
+
+    def test_status(self):
+        d, fake = self.make(dps={'1': True, '2': 42})
+        result = d.status()
+        self.assertEqual(result['dps'], {'1': True, '2': 42})
+        cmd, request = fake.requests[-1]
+        self.assertEqual(cmd, CMD.DP_QUERY_NEW if self.VERSION >= 3.4 else CMD.DP_QUERY)
+        if self.VERSION < 3.4:
+            self.assertEqual(request['devId'], 'DEVICE_ID_HERE')
+        self.assertEqual(fake.negotiations, 1 if self.VERSION >= 3.4 else 0)
+
+    def test_set_value(self):
+        d, fake = self.make()
+        result = d.set_value(2, 77)
+        self.assertEqual(result['dps'], {'2': 77})
+        self.assertEqual(fake.dps['2'], 77)
+        cmd, request = fake.requests[-1]
+        if self.VERSION >= 3.4:
+            self.assertEqual(cmd, CMD.CONTROL_NEW)
+            self.assertEqual(request['data']['dps'], {'2': 77})
+        else:
+            self.assertEqual(cmd, CMD.CONTROL)
+            self.assertEqual(request['dps'], {'2': 77})
+        self.assertEqual(d.cmd_retcode, 0)
+
+    def test_set_multiple_values(self):
+        d, fake = self.make()
+        result = d.set_multiple_values({1: True, '2': 50})
+        self.assertEqual(result['dps'], {'1': True, '2': 50})
+        self.assertEqual(fake.dps, {'1': True, '2': 50})
+        self.assertEqual(len(fake.requests), 1, 'both DPs go out in one CONTROL frame')
+
+    def test_heartbeat(self):
+        d, fake = self.make()
+        # devices answer a heartbeat with an empty payload, which reads as None
+        self.assertIsNone(d.heartbeat(nowait=False))
+        self.assertEqual(fake.requests[-1][0], CMD.HEART_BEAT)
+        self.assertEqual(d.cmd_retcode, 0)
+
+    def test_new_connection_per_call(self):
+        d, fake = self.make()
+        d.status()
+        d.set_value(1, True)
+        # non-persistent sockets reconnect (and renegotiate 3.4+ session keys) per call
+        self.assertEqual(fake.connections, 2)
+        self.assertEqual(fake.negotiations, 2 if self.VERSION >= 3.4 else 0)
+
+    def test_persistent_socket_reused(self):
+        d, fake = self.make()
+        d.set_socketPersistent(True)
+        d.status()
+        self.assertEqual(d.set_value(1, True)['dps'], {'1': True})
+        self.assertEqual(fake.connections, 1)
+        self.assertEqual(d.cached_status(nowait=True)['dps'], {'1': True, '2': 0})
+
+    def test_partial_reads_and_leading_junk(self):
+        # 3-byte recv() chunks and junk before the prefix exercise the resync loop
+        d, fake = self.make(dps={'1': True}, chunk=3)
+        fake.noise = b'\x01\x02\x03junk'
+        self.assertEqual(d.status()['dps'], {'1': True})
+        self.assertEqual(len(fake.requests), 1, 'resynced without a retry')
+
+    def test_requests_fed_one_byte_at_a_time(self):
+        # a streaming transport may hand the device any fragment, even a partial header
+        d, fake = self.make()
+        whole = fake.receive_bytes
+        fake.receive_bytes = lambda data: b''.join(whole(data[i:i + 1]) for i in range(len(data)))
+        self.assertEqual(d.set_value(2, 5)['dps'], {'2': 5})
+        self.assertEqual(d.status()['dps'], {'1': False, '2': 5})
+        self.assertEqual(fake.dropped, 0)
+
+
+class TestWireV31(_RoundTrip, _WireTestCase):
+    VERSION = 3.1
+
+
+class TestWireV33(_RoundTrip, _WireTestCase):
+    VERSION = 3.3
+
+
+class TestWireV34(_RoundTrip, _WireTestCase):
+    VERSION = 3.4
+
+
+class TestWireV35(_RoundTrip, _WireTestCase):
+    VERSION = 3.5
+
+
+class TestWireBehavior(_WireTestCase):
+    """Error handling, retries and device quirks on the wire path."""
+
+    def test_device22_detected_and_retried_with_dps_list(self):
+        d, fake = self.make(3.3, dev_id='abcdefghijklmnop123456', device22=True, dps={'1': True, '2': 5})
+        result = d.status()
+        self.assertEqual(result['dps'], {'1': True})
+        self.assertEqual(d.dev_type, 'device22')
+        # first a plain DP_QUERY, then CONTROL_NEW with an explicit null-valued DPS list
+        self.assertEqual([c for c, _ in fake.requests], [CMD.DP_QUERY, CMD.CONTROL_NEW])
+        self.assertEqual(fake.requests[1][1]['dps'], {'1': None})
+
+    def test_v32_detects_available_dps_at_set_version(self):
+        # 3.2 is forced to device22 and brute-forces the DP list on set_version()
+        d, fake = self.make(3.2, device22=True, dps={'1': True, '5': 3, '102': 0})
+        self.assertEqual(d.dev_type, 'device22')
+        self.assertEqual(d.dps_to_request, {'1': None, '5': None, '102': None})
+        self.assertTrue(all(cmd == CMD.CONTROL_NEW for cmd, _ in fake.requests))
+        self.assertEqual(d.status()['dps'], {'1': True, '5': 3, '102': 0})
+
+    def test_invalid_json_reply(self):
+        d, fake = self.make(3.3)
+        fake.raw_reply = b'{"dps":{"1":tru'
+        result = d.status()
+        self.assertEqual(result['Err'], str(tinytuya.ERR_JSON))
+        self.assertEqual(result['invalid_json'], '{"dps":{"1":tru')
+        # undecodable UTF-8 is replaced, and the raw bytes are handed back too
+        fake.raw_reply = b'{"dps":{"1":"\xff"}}'
+        result = d.status()
+        self.assertEqual(result['dps'], {'1': '\ufffd'})
+        self.assertEqual(result['invalid_json'], b'{"dps":{"1":"\xff"}}')
+
+    def test_connection_reset_returns_connect_error(self):
+        d, fake = self.make(3.3)
+        fake.send_error = ConnectionResetError()
+        self.assertEqual(d.status()['Err'], str(tinytuya.ERR_CONNECT))
+        self.assertEqual(fake.connections, d.socketRetryLimit + 1)
+
+    def test_retcode_captured_from_matching_ack(self):
+        for version in (3.3, 3.5):
+            with self.subTest(version=version):
+                d, fake = self.make(version)
+                fake.retcode = 1
+                d.set_value(1, True)
+                # the STATUS push that follows must not overwrite the ack's retcode
+                self.assertEqual(d.cmd_retcode, 1)
+
+    def test_bad_gcm_tag_rejected_then_retried(self):
+        d, fake = self.make(3.5, dps={'1': True})
+        fake.corrupt_tags = 1
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            self.assertEqual(d.status()['dps'], {'1': True})
+        self.assertEqual(self._gcm_rejections(logs), 1)
+        # the forged frame was discarded; the library reconnected and asked again
+        self.assertEqual(fake.connections, 2)
+        self.assertEqual(len(fake.requests), 2)
+
+    def test_bad_gcm_tag_every_time_returns_payload_error(self):
+        d, fake = self.make(3.5)
+        fake.corrupt_tags = 1000
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            result = d.status()
+        self.assertEqual(result['Err'], str(tinytuya.ERR_PAYLOAD))
+        self.assertNotIn('dps', result)
+        self.assertGreater(self._gcm_rejections(logs), 1)
+
+    @staticmethod
+    def _gcm_rejections(logs):
+        # assertLogs also keeps these expected tracebacks off stderr, where CI's
+        # Python problem matcher would turn each one into a failure annotation
+        return sum(1 for r in logs.records if r.exc_info and 'GCM authentication failed' in str(r.exc_info[1]))
+
+    def test_command_ids_match_protocol_md(self):
+        self.assertEqual({name: getattr(CT, name) for name in vars(CMD)}, vars(CMD))
+
+    def test_header_skip_list_matches_protocol_md(self):
+        self.assertEqual(set(mh.H.NO_PROTOCOL_HEADER_CMDS), FakeTuyaDevice.HEADERLESS)
+
+    def test_fake_drops_a_bad_frame_suffix(self):
+        fake = FakeTuyaDevice(3.3)
+        fake.connect()
+        msg = mh.TuyaMessage(1, CMD.DP_QUERY, None, mh.AESCipher(fake.key).encrypt(b'{}', False), 0, True, mh.H.PREFIX_55AA_VALUE, False)
+        frame = mh.pack_message(msg)
+        self.assertEqual(fake.receive_bytes(frame[:-4] + bytes(4)), b'')
+        self.assertEqual((fake.dropped, fake.requests), (1, []))
+        self.assertNotEqual(fake.receive_bytes(frame), b'', 'the same frame with its suffix is answered')
+
+    def test_fake_drops_the_other_versions_frame_prefix(self):
+        frames = {3.5: mh.TuyaMessage(1, CMD.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_55AA_VALUE, False)}
+        if HAS_GCM:
+            frames[3.4] = mh.TuyaMessage(1, CMD.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_6699_VALUE, True)
+        for version, msg in frames.items():
+            with self.subTest(version=version):
+                fake = FakeTuyaDevice(version)
+                fake.connect()
+                self.assertEqual(fake.receive_bytes(mh.pack_message(msg, hmac_key=fake.key)), b'')
+                self.assertEqual((fake.dropped, fake.requests), (1, []))
+
+    def test_silent_device_times_out(self):
+        d, fake = self.make(3.3)
+        fake.silent = True
+        result = d.status()
+        self.assertEqual(result['Err'], str(tinytuya.ERR_TIMEOUT))
+        # one try plus socketRetryLimit retries, with fake-clock back-off only
+        self.assertEqual(len(fake.requests), d.socketRetryLimit + 1)
+        self.assertGreater(self.clock.slept, 0)
+
+    def test_offline_device(self):
+        d, fake = self.make(3.3)
+        fake.connect_error = _socket_mod.timeout('timed out')
+        self.assertEqual(d.status()['Err'], str(tinytuya.ERR_OFFLINE))
+        fake.connect_error = ConnectionRefusedError()
+        self.assertEqual(d.status()['Err'], str(tinytuya.ERR_CONNECT))
+        self.assertEqual(fake.connections, 0)
+
+    def test_wrong_key_fails_session_negotiation(self):
+        for version in (3.4, 3.5):
+            with self.subTest(version=version):
+                d, fake = self.make(version, local_key=WRONG_KEY)
+                self.assertEqual(d.status()['Err'], str(tinytuya.ERR_KEY_OR_VER))
+                self.assertGreater(fake.dropped, 0)
+                self.assertEqual(fake.negotiations, 0)
+                self.assertEqual(fake.requests, [])
+
+    def test_forged_negotiation_hmac_rejected(self):
+        for version in (3.4, 3.5):
+            with self.subTest(version=version):
+                d, fake = self.make(version)
+                fake.forge_hmac = True
+                self.assertEqual(d.status()['Err'], str(tinytuya.ERR_KEY_OR_VER))
+                # the client must abort before FINISH and never send data
+                self.assertEqual(fake.negotiations, 0)
+                self.assertEqual(fake.requests, [])
+
+    def test_bad_key_length_rejected_before_connecting(self):
+        d, fake = self.make(3.3, local_key='short')
+        self.assertEqual(d.status()['Err'], str(tinytuya.ERR_KEY_OR_VER))
+        self.assertEqual(fake.connections, 0)
+
+    def _gateway(self, version):
+        if version >= 3.5 and not HAS_GCM:
+            self.skipTest("crypto backend has no GCM support")
+        fake = self.attach(FakeTuyaDevice(version, dev_id='GATEWAY_ID', children={'cidA': {'1': True}, 'cidB': {'1': False}}))
+        gw = tinytuya.Device('GATEWAY_ID', '192.0.2.10', LOCAL_KEY, version=version, persist=True)
+        self.addCleanup(gw.close)
+        child_a = tinytuya.Device('CHILD_A', cid='cidA', parent=gw)
+        child_b = tinytuya.Device('CHILD_B', cid='cidB', parent=gw)
+        return fake, child_a, child_b
+
+    def test_gateway_routes_replies_by_cid(self):
+        for version in (3.3, 3.5):
+            with self.subTest(version=version):
+                fake, child_a, child_b = self._gateway(version)
+                # an async update for child B arrives ahead of child A's reply
+                fake.push({'1': True}, cid='cidB')
+                result = child_a.status()
+                self.assertEqual(result['dps'], {'1': True})
+                self.assertIs(result['device'], child_a)
+                cmd, request = fake.requests[-1]
+                self.assertEqual(request.get('cid') or request['data']['cid'], 'cidA')
+                # child B's update was queued for it, not lost or handed to A
+                queued = child_b.receive()
+                self.assertIs(queued['device'], child_b)
+                self.assertEqual(queued['dps'], {'1': True})
+                self.assertEqual(child_b.set_value(1, False)['dps'], {'1': False})
+                self.assertEqual(fake.children['cidB'], {'1': False})
+
+
+# ---------------------------------------------------------------------------
+# Cloud tests: requests is replaced by a scripted fake Tuya Cloud
+# ---------------------------------------------------------------------------
+
+from urllib.parse import parse_qs, urlsplit
+
+API_KEY = 'abcdefghijklmnop1234'
+API_SECRET = '0123456789abcdef0123456789abcdef'
+TOKEN_REPLY = {'success': True, 't': 1700000000000, 'result': {'access_token': 'TOKEN1', 'expire_time': 7200}}
+TOKEN_INVALID = {'success': False, 'code': 1010, 'msg': 'token invalid'}
+
+
+def _tuya_sign(t, method, path, token='', body='', headers=''):
+    """Tuya's documented request signature, computed independently of Cloud.py."""
+    string_to_sign = '\n'.join([method, hashlib.sha256(body.encode()).hexdigest(), headers, path])
+    msg = API_KEY + token + t + string_to_sign
+    return _hmac_mod.new(API_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest().upper()
+
+
+class _FakeCloud(object):
+    """Stands in for requests.get/requests.request; each call pops the next
+    canned reply (a dict sent as JSON, or raw bytes) and is recorded."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def get(self, url, headers=None):
+        return self.request('GET', url, headers=headers)
+
+    def request(self, method, url, headers=None, data=None):
+        self.calls.append(types.SimpleNamespace(method=method, url=url, headers=headers, body=data))
+        reply = self.replies.pop(0)
+        content = reply if isinstance(reply, bytes) else json.dumps(reply).encode()
+        return types.SimpleNamespace(status_code=200, content=content, text=content.decode('utf-8', 'replace'))
+
+
+class TestCloud(unittest.TestCase):
+
+    def setUp(self):
+        self.clock = _FakeClock()
+        p = patch.object(_cloud_mod, 'time', self.clock)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def start(self, *replies, **kw):
+        """Cloud() with the given replies, starting with the token request."""
+        self.server = _FakeCloud(replies)
+        for name in ('get', 'request'):
+            p = patch.object(_cloud_mod.requests, name, getattr(self.server, name))
+            p.start()
+            self.addCleanup(p.stop)
+        return tinytuya.Cloud(apiRegion='us', apiKey=API_KEY, apiSecret=API_SECRET, **kw)
+
+    def test_token_request_signed(self):
+        c = self.start(TOKEN_REPLY)
+        self.assertEqual(c.token, 'TOKEN1')
+        call = self.server.calls[0]
+        self.assertEqual(call.url, 'https://openapi.tuyaus.com/v1.0/token?grant_type=1')
+        self.assertEqual(call.headers['t'], '1700000000000')
+        self.assertEqual(call.headers['client_id'], API_KEY)
+        self.assertEqual(call.headers['sign'], _tuya_sign('1700000000000', 'GET', '/v1.0/token?grant_type=1'))
+        self.assertNotIn('access_token', call.headers)
+
+    def test_post_signed_with_token_body_and_headers(self):
+        c = self.start(TOKEN_REPLY, {'success': True, 'result': True})
+        commands = {'commands': [{'code': 'switch_1', 'value': True}]}
+        self.assertEqual(c.sendcommand('DEVID', commands), {'success': True, 'result': True})
+        call = self.server.calls[1]
+        self.assertEqual(call.method, 'POST')
+        self.assertEqual(call.url, 'https://openapi.tuyaus.com/v1.0/iot-03/devices/DEVID/commands')
+        self.assertEqual(json.loads(call.body), commands)
+        self.assertEqual(call.headers['access_token'], 'TOKEN1')
+        self.assertEqual(call.headers['Signature-Headers'], 'Content-type')
+        expected = _tuya_sign('1700000000000', 'POST', '/v1.0/iot-03/devices/DEVID/commands', 'TOKEN1',
+                              call.body, 'Content-type:application/json\n')
+        self.assertEqual(call.headers['sign'], expected)
+
+    def test_query_signed_sorted_before_url_encoding(self):
+        c = self.start(TOKEN_REPLY, {'success': True, 'result': {}})
+        c.cloudrequest('/v1.0/devices/DEVID/logs', query={'type': '1,7', 'codes': 'a b', 'end_time': 5})
+        call = self.server.calls[1]
+        self.assertEqual(call.url, 'https://openapi.tuyaus.com/v1.0/devices/DEVID/logs?codes=a+b&end_time=5&type=1%2C7')
+        path = '/v1.0/devices/DEVID/logs?codes=a b&end_time=5&type=1,7'
+        self.assertEqual(call.headers['sign'], _tuya_sign('1700000000000', 'GET', path, 'TOKEN1'))
+
+    def test_old_sign_algorithm(self):
+        c = self.start(TOKEN_REPLY, {'success': True, 'result': []}, new_sign_algorithm=False)
+        c.getstatus('DEVID')
+        old_sign = lambda msg: _hmac_mod.new(API_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest().upper()
+        self.assertEqual(self.server.calls[0].headers['sign'], old_sign(API_KEY + '1700000000000'))
+        self.assertEqual(self.server.calls[1].headers['sign'], old_sign(API_KEY + 'TOKEN1' + '1700000000000'))
+
+    def test_token_refresh_retry_keeps_query_and_content_type(self):
+        # regression for #723: the retried request must be the same request
+        token2 = {'success': True, 'result': {'access_token': 'TOKEN2'}}
+        c = self.start(TOKEN_REPLY, TOKEN_INVALID, token2, {'success': True, 'result': 'ok'})
+        result = c._tuyaplatform('devices/DEVID/logs', query={'size': 2}, content_type='text/plain')
+        self.assertEqual(result, {'success': True, 'result': 'ok'})
+        first, renew, retry = self.server.calls[1:]
+        self.assertEqual(renew.url, 'https://openapi.tuyaus.com/v1.0/token?grant_type=1')
+        self.assertEqual(retry.url, first.url)
+        self.assertEqual(retry.url, 'https://openapi.tuyaus.com/v1.0/devices/DEVID/logs?size=2')
+        self.assertEqual(retry.headers['Content-type'], 'text/plain')
+        self.assertEqual(retry.headers['access_token'], 'TOKEN2')
+
+    def test_token_refresh_gives_up(self):
+        token2 = {'success': True, 'result': {'access_token': 'TOKEN2'}}
+        c = self.start(TOKEN_REPLY, TOKEN_INVALID, token2, TOKEN_INVALID)
+        self.assertIsNone(c.cloudrequest('/v1.0/devices/DEVID'))
+        # a failed renewal stops at once and leaves the token error behind
+        c = self.start(TOKEN_REPLY, TOKEN_INVALID, {'success': False, 'msg': 'sign invalid'})
+        self.assertIsNone(c.cloudrequest('/v1.0/devices/DEVID'))
+        self.assertEqual(c.error['Err'], str(tinytuya.ERR_CLOUDTOKEN))
+
+    def test_token_failure_at_init(self):
+        c = self.start({'success': False, 'code': 1004, 'msg': 'sign invalid'})
+        self.assertIsNone(c.token)
+        self.assertEqual(c.error['Err'], str(tinytuya.ERR_CLOUDTOKEN))
+        self.assertIn('sign invalid', c.error['Payload'])
+        self.assertIs(c.getstatus('DEVID'), c.error)
+        self.assertEqual(len(self.server.calls), 1, 'no request is sent without a token')
+
+    def test_error_dicts(self):
+        c = self.start(TOKEN_REPLY, {'success': False, 'code': 1106, 'msg': 'permission deny'}, b'<html>502 Bad Gateway</html>')
+        result = c.getstatus('DEVID')
+        self.assertEqual(result['Err'], str(tinytuya.ERR_CLOUD))
+        self.assertIn('permission deny', result['Payload'])
+        # a non-JSON reply is an error dict, never an exception
+        result = c.getstatus('DEVID')
+        self.assertEqual(result['Err'], str(tinytuya.ERR_CLOUD))
+        self.assertEqual(c.getstatus()['Err'], str(tinytuya.ERR_PARAMS))
+        self.assertEqual(c.sendcommand('DEVID')['Err'], str(tinytuya.ERR_PARAMS))
+        self.assertEqual(len(self.server.calls), 3)
+
+    def test_getdevices_follows_pages_and_merges(self):
+        c = self.start(
+            TOKEN_REPLY,
+            {'success': True, 'result': {'devices': [{'id': 'dev1', 'name': 'Lamp ', 'local_key': '', 'uid': 'u1', 'product_id': 'p1'}],
+                                         'has_more': True, 'last_row_key': 'k1', 'total': 2}},
+            {'success': True, 'result': {'devices': [{'id': 'dev2', 'name': 'Plug', 'local_key': 'key2', 'uid': 'u1', 'product_id': 'p2'}],
+                                         'has_more': False, 'total': 2}},
+            # per-user list fills in the missing local key
+            {'success': True, 'result': {'list': [{'id': 'dev1', 'local_key': 'key1'}], 'has_more': False}},
+            {'success': True, 'result': [{'id': 'dev1', 'mac': 'aa:bb:cc:dd:ee:ff', 'uuid': 'uuid1'}]},
+        )
+        devices = c.getdevices()
+        self.assertEqual(devices, [
+            {'name': 'Lamp', 'id': 'dev1', 'key': 'key1', 'mac': 'aa:bb:cc:dd:ee:ff', 'uuid': 'uuid1', 'product_id': 'p1'},
+            {'name': 'Plug', 'id': 'dev2', 'key': 'key2', 'mac': '', 'product_id': 'p2'},
+        ])
+        page1, page2, by_user, factory = [urlsplit(call.url) for call in self.server.calls[1:]]
+        self.assertEqual(page1.path, '/v1.0/iot-01/associated-users/devices')
+        self.assertNotIn('last_row_key', parse_qs(page1.query))
+        self.assertEqual(parse_qs(page2.query)['last_row_key'], ['k1'])
+        self.assertEqual(by_user.path, '/v1.3/iot-03/devices')
+        self.assertEqual(parse_qs(by_user.query)['source_id'], ['u1'])
+        self.assertEqual(parse_qs(factory.query)['device_ids'], ['dev1,dev2'])
+
+    def test_getdevices_by_device_id_reuses_unchanged_and_maps_changed(self):
+        # the wizard path: apiDeviceID -> uid -> user's devices, diffed against devices.json
+        spec = {'category': 'cz', 'status': [
+            {'code': 'switch_1', 'dp_id': 1, 'type': 'Boolean', 'values': '{}'},
+            {'code': 'cur_power', 'dp_id': 19, 'type': 'Integer', 'values': '{"unit":"W","min":0}'}]}
+        c = self.start(
+            TOKEN_REPLY,
+            {'success': True, 'result': {'uid': 'u1'}},
+            {'success': True, 'result': {'uid': 'u1'}},
+            {'success': True, 'result': [
+                {'id': 'dev1', 'name': 'Lamp', 'local_key': 'key1', 'product_id': 'p1'},
+                {'id': 'dev2', 'name': 'Plug', 'local_key': 'newkey', 'product_id': 'p2'}]},
+            {'success': True, 'result': spec},
+            {'success': True, 'result': [{'id': 'dev2', 'mac': '11:22:33:44:55:66'}]},
+            apiDeviceID='dev1, dev2')
+        unchanged = {'id': 'dev1', 'name': 'Lamp', 'key': 'key1', 'product_id': 'p1', 'mapping': {}}
+        oldlist = [unchanged, {'id': 'dev2', 'name': 'Plug', 'key': 'oldkey', 'product_id': 'p2'}]
+        devices = c.getdevices(oldlist=oldlist, include_map=True)
+        self.assertEqual(devices, [
+            {'name': 'Plug', 'id': 'dev2', 'key': 'newkey', 'mac': '11:22:33:44:55:66', 'product_id': 'p2', 'mapping': {
+                '1': {'code': 'switch_1', 'type': 'Boolean', 'values': {}},
+                '19': {'code': 'cur_power', 'type': 'Integer', 'values': {'unit': 'W', 'min': 0}}}},
+            unchanged,
+        ])
+        self.assertIs(devices[1], unchanged)
+        paths = [urlsplit(call.url).path for call in self.server.calls[1:]]
+        self.assertEqual(paths, ['/v1.0/devices/dev1', '/v1.0/devices/dev2', '/v1.0/users/u1/devices',
+                                 '/v1.1/devices/dev2/specifications', '/v1.0/devices/factory-infos'])
+
+    def test_getdevices_uid_error(self):
+        c = self.start(TOKEN_REPLY, {'success': False, 'code': 1106, 'msg': 'permission deny'}, apiDeviceID='dev1')
+        result = c.getdevices()
+        self.assertEqual(result['Err'], str(tinytuya.ERR_CLOUD))
+        self.assertIn('permission deny', result['Payload'])
+
+    def test_getdevicelog_follows_pages(self):
+        c = self.start(
+            TOKEN_REPLY,
+            {'success': True, 'result': {'logs': [{'value': '1'}], 'has_next': True, 'next_row_key': 'r1'}},
+            {'success': True, 'result': {'logs': [{'value': '2'}], 'has_next': False, 'next_row_key': 'r2'}},
+        )
+        result = c.getdevicelog('DEVID', start=-1, evtype=[1, 7])
+        self.assertEqual(result['result']['logs'], [{'value': '1'}, {'value': '2'}])
+        self.assertEqual(result['fetches'], 2)
+        first, second = [parse_qs(urlsplit(call.url).query) for call in self.server.calls[1:]]
+        self.assertEqual(first['end_time'], ['1700000000000'])
+        self.assertEqual(first['start_time'], [str((1700000000 - 86400) * 1000)])
+        self.assertEqual(first['type'], ['1,7'])
+        self.assertNotIn('start_row_key', first)
+        self.assertEqual(second['start_row_key'], ['r1'])
+
+    def test_getdevicelog_stops_on_repeated_row_key(self):
+        page = {'success': True, 'result': {'logs': [{'value': '1'}], 'has_next': True, 'next_row_key': 'r1'}}
+        c = self.start(TOKEN_REPLY, page, json.loads(json.dumps(page)))
+        result = c.getdevicelog('DEVID')
+        # a server that keeps returning the same row key must not loop forever
+        self.assertEqual(result['fetches'], 2)
+        self.assertEqual(len(self.server.calls), 3)
+
+
+# ---------------------------------------------------------------------------
+# Contract tests: API.md and the mechanically checkable AGENTS.md rules.
+# Known deviations are listed for discussion, not encoded as correct: each
+# gets its own @expectedFailure test asserting the documented behavior, so it
+# turns into an "unexpected success" (a failure) once fixed and the entry
+# must then be deleted.
+# ---------------------------------------------------------------------------
+
+import ast
+import collections
+import functools
+import glob
+import inspect
+import os
+import re
+
+REPO = os.path.dirname(os.path.abspath(__file__))
+
+
+def _read(*path):
+    with open(os.path.join(REPO, *path), encoding='utf-8') as f:
+        return f.read()
+
+
+def _add_deviation_tests(cls, deviations, check):
+    """Attach one @expectedFailure test per known deviation to `cls`."""
+    for key in sorted(deviations):
+        def test(self, key=key):
+            check(self, key)
+        test.__doc__ = deviations[key]
+        name = 'test_deviation_' + re.sub(r'\W+', '_', key).strip('_')
+        setattr(cls, name, unittest.expectedFailure(test))
+
+
+_API_SECTIONS = {
+    'Module-Level Functions': tinytuya, 'XenonDevice (Base Class)': tinytuya.XenonDevice,
+    'Device': tinytuya.Device, 'OutletDevice': tinytuya.OutletDevice, 'BulbDevice': tinytuya.BulbDevice,
+    'CoverDevice': tinytuya.CoverDevice, 'Cloud': tinytuya.Cloud,
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _api_md_sections():
+    """{'## heading': [(lineno, line), ...]} for API.md."""
+    sections, current = {}, None
+    for lineno, line in enumerate(_read('API.md').splitlines(), 1):
+        if line.startswith('## '):
+            current = sections.setdefault(line[3:].strip(), [])
+        elif current is not None:
+            current.append((lineno, line))
+    return sections
+
+
+def _params_from_def(text):
+    """[(name, default, kind)] from a documented parameter list, defaults evaluated."""
+    args, P = ast.parse('def f(%s): pass' % text).body[0].args, inspect.Parameter
+    positional = [(a, P.POSITIONAL_ONLY) for a in args.posonlyargs] + [(a, P.POSITIONAL_OR_KEYWORD) for a in args.args]
+    defaults = [P.empty] * (len(positional) - len(args.defaults)) + [ast.literal_eval(d) for d in args.defaults]
+    params = [(a.arg, default, kind) for (a, kind), default in zip(positional, defaults)]
+    if args.vararg:
+        params.append((args.vararg.arg, P.empty, P.VAR_POSITIONAL))
+    params += [(a.arg, P.empty if d is None else ast.literal_eval(d), P.KEYWORD_ONLY) for a, d in zip(args.kwonlyargs, args.kw_defaults)]
+    if args.kwarg:
+        params.append((args.kwarg.arg, P.empty, P.VAR_KEYWORD))
+    return params
+
+
+@functools.lru_cache(maxsize=None)
+def _api_md_signatures():
+    """{'Owner.name': (lineno, owner, name, [(param, default)])} for every
+    documented signature heading plus the XenonDevice constructor block."""
+    found = {}
+    for section, lines in _api_md_sections().items():
+        owner = _API_SECTIONS.get(section)
+        if owner is None:
+            continue
+        owner_name = getattr(owner, '__name__', 'tinytuya')
+        for lineno, line in lines:
+            m = re.match(r'^#{3,4} `(?:\w+\.)?(\w+)\((.*)\)`\s*$', line)
+            if m:
+                found['%s.%s' % (owner_name, m.group(1))] = (lineno, owner, m.group(1), _params_from_def(m.group(2)))
+    # the constructor is documented as a commented call in a code block
+    lines = _api_md_sections()['XenonDevice (Base Class)']
+    start = next(i for i, (_, line) in enumerate(lines) if line.startswith('XenonDevice('))
+    end = next(i for i in range(start, len(lines)) if lines[i][1].startswith(')'))
+    text = ' '.join(line.split('#')[0].strip() for _, line in lines[start + 1:end])
+    found['XenonDevice.__init__'] = (lines[start][0], tinytuya.XenonDevice, '__init__', _params_from_def(text))
+    return found
+
+
+def _code_params(owner, name):
+    """[(param, default, kind)] of owner.name in the code, or None when it does not exist."""
+    obj = getattr(owner, name, None)
+    if obj is None or (inspect.isclass(owner) and name not in vars(owner) and name != '__init__'
+                       and not any(name in vars(base) for base in owner.__mro__[1:] if base is not object)):
+        return None
+    return [(p.name, p.default, p.kind) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
+
+
+def _signature_problem(key):
+    """None when the code matches API.md for this entry, else a description."""
+    lineno, owner, name, documented = _api_md_signatures()[key]
+    actual = _code_params(owner, name)
+    if actual is None:
+        return 'API.md:%d documents %s, which does not exist' % (lineno, key)
+    if actual != documented:
+        return 'API.md:%d documents %s%r, code has %r' % (lineno, key, documented, actual)
+    return None
+
+
+def _breaking_change(baseline, actual):
+    """Why the code's `actual` parameters would break callers of `baseline`, or None."""
+    P = inspect.Parameter
+    if actual is None:
+        return 'no longer exists'
+    if len(actual) < len(baseline):
+        return 'parameters removed: %r' % actual
+    for (name, default, kind), (new_name, new_default, new_kind) in zip(baseline, actual):
+        if (new_name, new_kind) != (name, kind):
+            return '%s (%s) is now %s (%s)' % (name, kind, new_name, new_kind)
+        if default is not P.empty and new_default != default:
+            return '%s default changed from %r to %r' % (name, default, new_default)
+    for name, default, kind in actual[len(baseline):]:
+        if default is P.empty and kind not in (P.VAR_POSITIONAL, P.VAR_KEYWORD):
+            return 'new required parameter %s' % name
+    return None
+
+
+# Public API at the time this test was written: the code's parameters for every API.md signature
+# (None = documented but not in the code).  Edit API.md and the code together all you like; callers
+# of these must keep working, so parameters may gain defaults and new ones go last with a default.
+# Add an entry when API.md documents something new; never edit one to make a breaking change pass.
+API_BASELINE = {
+    'tinytuya.deviceScan': 'verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False',
+    'tinytuya.scan': 'maxretry=None, color=True, forcescan=False',
+    'tinytuya.find_device': 'dev_id=None, address=None',
+    'tinytuya.device_info': 'dev_id',
+    'tinytuya.assign_dp_mappings': 'tuyadevices, mappings',
+    'tinytuya.decrypt_udp': 'msg',
+    'tinytuya.set_debug': 'toggle=True, color=True',
+    'tinytuya.load_devicefile': 'fname=None',
+    'XenonDevice.set_version': 'version',
+    'XenonDevice.set_socketPersistent': 'persist',
+    'XenonDevice.set_socketNODELAY': 'nodelay',
+    'XenonDevice.set_socketRetryLimit': 'limit',
+    'XenonDevice.set_socketRetryDelay': 'delay',
+    'XenonDevice.set_socketTimeout': 's',
+    'XenonDevice.set_sendWait': 's',
+    'XenonDevice.set_retry': 'retry',
+    'XenonDevice.status': 'nowait=False',
+    'XenonDevice.cached_status': 'historic=False, nowait=False',
+    'XenonDevice.receive': '',
+    'XenonDevice.send': 'payload',
+    'XenonDevice.set_dpsUsed': 'dps_to_request',
+    'XenonDevice.add_dps_to_request': 'dp_indicies',
+    'XenonDevice.detect_available_dps': '',
+    'XenonDevice.generate_payload': 'command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None',
+    'XenonDevice.heartbeat': None,
+    'XenonDevice.updatedps': None,
+    'XenonDevice.subdev_query': 'nowait=False',
+    'Device.status': 'nowait=False',
+    'Device.set_status': 'on, switch=1, nowait=False',
+    'Device.turn_on': 'switch=1, nowait=False',
+    'Device.turn_off': 'switch=1, nowait=False',
+    'Device.set_value': 'index, value, nowait=False',
+    'Device.set_multiple_values': 'data, nowait=False',
+    'Device.set_timer': 'num_secs, dps_id=0, nowait=False',
+    'Device.heartbeat': 'nowait=True',
+    'Device.product': '',
+    'OutletDevice.set_dimmer': 'percentage=None, value=None, dps_id=3, nowait=False',
+    'BulbDevice.set_mode': "mode='white', nowait=False",
+    'BulbDevice.set_colour': 'r, g, b, nowait=False',
+    'BulbDevice.set_hsv': 'h, s, v, nowait=False',
+    'BulbDevice.set_white_percentage': 'brightness=100, colourtemp=0, nowait=False',
+    'BulbDevice.set_brightness_percentage': 'brightness=100, nowait=False',
+    'BulbDevice.set_colourtemp_percentage': 'colourtemp=100, nowait=False',
+    'BulbDevice.set_scene': 'scene, scene_data=None, nowait=False',
+    'BulbDevice.set_timer': 'num_secs, dps_id=0, nowait=False',
+    'BulbDevice.set_musicmode': None,
+    'BulbDevice.set_music_colour': 'transition, red, green, blue, brightness=None, colourtemp=None, nowait=False',
+    'BulbDevice.state': 'nowait=False',
+    'BulbDevice.get_mode': 'state=None, nowait=False',
+    'BulbDevice.brightness': 'state=None, nowait=False',
+    'BulbDevice.get_brightness_percentage': 'state=None, nowait=False',
+    'BulbDevice.colourtemp': 'state=None, nowait=False',
+    'BulbDevice.get_colourtemp_percentage': 'state=None, nowait=False',
+    'BulbDevice.colour_rgb': 'state=None, nowait=False',
+    'BulbDevice.colour_hsv': 'state=None, nowait=False',
+    'BulbDevice.rgb_to_hexvalue': 'r, g, b, hexformat',
+    'BulbDevice.hsv_to_hexvalue': 'h, s, v, hexformat',
+    'BulbDevice.hexvalue_to_rgb': 'hexvalue, hexformat=None',
+    'BulbDevice.hexvalue_to_hsv': 'hexvalue, hexformat=None',
+    'BulbDevice.bulb_has_capability': 'feature, nowait=False',
+    'BulbDevice.detect_bulb': 'response=None, nowait=False',
+    'BulbDevice.set_bulb_type': 'bulb_type=None, mapping=None',
+    'CoverDevice.open_cover': 'switch=None, nowait=False',
+    'CoverDevice.close_cover': 'switch=None, nowait=False',
+    'CoverDevice.stop_cover': 'switch=None, nowait=False',
+    'Cloud.setregion': 'apiRegion=None',
+    'Cloud.cloudrequest': 'url, action=None, post=None, query=None',
+    'Cloud.getdevices': 'verbose=False, oldlist=[], include_map=False',
+    'Cloud.getstatus': 'deviceid=None',
+    'Cloud.getfunctions': 'deviceid=None',
+    'Cloud.getproperties': 'deviceid=None',
+    'Cloud.getdps': 'deviceid=None',
+    'Cloud.sendcommand': "deviceid=None, commands=None, uri='iot-03/devices/'",
+    'Cloud.getconnectstatus': 'deviceid=None',
+    'Cloud.getdevicelog': 'deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None',
+    'XenonDevice.__init__': "dev_id, address=None, local_key='', dev_type='default', connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=6668, max_simultaneous_dps=0",
+}
+
+# file:line in the code for each, so the list can be acted on directly
+API_SIGNATURE_DEVIATIONS = {
+    'tinytuya.deviceScan': 'core/core.py:235 has maxretry=None and an undocumented byID=False',
+    'tinytuya.scan': 'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter',
+    'XenonDevice.__init__': 'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0',
+    'XenonDevice.add_dps_to_request': 'XenonDevice.py:1154 names the parameter dp_indicies, not index',
+    'XenonDevice.heartbeat': 'documented under XenonDevice, but only Device (core/Device.py:47) has it',
+    'XenonDevice.updatedps': 'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)',
+    'BulbDevice.set_musicmode': 'no such method (BulbDevice.py:24 docstring lists it too)',
+    'CoverDevice.open_cover': 'CoverDevice.py:236 defaults switch=None, not 1',
+    'CoverDevice.close_cover': 'CoverDevice.py:251 defaults switch=None, not 1',
+    'CoverDevice.stop_cover': 'CoverDevice.py:266 defaults switch=None, not 1',
+    'Cloud.setregion': 'Cloud.py:128 defaults apiRegion=None; API.md shows it required',
+    'Cloud.getstatus': 'Cloud.py:626 defaults deviceid=None (returns ERR_PARAMS); API.md shows it required',
+    'Cloud.getfunctions': 'Cloud.py:632 defaults deviceid=None; API.md shows it required',
+    'Cloud.getproperties': 'Cloud.py:638 defaults deviceid=None; API.md shows it required',
+    'Cloud.getdps': 'Cloud.py:644 defaults deviceid=None; API.md shows it required',
+    'Cloud.sendcommand': 'Cloud.py:669 defaults deviceid=None, commands=None; API.md shows them required',
+    'Cloud.getconnectstatus': 'Cloud.py:694 defaults deviceid=None; API.md shows it required',
+    'Cloud.getdevicelog': 'Cloud.py:717 defaults deviceid=None; API.md shows it required',
+}
+
+API_CONTRIB_DEVIATIONS = {
+    'FloorFanDevice': 'missing from the API.md Contrib Modules table',
+    'SoriaInverterDevice': 'missing from the API.md Contrib Modules table',
+    'TowelRailHeaterDevice': 'missing from the API.md Contrib Modules table',
+}
+
+
+def _contrib_modules():
+    return sorted(os.path.basename(p)[:-3] for p in glob.glob(os.path.join(REPO, 'tinytuya', 'Contrib', '*Device.py')))
+
+
+def _api_md_contrib_table():
+    return re.findall(r'^\| `(\w+)` \| `(\w+)` \|', '\n'.join(l for _, l in _api_md_sections()['Contrib Modules']), re.M)
+
+
+class TestApiContract(unittest.TestCase):
+    """API.md is the public contract (AGENTS.md: Public API stability)."""
+
+    def test_signatures_match_api_md(self):
+        signatures = _api_md_signatures()
+        self.assertGreater(len(signatures), 60, 'API.md headings no longer parse')
+        for key in API_SIGNATURE_DEVIATIONS:
+            self.assertIn(key, signatures, 'stale deviation entry')
+        for key in sorted(set(signatures) - set(API_SIGNATURE_DEVIATIONS)):
+            with self.subTest(key=key):
+                self.assertIsNone(_signature_problem(key))
+
+    def test_documented_api_stays_backward_compatible(self):
+        signatures = _api_md_signatures()
+        self.assertEqual(set(signatures) - set(API_BASELINE), set(), 'add new API.md signatures to API_BASELINE')
+        for key, params in API_BASELINE.items():
+            with self.subTest(key=key):
+                self.assertIn(key, signatures, 'removed from API.md')
+                if params is not None:
+                    _, owner, name, _ = signatures[key]
+                    self.assertIsNone(_breaking_change(_params_from_def(params), _code_params(owner, name)))
+
+    def test_device_classes_accept_documented_constructor(self):
+        # API.md: "All device classes share the constructor signature" of XenonDevice
+        kwargs = {name: default for name, default, _ in _api_md_signatures()['XenonDevice.__init__'][3][1:]}
+        kwargs.update(address='192.0.2.10', local_key=LOCAL_KEY, version=3.3)
+        for cls in (tinytuya.Device, tinytuya.OutletDevice, tinytuya.BulbDevice, tinytuya.CoverDevice):
+            with self.subTest(cls=cls.__name__):
+                d = cls('DEVICE_ID_HERE', **kwargs)
+                self.assertEqual((d.id, d.address, d.version, d.port), ('DEVICE_ID_HERE', '192.0.2.10', 3.3, 6668))
+
+    def test_cloud_constructor_accepts_documented_keywords(self):
+        params = inspect.signature(tinytuya.Cloud).parameters
+        for name in ('apiRegion', 'apiKey', 'apiSecret', 'apiDeviceID', 'configFile'):
+            self.assertIn(name, params)
+
+    def test_cloud_region_table(self):
+        rows = re.findall(r'^\| (`[\w-]+`(?: / `[\w-]+`)*) \| (.+?) \|$',
+                          '\n'.join(l for _, l in _api_md_sections()['Cloud']), re.M)
+        self.assertEqual(len(rows), 7)
+        c = tinytuya.Cloud(apiRegion='us', apiKey=API_KEY, apiSecret=API_SECRET, initial_token='TOKEN')
+        hosts = []
+        for codes, _center in rows:
+            row_hosts = set()
+            for code in re.findall(r'`([\w-]+)`', codes):
+                c.setregion(code)
+                row_hosts.add(c.urlhost)
+            self.assertEqual(len(row_hosts), 1, 'aliases on one row must share a data center: %s' % codes)
+            hosts.append(row_hosts.pop())
+        self.assertEqual(len(set(hosts)), len(hosts), 'each documented region needs its own host')
+
+    def test_setter_defaults(self):
+        # attribute behind each setter and the default API.md states for it
+        attrs = {'set_socketNODELAY': 'socketNODELAY', 'set_socketRetryLimit': 'socketRetryLimit',
+                 'set_socketRetryDelay': 'socketRetryDelay', 'set_socketTimeout': 'connection_timeout',
+                 'set_sendWait': 'sendWait', 'set_retry': 'retry'}
+        text = '\n'.join(l for _, l in _api_md_sections()['XenonDevice (Base Class)'])
+        d = tinytuya.Device('DEVICE_ID_HERE', '192.0.2.10', LOCAL_KEY, version=3.3)
+        for setter, attr in attrs.items():
+            with self.subTest(setter=setter):
+                default = re.search(r'#### `%s\(.*?Default: `([^`]+)`' % setter, text, re.S).group(1)
+                self.assertEqual(getattr(d, attr), ast.literal_eval(default))
+        self.assertFalse(d.socketPersistent, 'API.md: close after each command (False, default)')
+
+    def test_error_code_table(self):
+        documented = {int(code): name for code, name in re.findall(
+            r'^\| (\d{3}) \| `(ERR_\w+)` \|', '\n'.join(l for _, l in _api_md_sections()['Error Codes']), re.M)}
+        actual = {code: name for name, code in vars(tinytuya).items() if name.startswith('ERR_') and isinstance(code, int)}
+        self.assertEqual(documented, actual)
+        self.assertEqual(set(actual), {k for k in tinytuya.error_codes if k is not None})
+
+    def test_find_device_result_shape(self):
+        # API.md: {'ip', 'version', 'id', 'product_id', 'data'}, found or not
+        keys = {'ip', 'version', 'id', 'product_id', 'data'}
+        self.assertEqual(set(tinytuya.find_device()), keys)
+        from tinytuya import scanner
+        found = {'DEVICE_ID_HERE': {'ip': '192.0.2.10', 'version': '3.3', 'productKey': 'p1'}}
+        for reply in ({}, found):
+            with patch.object(scanner, 'devices', return_value=reply):
+                self.assertEqual(set(tinytuya.find_device(dev_id='DEVICE_ID_HERE')), keys)
+        with patch.object(scanner, 'devices', return_value=found):
+            self.assertEqual(tinytuya.find_device(dev_id='DEVICE_ID_HERE')['product_id'], 'p1')
+
+    def test_contrib_table_lists_real_classes(self):
+        import importlib
+        table = _api_md_contrib_table()
+        self.assertGreater(len(table), 10)
+        for module, cls in table:
+            with self.subTest(module=module):
+                self.assertTrue(inspect.isclass(getattr(importlib.import_module('tinytuya.Contrib.' + module), cls)))
+        listed = {m for m, _ in table}
+        for module in sorted(set(_contrib_modules()) - set(API_CONTRIB_DEVIATIONS)):
+            with self.subTest(module=module):
+                self.assertIn(module, listed)
+
+
+_add_deviation_tests(TestApiContract, API_SIGNATURE_DEVIATIONS,
+                     lambda self, key: self.assertIsNone(_signature_problem(key)))
+_add_deviation_tests(TestApiContract, {'contrib_' + k: v for k, v in API_CONTRIB_DEVIATIONS.items()},
+                     lambda self, key: self.assertIn(key[len('contrib_'):], {m for m, _ in _api_md_contrib_table()}))
+
+
+def _library_sources():
+    """{repo-relative path: AST} for every module in the tinytuya package."""
+    paths = sorted(glob.glob(os.path.join(REPO, 'tinytuya', '**', '*.py'), recursive=True))
+    return {os.path.relpath(p, REPO).replace(os.sep, '/'): ast.parse(_read(p), p) for p in paths}
+
+
+def _calls(tree, names):
+    """(lineno, name) of calls to any of `names` (plain or attribute calls)."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, 'attr', None)
+            if name in names:
+                yield node.lineno, name
+
+
+# AGENTS.md: "only the CLI, wizard, and scanner user-facing output may print"
+PRINT_ALLOWED = {'tinytuya/__main__.py', 'tinytuya/cli.py', 'tinytuya/wizard.py', 'tinytuya/scanner.py'}
+# 'path:function': (print() calls, note); a new print anywhere, even in one of these functions, fails
+PRINT_DEVIATIONS = {
+    'tinytuya/Cloud.py:<module>': (3, 'Cloud.py:39-41 print a WARN banner at import time when requests is missing'),
+    'tinytuya/Contrib/IRRemoteControlDevice.py:head_key_to_pulses': (14, 'IRRemoteControlDevice.py:413-494 debug prints in head_key_to_pulses(), inside "if False:" blocks'),
+    'tinytuya/Contrib/IRRemoteControlDevice.py:pulses_to_space_encoded_head_key': (2, 'IRRemoteControlDevice.py:930,968 print on every call of pulses_to_space_encoded_head_key()'),
+    'tinytuya/Contrib/WiFiDualMeterDevice.py:print_all': (26, 'WiFiDualMeterDevice.py:217-242: print_all() is a public method that prints'),
+}
+HEXLIFY_DEVIATIONS = {  # 'path:function': (unguarded calls, note), as for PRINT_DEVIATIONS
+    'tinytuya/core/XenonDevice.py:_negotiate_session_key_generate_step_3': (1, 'XenonDevice.py:944 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard'),
+    'tinytuya/core/message_helper.py:unpack_message': (1, 'message_helper.py:150 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard'),
+}
+# AGENTS.md binds __all__ only for *new* wildcard-exported modules; these predate the rule
+WILDCARD_WITHOUT_ALL = {
+    'crypto_helper', 'message_helper', 'exceptions', 'error_helper', 'const', 'XenonDevice',
+    'udp_helper', 'Device', 'command_types', 'header', 'core',
+}
+# AGENTS.md's Contrib checklist (README section, example, testcontrib) binds new modules
+CONTRIB_PREDATES_CHECKLIST = {
+    'AtorchTemperatureControllerDevice', 'BlanketDevice', 'ClimateDevice', 'ColorfulX7Device', 'DoorbellDevice',
+    'FloorFanDevice', 'IRRemoteControlDevice', 'InverterHeatPumpDevice', 'PresenceDetectorDevice',
+    'RFRemoteControlDevice', 'SocketDevice', 'SoriaInverterDevice', 'ThermostatDevice',
+    'TowelRailHeaterDevice', 'WiFiDualMeterDevice',
+}
+
+
+def _print_sites(path, tree):
+    """Counter of 'path:function' for print() calls (innermost def, or <module>)."""
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    sites = collections.Counter()
+    for node in ast.walk(tree):
+        func = getattr(node, 'func', None)
+        if not (isinstance(node, ast.Call) and getattr(func, 'id', getattr(func, 'attr', None)) == 'print'):
+            continue
+        while node in parents and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node = parents[node]
+        sites['%s:%s' % (path, getattr(node, 'name', '<module>'))] += 1
+    return sites
+
+
+def _unguarded_hexlify(path, tree):
+    """'path:function' of log calls that hexlify outside an isEnabledFor() check."""
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        func = getattr(node, 'func', None)
+        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == 'log'):
+            continue
+        if not any(getattr(getattr(n, 'func', None), 'attr', None) == 'hexlify' for arg in node.args for n in ast.walk(arg)):
+            continue
+        p, guarded = node, False
+        while p in parents and not isinstance(p, ast.FunctionDef):
+            child, p = p, parents[p]
+            # only the body of `if log.isEnabledFor(logging.DEBUG):` counts, not its else or another level
+            guarded = guarded or (isinstance(p, ast.If) and child in p.body
+                                  and ast.unparse(p.test) == 'log.isEnabledFor(logging.DEBUG)')
+        if not guarded:
+            yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
+
+
+def _import_guarded(parents, node):
+    """True when `node` sits in the body of a try whose handlers catch ImportError."""
+    catches = {'ImportError', 'ModuleNotFoundError', 'Exception', 'BaseException'}
+    while node in parents:
+        child, node = node, parents[node]
+        if isinstance(node, ast.Try) and child in node.body and any(
+                h.type is None or {getattr(n, 'id', None) for n in ast.walk(h.type)} & catches for h in node.handlers):
+            return True
+    return False
+
+
+class TestAgentsRules(unittest.TestCase):
+    """Mechanically checkable AGENTS.md rules (AST/inspect, not text matching)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sources = _library_sources()
+        cls.unguarded_hexlify = collections.Counter(site for path, tree in cls.sources.items() for site in _unguarded_hexlify(path, tree))
+        cls.print_sites = sum((_print_sites(path, tree) for path, tree in cls.sources.items() if path not in PRINT_ALLOWED),
+                              collections.Counter())
+
+    def _assert_only_known_sites(self, found, deviations):
+        """Every site in `found` is a known deviation with exactly its recorded count (0 = fixed)."""
+        known = collections.Counter({site: count for site, (count, _) in deviations.items()})
+        self.assertEqual(found - known, collections.Counter())
+        partly_fixed = {site for site in known if 0 < found[site] < known[site]}
+        self.assertEqual(partly_fixed, set(), 'lower the deviation count')
+
+    def test_no_print_in_library_modules(self):
+        self._assert_only_known_sites(self.print_sites, PRINT_DEVIATIONS)
+
+    def test_logging_configured_only_by_set_debug(self):
+        config = {'basicConfig', 'addHandler', 'removeHandler', 'setFormatter', 'dictConfig', 'fileConfig',
+                  'StreamHandler', 'FileHandler', 'NullHandler', 'Formatter'}
+        for path, tree in self.sources.items():
+            set_debug = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == 'set_debug']
+            allowed = {line for f in set_debug for line in range(f.lineno, f.end_lineno + 1)}
+            with self.subTest(path=path):
+                self.assertEqual([c for c in _calls(tree, config) if c[0] not in allowed], [])
+
+    def test_loggers_named_by_module(self):
+        for path, tree in self.sources.items():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and getattr(node.func, 'attr', None) == 'getLogger':
+                    with self.subTest(path=path, line=node.lineno):
+                        self.assertEqual(ast.unparse(node.args[0]) if node.args else None, '__name__')
+
+    def test_hexlify_logging_is_guarded(self):
+        self._assert_only_known_sites(self.unguarded_hexlify, HEXLIFY_DEVIATIONS)
+
+    def test_crypto_imported_only_in_crypto_helper(self):
+        crypto = {'cryptography', 'Crypto', 'Cryptodome', 'pyaes'}
+        for path, tree in self.sources.items():
+            if path == 'tinytuya/core/crypto_helper.py':
+                continue
+            for node in ast.walk(tree):
+                names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+                        [node.module or ''] if isinstance(node, ast.ImportFrom) and not node.level else []
+                for name in names:
+                    with self.subTest(path=path, line=node.lineno):
+                        self.assertNotIn(name.split('.')[0], crypto)
+
+    def test_no_type_annotations(self):
+        for path, tree in self.sources.items():
+            annotated = [n.lineno for n in ast.walk(tree)
+                         if (isinstance(n, ast.arg) and n.annotation is not None) or isinstance(n, ast.AnnAssign)
+                         or (isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.returns is not None)]
+            with self.subTest(path=path):
+                self.assertEqual(annotated, [])
+
+    def test_new_wildcard_modules_define_all(self):
+        for init in ('tinytuya/__init__.py', 'tinytuya/core/__init__.py'):
+            package = os.path.dirname(init)
+            for node in self.sources[init].body:
+                if isinstance(node, ast.ImportFrom) and node.level and any(a.name == '*' for a in node.names):
+                    path = '%s/%s.py' % (package, node.module.replace('.', '/'))
+                    if path not in self.sources:
+                        path = '%s/%s/__init__.py' % (package, node.module.replace('.', '/'))
+                    defines_all = any(isinstance(n, ast.Assign) and any(getattr(t, 'id', None) == '__all__' for t in n.targets)
+                                      for n in self.sources[path].body)
+                    with self.subTest(module=path):
+                        self.assertTrue(defines_all or node.module in WILDCARD_WITHOUT_ALL or path == 'tinytuya/core/__init__.py')
+
+    def test_error_codes_listed_in_readme(self):
+        readme = dict((int(c), (n, m)) for c, n, m in re.findall(r'^\* (\d{3}) \((ERR_\w+)\) - (.+)$', _read('README.md'), re.M))
+        codes = {k: v for k, v in tinytuya.error_codes.items() if k is not None}
+        self.assertEqual(set(readme), set(codes))
+        for code, (name, message) in readme.items():
+            self.assertEqual(getattr(tinytuya, name), code)
+            self.assertEqual(message, codes[code])
+
+    def test_supported_python_versions_in_sync(self):
+        setup = ast.parse(_read('setup.py'))
+        kw = {k.arg: k.value for n in ast.walk(setup) if isinstance(n, ast.Call) and getattr(n.func, 'attr', None) == 'setup' for k in n.keywords}
+        classifiers = {c.split(':: ')[-1] for c in ast.literal_eval(kw['classifiers']) if re.search(r':: 3\.\d+$', c)}
+        ci = re.search(r'python-version: \[([^\]]+)\]', _read('.github', 'workflows', 'ci.yml')).group(1)
+        matrix = set(re.findall(r'"(3\.\d+)"', ci))
+        low, high = re.search(r'Python (3\.\d+)–(3\.\d+)', _read('AGENTS.md')).groups()
+        self.assertEqual(classifiers, matrix)
+        self.assertEqual(ast.literal_eval(kw['python_requires']), '>=' + low)
+        key = lambda v: int(v.split('.')[1])
+        self.assertEqual((min(matrix, key=key), max(matrix, key=key)), (low, high))
+        self.assertEqual(len(matrix), key(high) - key(low) + 1, 'no gaps in the test matrix')
+
+    def test_no_new_hard_dependencies(self):
+        setup = ast.parse(_read('setup.py'))
+        install = next(ast.literal_eval(n.value) for n in setup.body if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', None) == 'INSTALL_REQUIRES')
+        self.assertEqual(install, ['requests', 'colorama'])  # plus one auto-chosen AES backend
+        reqs = {re.split(r'[<>=\s#]', l.strip())[0] for l in _read('requirements.txt').splitlines() if l.strip() and not l.startswith('#')}
+        self.assertEqual(reqs, {'cryptography', 'requests', 'colorama'})
+        for name in ('pyproject.toml', 'setup.cfg'):
+            self.assertNotRegex(_read(name), r'(?m)^\s*(dependencies|install_requires)\s*=', name)
+
+    def test_third_party_imports_are_optional(self):
+        # every non-stdlib import sits in try/except ImportError today; an unguarded one is a new hard dependency
+        for path, tree in self.sources.items():
+            parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = {a.name.split('.')[0] for a in node.names}
+                elif isinstance(node, ast.ImportFrom) and not node.level:
+                    roots = {node.module.split('.')[0]}
+                else:
+                    continue
+                third_party = roots - set(sys.stdlib_module_names) - {'tinytuya'}
+                if third_party:
+                    with self.subTest(path=path, line=node.lineno, modules=sorted(third_party)):
+                        self.assertTrue(_import_guarded(parents, node))
+
+    def test_version_from_version_tuple(self):
+        from tinytuya.core import core
+        self.assertEqual(tinytuya.__version__, '%d.%d.%d' % core.version_tuple)
+
+    def test_is_py2_alias_kept(self):
+        self.assertIs(tinytuya.IS_PY2, False)
+
+    def test_new_contrib_modules_follow_checklist(self):
+        readme = _read('tinytuya', 'Contrib', 'README.md')
+        examples = ''.join(_read(p) for p in glob.glob(os.path.join(REPO, 'examples', 'Contrib', '*.py')))
+        testcontrib = _read('testcontrib.py')
+        self.assertEqual(CONTRIB_PREDATES_CHECKLIST - set(_contrib_modules()), set(), 'stale entry')
+        for module in sorted(set(_contrib_modules()) - CONTRIB_PREDATES_CHECKLIST):
+            with self.subTest(module=module):
+                self.assertRegex(readme, r'(?m)^### %s$' % module)
+                self.assertIn(module, examples)
+                self.assertIn(module, testcontrib)
+
+
+_add_deviation_tests(TestAgentsRules, {site: note for site, (_, note) in PRINT_DEVIATIONS.items()},
+                     lambda self, site: self.assertEqual(self.print_sites[site], 0))
+_add_deviation_tests(TestAgentsRules, {site: note for site, (_, note) in HEXLIFY_DEVIATIONS.items()},
+                     lambda self, site: self.assertEqual(self.unguarded_hexlify[site], 0))
+
 
 if __name__ == '__main__':
     unittest.main()

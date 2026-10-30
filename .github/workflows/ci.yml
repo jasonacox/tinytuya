@@ -17,7 +17,7 @@ concurrency:
 jobs:
   lint:
     name: "Pylint"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
@@ -32,7 +32,7 @@ jobs:
 
   test:
     name: "Test Python ${{ matrix.python-version }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +59,7 @@ jobs:
 
   crypto:
     name: "Crypto backend ${{ matrix.backend }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -92,9 +92,29 @@ jobs:
       - name: Unit tests
         run: python -m tests
 
+  coverage:
+    name: "Coverage"
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt coverage
+      - name: Measure coverage (fails below the floor)
+        # Floor = the current total rounded down; raise it as coverage grows, never lower it to pass.
+        run: |
+          coverage run --source=tinytuya -m tests
+          coverage run -a --source=tinytuya testcontrib.py
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          coverage report --sort=cover --precision=1 --fail-under=34
+
   package:
     name: "Build package"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0
