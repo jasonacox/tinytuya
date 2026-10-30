@@ -717,6 +717,14 @@ HAS_GCM = bool(mh.AESCipher.CRYPTOLIB_HAS_GCM)
 WRONG_KEY = 'fedcba9876543210'
 
 
+# PROTOCOL.md "Command IDs".  Kept apart from command_types (like HEADERLESS below) so a
+# wrong ID in the library fails the round trips instead of agreeing with itself.
+CMD = types.SimpleNamespace(
+    SESS_KEY_NEG_START=0x03, SESS_KEY_NEG_RESP=0x04, SESS_KEY_NEG_FINISH=0x05, CONTROL=0x07, STATUS=0x08,
+    HEART_BEAT=0x09, DP_QUERY=0x0A, CONTROL_NEW=0x0D, DP_QUERY_NEW=0x10, UPDATEDPS=0x12, UDP_NEW=0x13,
+    BOARDCAST_LPV34=0x23, REQ_DEVINFO=0x25, LAN_EXT_STREAM=0x40)
+
+
 class FakeTuyaDevice(object):
     """Device side of the Tuya LAN protocol (3.1/3.3/3.4/3.5), per PROTOCOL.md.
 
@@ -741,8 +749,8 @@ class FakeTuyaDevice(object):
     NONCE = b'fedcba9876543210'
     # PROTOCOL.md "Version Header": commands sent without it.  Kept apart from
     # header.NO_PROTOCOL_HEADER_CMDS so a change to that list fails the round trips.
-    HEADERLESS = frozenset((CT.DP_QUERY, CT.DP_QUERY_NEW, CT.UPDATEDPS, CT.HEART_BEAT, CT.SESS_KEY_NEG_START,
-                            CT.SESS_KEY_NEG_RESP, CT.SESS_KEY_NEG_FINISH, CT.LAN_EXT_STREAM))
+    HEADERLESS = frozenset((CMD.DP_QUERY, CMD.DP_QUERY_NEW, CMD.UPDATEDPS, CMD.HEART_BEAT, CMD.SESS_KEY_NEG_START,
+                            CMD.SESS_KEY_NEG_RESP, CMD.SESS_KEY_NEG_FINISH, CMD.LAN_EXT_STREAM))
     # PROTOCOL.md "Packet Format": 55AA = prefix, seq, cmd, length (from the retcode/payload
     # through the footer); 6699 = prefix, 2 reserved bytes, seq, cmd, length (IV through tag),
     # with those 14 bytes after the prefix as the GCM AAD, then a footer outside the length.
@@ -820,7 +828,7 @@ class FakeTuyaDevice(object):
     def _open(self, cmd, payload):
         cipher = mh.AESCipher(self.key)
         if self.version < 3.2:
-            if cmd != CT.CONTROL:
+            if cmd != CMD.CONTROL:
                 return payload  # 3.1 sends everything but CONTROL in the clear
             enc = payload[19:]
             if payload[:19] != self._envelope_31(enc):
@@ -910,9 +918,9 @@ class FakeTuyaDevice(object):
         try:
             seqno, cmd, payload = self._unframe(frame)
             payload = self._open(cmd, payload)
-            if cmd == CT.SESS_KEY_NEG_START:
+            if cmd == CMD.SESS_KEY_NEG_START:
                 return self._negotiate_start(payload, seqno)
-            if cmd == CT.SESS_KEY_NEG_FINISH:
+            if cmd == CMD.SESS_KEY_NEG_FINISH:
                 return self._negotiate_finish(payload)
             request = json.loads(payload) if payload else {}
         except ValueError:
@@ -921,7 +929,7 @@ class FakeTuyaDevice(object):
         self.requests.append((cmd, request))
         if self.silent:
             return b''
-        out = b''.join(self._frame(CT.STATUS, self._seal(p, True), seqno) for p in self._pushes)
+        out = b''.join(self._frame(CMD.STATUS, self._seal(p, True), seqno) for p in self._pushes)
         self._pushes = []
         return out + self._reply(cmd, seqno, request)
 
@@ -930,7 +938,7 @@ class FakeTuyaDevice(object):
         body = self.NONCE + _hmac_mod.new(self.real_key, client_nonce, hashlib.sha256).digest()
         if self.forge_hmac:
             body = body[:16] + bytes(32)
-        return self._frame(CT.SESS_KEY_NEG_RESP, self._seal(body), seqno, data=False)
+        return self._frame(CMD.SESS_KEY_NEG_RESP, self._seal(body), seqno, data=False)
 
     def _negotiate_finish(self, rkey_hmac):
         if rkey_hmac != _hmac_mod.new(self.real_key, self.NONCE, hashlib.sha256).digest():
@@ -948,22 +956,22 @@ class FakeTuyaDevice(object):
         data = request.get('data') if isinstance(request.get('data'), dict) else {}
         cid = request.get('cid') or data.get('cid')
         state = self.children[cid] if cid else self.dps
-        if cmd in (CT.DP_QUERY, CT.DP_QUERY_NEW):
-            if self.device22 and cmd == CT.DP_QUERY:
+        if cmd in (CMD.DP_QUERY, CMD.DP_QUERY_NEW):
+            if self.device22 and cmd == CMD.DP_QUERY:
                 return self._frame(cmd, self._seal(b'json obj data unvalid'), seqno)
             body = self.raw_reply if self.raw_reply is not None else self._status(state, cid)
             return self._frame(cmd, self._seal(body), seqno)
-        if cmd in (CT.CONTROL, CT.CONTROL_NEW):
+        if cmd in (CMD.CONTROL, CMD.CONTROL_NEW):
             dps = data.get('dps', request.get('dps', {}))
-            if self.device22 and cmd == CT.CONTROL_NEW and all(v is None for v in dps.values()):
+            if self.device22 and cmd == CMD.CONTROL_NEW and all(v is None for v in dps.values()):
                 # device22 status query: answer with the requested DPs only
                 found = {k: state[k] for k in dps if k in state}
                 return self._frame(cmd, self._seal(self._status(found, cid)), seqno)
             state.update(dps)
             # empty ack carrying the retcode, then a STATUS push with the new values
             ack = self._frame(cmd, b'', seqno, self.retcode)
-            return ack + self._frame(CT.STATUS, self._seal(self._status(dps, cid), True), seqno)
-        if cmd == CT.HEART_BEAT:
+            return ack + self._frame(CMD.STATUS, self._seal(self._status(dps, cid), True), seqno)
+        if cmd == CMD.HEART_BEAT:
             return self._frame(cmd, b'', seqno)
         return b''
 
@@ -1057,7 +1065,7 @@ class _RoundTrip(object):
         result = d.status()
         self.assertEqual(result['dps'], {'1': True, '2': 42})
         cmd, request = fake.requests[-1]
-        self.assertEqual(cmd, CT.DP_QUERY_NEW if self.VERSION >= 3.4 else CT.DP_QUERY)
+        self.assertEqual(cmd, CMD.DP_QUERY_NEW if self.VERSION >= 3.4 else CMD.DP_QUERY)
         if self.VERSION < 3.4:
             self.assertEqual(request['devId'], 'DEVICE_ID_HERE')
         self.assertEqual(fake.negotiations, 1 if self.VERSION >= 3.4 else 0)
@@ -1069,10 +1077,10 @@ class _RoundTrip(object):
         self.assertEqual(fake.dps['2'], 77)
         cmd, request = fake.requests[-1]
         if self.VERSION >= 3.4:
-            self.assertEqual(cmd, CT.CONTROL_NEW)
+            self.assertEqual(cmd, CMD.CONTROL_NEW)
             self.assertEqual(request['data']['dps'], {'2': 77})
         else:
-            self.assertEqual(cmd, CT.CONTROL)
+            self.assertEqual(cmd, CMD.CONTROL)
             self.assertEqual(request['dps'], {'2': 77})
         self.assertEqual(d.cmd_retcode, 0)
 
@@ -1087,7 +1095,7 @@ class _RoundTrip(object):
         d, fake = self.make()
         # devices answer a heartbeat with an empty payload, which reads as None
         self.assertIsNone(d.heartbeat(nowait=False))
-        self.assertEqual(fake.requests[-1][0], CT.HEART_BEAT)
+        self.assertEqual(fake.requests[-1][0], CMD.HEART_BEAT)
         self.assertEqual(d.cmd_retcode, 0)
 
     def test_new_connection_per_call(self):
@@ -1148,7 +1156,7 @@ class TestWireBehavior(_WireTestCase):
         self.assertEqual(result['dps'], {'1': True})
         self.assertEqual(d.dev_type, 'device22')
         # first a plain DP_QUERY, then CONTROL_NEW with an explicit null-valued DPS list
-        self.assertEqual([c for c, _ in fake.requests], [CT.DP_QUERY, CT.CONTROL_NEW])
+        self.assertEqual([c for c, _ in fake.requests], [CMD.DP_QUERY, CMD.CONTROL_NEW])
         self.assertEqual(fake.requests[1][1]['dps'], {'1': None})
 
     def test_v32_detects_available_dps_at_set_version(self):
@@ -1156,7 +1164,7 @@ class TestWireBehavior(_WireTestCase):
         d, fake = self.make(3.2, device22=True, dps={'1': True, '5': 3, '102': 0})
         self.assertEqual(d.dev_type, 'device22')
         self.assertEqual(d.dps_to_request, {'1': None, '5': None, '102': None})
-        self.assertTrue(all(cmd == CT.CONTROL_NEW for cmd, _ in fake.requests))
+        self.assertTrue(all(cmd == CMD.CONTROL_NEW for cmd, _ in fake.requests))
         self.assertEqual(d.status()['dps'], {'1': True, '5': 3, '102': 0})
 
     def test_invalid_json_reply(self):
@@ -1211,22 +1219,25 @@ class TestWireBehavior(_WireTestCase):
         # Python problem matcher would turn each one into a failure annotation
         return sum(1 for r in logs.records if r.exc_info and 'GCM authentication failed' in str(r.exc_info[1]))
 
+    def test_command_ids_match_protocol_md(self):
+        self.assertEqual({name: getattr(CT, name) for name in vars(CMD)}, vars(CMD))
+
     def test_header_skip_list_matches_protocol_md(self):
         self.assertEqual(set(mh.H.NO_PROTOCOL_HEADER_CMDS), FakeTuyaDevice.HEADERLESS)
 
     def test_fake_drops_a_bad_frame_suffix(self):
         fake = FakeTuyaDevice(3.3)
         fake.connect()
-        msg = mh.TuyaMessage(1, CT.DP_QUERY, None, mh.AESCipher(fake.key).encrypt(b'{}', False), 0, True, mh.H.PREFIX_55AA_VALUE, False)
+        msg = mh.TuyaMessage(1, CMD.DP_QUERY, None, mh.AESCipher(fake.key).encrypt(b'{}', False), 0, True, mh.H.PREFIX_55AA_VALUE, False)
         frame = mh.pack_message(msg)
         self.assertEqual(fake.receive_bytes(frame[:-4] + bytes(4)), b'')
         self.assertEqual((fake.dropped, fake.requests), (1, []))
         self.assertNotEqual(fake.receive_bytes(frame), b'', 'the same frame with its suffix is answered')
 
     def test_fake_drops_the_other_versions_frame_prefix(self):
-        frames = {3.5: mh.TuyaMessage(1, CT.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_55AA_VALUE, False)}
+        frames = {3.5: mh.TuyaMessage(1, CMD.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_55AA_VALUE, False)}
         if HAS_GCM:
-            frames[3.4] = mh.TuyaMessage(1, CT.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_6699_VALUE, True)
+            frames[3.4] = mh.TuyaMessage(1, CMD.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_6699_VALUE, True)
         for version, msg in frames.items():
             with self.subTest(version=version):
                 fake = FakeTuyaDevice(version)
@@ -1633,45 +1644,127 @@ def _signature_problem(key):
     return None
 
 
-# key: (the code's parameters today, or None when it has no such method; note with file:line).
-# The code stays pinned to those parameters, so a change beyond the known mismatch still fails.
+def _breaking_change(baseline, actual):
+    """Why the code's `actual` parameters would break callers of `baseline`, or None."""
+    P = inspect.Parameter
+    if actual is None:
+        return 'no longer exists'
+    if len(actual) < len(baseline):
+        return 'parameters removed: %r' % actual
+    for (name, default, kind), (new_name, new_default, new_kind) in zip(baseline, actual):
+        if (new_name, new_kind) != (name, kind):
+            return '%s (%s) is now %s (%s)' % (name, kind, new_name, new_kind)
+        if default is not P.empty and new_default != default:
+            return '%s default changed from %r to %r' % (name, default, new_default)
+    for name, default, kind in actual[len(baseline):]:
+        if default is P.empty and kind not in (P.VAR_POSITIONAL, P.VAR_KEYWORD):
+            return 'new required parameter %s' % name
+    return None
+
+
+# Public API at the time this test was written: the code's parameters for every API.md signature
+# (None = documented but not in the code).  Edit API.md and the code together all you like; callers
+# of these must keep working, so parameters may gain defaults and new ones go last with a default.
+# Add an entry when API.md documents something new; never edit one to make a breaking change pass.
+API_BASELINE = {
+    'tinytuya.deviceScan': 'verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False',
+    'tinytuya.scan': 'maxretry=None, color=True, forcescan=False',
+    'tinytuya.find_device': 'dev_id=None, address=None',
+    'tinytuya.device_info': 'dev_id',
+    'tinytuya.assign_dp_mappings': 'tuyadevices, mappings',
+    'tinytuya.decrypt_udp': 'msg',
+    'tinytuya.set_debug': 'toggle=True, color=True',
+    'tinytuya.load_devicefile': 'fname=None',
+    'XenonDevice.set_version': 'version',
+    'XenonDevice.set_socketPersistent': 'persist',
+    'XenonDevice.set_socketNODELAY': 'nodelay',
+    'XenonDevice.set_socketRetryLimit': 'limit',
+    'XenonDevice.set_socketRetryDelay': 'delay',
+    'XenonDevice.set_socketTimeout': 's',
+    'XenonDevice.set_sendWait': 's',
+    'XenonDevice.set_retry': 'retry',
+    'XenonDevice.status': 'nowait=False',
+    'XenonDevice.cached_status': 'historic=False, nowait=False',
+    'XenonDevice.receive': '',
+    'XenonDevice.send': 'payload',
+    'XenonDevice.set_dpsUsed': 'dps_to_request',
+    'XenonDevice.add_dps_to_request': 'dp_indicies',
+    'XenonDevice.detect_available_dps': '',
+    'XenonDevice.generate_payload': 'command, data=None, gwId=None, devId=None, uid=None, rawData=None, reqType=None',
+    'XenonDevice.heartbeat': None,
+    'XenonDevice.updatedps': None,
+    'XenonDevice.subdev_query': 'nowait=False',
+    'Device.status': 'nowait=False',
+    'Device.set_status': 'on, switch=1, nowait=False',
+    'Device.turn_on': 'switch=1, nowait=False',
+    'Device.turn_off': 'switch=1, nowait=False',
+    'Device.set_value': 'index, value, nowait=False',
+    'Device.set_multiple_values': 'data, nowait=False',
+    'Device.set_timer': 'num_secs, dps_id=0, nowait=False',
+    'Device.heartbeat': 'nowait=True',
+    'Device.product': '',
+    'OutletDevice.set_dimmer': 'percentage=None, value=None, dps_id=3, nowait=False',
+    'BulbDevice.set_mode': "mode='white', nowait=False",
+    'BulbDevice.set_colour': 'r, g, b, nowait=False',
+    'BulbDevice.set_hsv': 'h, s, v, nowait=False',
+    'BulbDevice.set_white_percentage': 'brightness=100, colourtemp=0, nowait=False',
+    'BulbDevice.set_brightness_percentage': 'brightness=100, nowait=False',
+    'BulbDevice.set_colourtemp_percentage': 'colourtemp=100, nowait=False',
+    'BulbDevice.set_scene': 'scene, scene_data=None, nowait=False',
+    'BulbDevice.set_timer': 'num_secs, dps_id=0, nowait=False',
+    'BulbDevice.set_musicmode': None,
+    'BulbDevice.set_music_colour': 'transition, red, green, blue, brightness=None, colourtemp=None, nowait=False',
+    'BulbDevice.state': 'nowait=False',
+    'BulbDevice.get_mode': 'state=None, nowait=False',
+    'BulbDevice.brightness': 'state=None, nowait=False',
+    'BulbDevice.get_brightness_percentage': 'state=None, nowait=False',
+    'BulbDevice.colourtemp': 'state=None, nowait=False',
+    'BulbDevice.get_colourtemp_percentage': 'state=None, nowait=False',
+    'BulbDevice.colour_rgb': 'state=None, nowait=False',
+    'BulbDevice.colour_hsv': 'state=None, nowait=False',
+    'BulbDevice.rgb_to_hexvalue': 'r, g, b, hexformat',
+    'BulbDevice.hsv_to_hexvalue': 'h, s, v, hexformat',
+    'BulbDevice.hexvalue_to_rgb': 'hexvalue, hexformat=None',
+    'BulbDevice.hexvalue_to_hsv': 'hexvalue, hexformat=None',
+    'BulbDevice.bulb_has_capability': 'feature, nowait=False',
+    'BulbDevice.detect_bulb': 'response=None, nowait=False',
+    'BulbDevice.set_bulb_type': 'bulb_type=None, mapping=None',
+    'CoverDevice.open_cover': 'switch=None, nowait=False',
+    'CoverDevice.close_cover': 'switch=None, nowait=False',
+    'CoverDevice.stop_cover': 'switch=None, nowait=False',
+    'Cloud.setregion': 'apiRegion=None',
+    'Cloud.cloudrequest': 'url, action=None, post=None, query=None',
+    'Cloud.getdevices': 'verbose=False, oldlist=[], include_map=False',
+    'Cloud.getstatus': 'deviceid=None',
+    'Cloud.getfunctions': 'deviceid=None',
+    'Cloud.getproperties': 'deviceid=None',
+    'Cloud.getdps': 'deviceid=None',
+    'Cloud.sendcommand': "deviceid=None, commands=None, uri='iot-03/devices/'",
+    'Cloud.getconnectstatus': 'deviceid=None',
+    'Cloud.getdevicelog': 'deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None',
+    'XenonDevice.__init__': "dev_id, address=None, local_key='', dev_type='default', connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=6668, max_simultaneous_dps=0",
+}
+
+# file:line in the code for each, so the list can be acted on directly
 API_SIGNATURE_DEVIATIONS = {
-    'tinytuya.deviceScan': ('verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False',
-        'core/core.py:235 has maxretry=None and an undocumented byID=False'),
-    'tinytuya.scan': ('maxretry=None, color=True, forcescan=False',
-        'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter'),
-    'XenonDevice.__init__': ("dev_id, address=None, local_key='', dev_type='default', connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=6668, max_simultaneous_dps=0",
-        'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0'),
-    'XenonDevice.add_dps_to_request': ('dp_indicies',
-        'XenonDevice.py:1154 names the parameter dp_indicies, not index'),
-    'XenonDevice.heartbeat': (None,
-        'documented under XenonDevice, but only Device (core/Device.py:47) has it'),
-    'XenonDevice.updatedps': (None,
-        'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)'),
-    'BulbDevice.set_musicmode': (None,
-        'no such method (BulbDevice.py:24 docstring lists it too)'),
-    'CoverDevice.open_cover': ('switch=None, nowait=False',
-        'CoverDevice.py:236 defaults switch=None, not 1'),
-    'CoverDevice.close_cover': ('switch=None, nowait=False',
-        'CoverDevice.py:251 defaults switch=None, not 1'),
-    'CoverDevice.stop_cover': ('switch=None, nowait=False',
-        'CoverDevice.py:266 defaults switch=None, not 1'),
-    'Cloud.setregion': ('apiRegion=None',
-        'Cloud.py:128 defaults apiRegion=None; API.md shows it required'),
-    'Cloud.getstatus': ('deviceid=None',
-        'Cloud.py:626 defaults deviceid=None (returns ERR_PARAMS); API.md shows it required'),
-    'Cloud.getfunctions': ('deviceid=None',
-        'Cloud.py:632 defaults deviceid=None; API.md shows it required'),
-    'Cloud.getproperties': ('deviceid=None',
-        'Cloud.py:638 defaults deviceid=None; API.md shows it required'),
-    'Cloud.getdps': ('deviceid=None',
-        'Cloud.py:644 defaults deviceid=None; API.md shows it required'),
-    'Cloud.sendcommand': ("deviceid=None, commands=None, uri='iot-03/devices/'",
-        'Cloud.py:669 defaults deviceid=None, commands=None; API.md shows them required'),
-    'Cloud.getconnectstatus': ('deviceid=None',
-        'Cloud.py:694 defaults deviceid=None; API.md shows it required'),
-    'Cloud.getdevicelog': ('deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None',
-        'Cloud.py:717 defaults deviceid=None; API.md shows it required'),
+    'tinytuya.deviceScan': 'core/core.py:235 has maxretry=None and an undocumented byID=False',
+    'tinytuya.scan': 'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter',
+    'XenonDevice.__init__': 'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0',
+    'XenonDevice.add_dps_to_request': 'XenonDevice.py:1154 names the parameter dp_indicies, not index',
+    'XenonDevice.heartbeat': 'documented under XenonDevice, but only Device (core/Device.py:47) has it',
+    'XenonDevice.updatedps': 'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)',
+    'BulbDevice.set_musicmode': 'no such method (BulbDevice.py:24 docstring lists it too)',
+    'CoverDevice.open_cover': 'CoverDevice.py:236 defaults switch=None, not 1',
+    'CoverDevice.close_cover': 'CoverDevice.py:251 defaults switch=None, not 1',
+    'CoverDevice.stop_cover': 'CoverDevice.py:266 defaults switch=None, not 1',
+    'Cloud.setregion': 'Cloud.py:128 defaults apiRegion=None; API.md shows it required',
+    'Cloud.getstatus': 'Cloud.py:626 defaults deviceid=None (returns ERR_PARAMS); API.md shows it required',
+    'Cloud.getfunctions': 'Cloud.py:632 defaults deviceid=None; API.md shows it required',
+    'Cloud.getproperties': 'Cloud.py:638 defaults deviceid=None; API.md shows it required',
+    'Cloud.getdps': 'Cloud.py:644 defaults deviceid=None; API.md shows it required',
+    'Cloud.sendcommand': 'Cloud.py:669 defaults deviceid=None, commands=None; API.md shows them required',
+    'Cloud.getconnectstatus': 'Cloud.py:694 defaults deviceid=None; API.md shows it required',
+    'Cloud.getdevicelog': 'Cloud.py:717 defaults deviceid=None; API.md shows it required',
 }
 
 API_CONTRIB_DEVIATIONS = {
@@ -1695,15 +1788,21 @@ class TestApiContract(unittest.TestCase):
     def test_signatures_match_api_md(self):
         signatures = _api_md_signatures()
         self.assertGreater(len(signatures), 60, 'API.md headings no longer parse')
-        for key, (code, _) in API_SIGNATURE_DEVIATIONS.items():
-            with self.subTest(key=key):
-                self.assertIn(key, signatures, 'stale deviation entry')
-                _, owner, name, documented = signatures[key]
-                pinned = None if code is None else _params_from_def(code)
-                self.assertIn(_code_params(owner, name), (pinned, documented), 'changed beyond the known deviation')
+        for key in API_SIGNATURE_DEVIATIONS:
+            self.assertIn(key, signatures, 'stale deviation entry')
         for key in sorted(set(signatures) - set(API_SIGNATURE_DEVIATIONS)):
             with self.subTest(key=key):
                 self.assertIsNone(_signature_problem(key))
+
+    def test_documented_api_stays_backward_compatible(self):
+        signatures = _api_md_signatures()
+        self.assertEqual(set(signatures) - set(API_BASELINE), set(), 'add new API.md signatures to API_BASELINE')
+        for key, params in API_BASELINE.items():
+            with self.subTest(key=key):
+                self.assertIn(key, signatures, 'removed from API.md')
+                if params is not None:
+                    _, owner, name, _ = signatures[key]
+                    self.assertIsNone(_breaking_change(_params_from_def(params), _code_params(owner, name)))
 
     def test_device_classes_accept_documented_constructor(self):
         # API.md: "All device classes share the constructor signature" of XenonDevice
@@ -1779,7 +1878,7 @@ class TestApiContract(unittest.TestCase):
                 self.assertIn(module, listed)
 
 
-_add_deviation_tests(TestApiContract, {key: note for key, (_, note) in API_SIGNATURE_DEVIATIONS.items()},
+_add_deviation_tests(TestApiContract, API_SIGNATURE_DEVIATIONS,
                      lambda self, key: self.assertIsNone(_signature_problem(key)))
 _add_deviation_tests(TestApiContract, {'contrib_' + k: v for k, v in API_CONTRIB_DEVIATIONS.items()},
                      lambda self, key: self.assertIn(key[len('contrib_'):], {m for m, _ in _api_md_contrib_table()}))
@@ -1859,6 +1958,17 @@ def _unguarded_hexlify(path, tree):
                                   and ast.unparse(p.test) == 'log.isEnabledFor(logging.DEBUG)')
         if not guarded:
             yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
+
+
+def _import_guarded(parents, node):
+    """True when `node` sits in the body of a try whose handlers catch ImportError."""
+    catches = {'ImportError', 'ModuleNotFoundError', 'Exception', 'BaseException'}
+    while node in parents:
+        child, node = node, parents[node]
+        if isinstance(node, ast.Try) and child in node.body and any(
+                h.type is None or {getattr(n, 'id', None) for n in ast.walk(h.type)} & catches for h in node.handlers):
+            return True
+    return False
 
 
 class TestAgentsRules(unittest.TestCase):
@@ -1960,6 +2070,24 @@ class TestAgentsRules(unittest.TestCase):
         self.assertEqual(install, ['requests', 'colorama'])  # plus one auto-chosen AES backend
         reqs = {re.split(r'[<>=\s#]', l.strip())[0] for l in _read('requirements.txt').splitlines() if l.strip() and not l.startswith('#')}
         self.assertEqual(reqs, {'cryptography', 'requests', 'colorama'})
+        for name in ('pyproject.toml', 'setup.cfg'):
+            self.assertNotRegex(_read(name), r'(?m)^\s*(dependencies|install_requires)\s*=', name)
+
+    def test_third_party_imports_are_optional(self):
+        # every non-stdlib import sits in try/except ImportError today; an unguarded one is a new hard dependency
+        for path, tree in self.sources.items():
+            parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = {a.name.split('.')[0] for a in node.names}
+                elif isinstance(node, ast.ImportFrom) and not node.level:
+                    roots = {node.module.split('.')[0]}
+                else:
+                    continue
+                third_party = roots - set(sys.stdlib_module_names) - {'tinytuya'}
+                if third_party:
+                    with self.subTest(path=path, line=node.lineno, modules=sorted(third_party)):
+                        self.assertTrue(_import_guarded(parents, node))
 
     def test_version_from_version_tuple(self):
         from tinytuya.core import core
