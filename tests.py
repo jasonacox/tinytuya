@@ -4,9 +4,9 @@ import logging
 
 import unittest
 try:
-    from unittest.mock import MagicMock  # Python 3
+    from unittest.mock import MagicMock, patch  # Python 3
 except ImportError:
-    from mock import MagicMock  # py2 use https://pypi.python.org/pypi/mock
+    from mock import MagicMock, patch  # py2 use https://pypi.python.org/pypi/mock
 import json
 import struct
 
@@ -694,6 +694,106 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
         self.assertTrue(_accepts_nowait(lambda x, **kw: None))
         self.assertFalse(_accepts_nowait(lambda x: None))
+
+class TestScannerRobustness(unittest.TestCase):
+    """scanner.devices() must not crash on malformed devices.json rows or an early
+    Ctrl-C, and must not dispatch events for a socket a device has replaced."""
+
+    DEV_ID = 'abcdefghijklmnopqrst'
+
+    def _run(self, rows, select_fn=None, sleep_fn=None, payload=None, **kwargs):
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+
+        udp = MagicMock()
+        if payload:
+            udp.recvfrom.return_value = (b'packet', (payload['ip'], scanner.UDPPORT))
+        delivered = []
+
+        def default_select(read_socks, write_socks, error_socks, timeout):
+            if payload and not delivered and read_socks:
+                delivered.append(True)
+                return ([read_socks[0]], [], [])
+            return ([], [], [])
+
+        out = io.StringIO()
+        with patch.object(scanner.socket, 'socket', side_effect=lambda *a, **k: udp), \
+                patch.object(scanner.select, 'select', side_effect=select_fn or default_select), \
+                patch.object(scanner, 'get_ip_to_broadcast', return_value={}), \
+                patch.object(scanner, 'send_discovery_request'), \
+                patch.object(scanner, 'save_snapshotfile'), \
+                patch.object(scanner, 'DEVICEFILE', '/nonexistent/tinytuya-test-devices.json'), \
+                patch.object(tinytuya, 'decrypt_udp', side_effect=lambda data: json.dumps(payload)), \
+                patch.object(scanner.time, 'sleep', side_effect=sleep_fn), \
+                redirect_stdout(out):
+            result = scanner.devices(color=False, tuyadevices=rows, **kwargs)
+        return result, out.getvalue()
+
+    def test_malformed_rows_do_not_crash_a_scan(self):
+        cases = {
+            'row without key': [{'id': self.DEV_ID, 'name': 'No Key Field'}],
+            'non-dict row': ['not-a-row', {'id': self.DEV_ID, 'key': '', 'name': 'ok'}],
+            'row without id': [{'key': LOCAL_KEY, 'name': 'No Id'}],
+        }
+        for label, rows in cases.items():
+            with self.subTest(label):
+                result, _ = self._run(rows, verbose=True, scantime=0.1)
+                self.assertEqual(result, {})
+
+    def test_broadcast_lookup_skips_malformed_rows(self):
+        rows = ['some-id-string', {'id': self.DEV_ID}]  # a non-dict row, and a row with only an id
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.11', 'version': '3.3', 'productKey': 'p'}
+        result, _ = self._run(rows, payload=payload, byID=True, scantime=0.1)
+        self.assertEqual(result[self.DEV_ID]['name'], '')
+        self.assertEqual(result[self.DEV_ID]['key'], '')
+
+    def test_keyless_row_keeps_its_name(self):
+        row = {'id': self.DEV_ID, 'key': '', 'name': 'Keyless Lamp'}
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.11', 'version': '3.3', 'productKey': 'p'}
+        result, out = self._run([row], payload=payload, verbose=True, byID=True, scantime=0.1)
+        self.assertEqual(result[self.DEV_ID]['name'], 'Keyless Lamp')
+        self.assertIn('Missing Local Key: 1', out)
+
+    def test_interrupt_on_first_pass_does_not_raise(self):
+        calls = []
+
+        def sleep(seconds):
+            calls.append(seconds)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+        result, _ = self._run([], sleep_fn=sleep, discover=False)
+        self.assertEqual(result, {})
+
+    def test_event_for_replaced_socket_is_not_dispatched(self):
+        from tinytuya import scanner
+        old_sock, new_sock = MagicMock(), MagicMock()
+        calls = []
+
+        def connect(dev):
+            dev.sock, dev.write, dev.read = old_sock, True, False
+            dev.timeo = scanner.time.time() + 0.05
+            dev.retries = 0
+
+        def write_data(dev):
+            calls.append('write')
+            dev.sock = new_sock  # the device reconnected while handling this event
+
+        def read_data(dev):
+            calls.append('read')
+
+        def select(read_socks, write_socks, error_socks, timeout):
+            if old_sock in write_socks:
+                return ([old_sock], [old_sock], [])
+            return ([], [], [])
+
+        snapshot = {'192.0.2.10': {'gwId': self.DEV_ID, 'version': '3.3', 'key': LOCAL_KEY, 'ip': '192.0.2.10'}}
+        with patch.object(scanner.PollDevice, 'connect', connect), \
+                patch.object(scanner.PollDevice, 'write_data', write_data), \
+                patch.object(scanner.PollDevice, 'read_data', read_data):
+            self._run([], select_fn=select, discover=False, snapshot=snapshot)
+        self.assertEqual(calls, ['write'])
+
 
 if __name__ == '__main__':
     unittest.main()

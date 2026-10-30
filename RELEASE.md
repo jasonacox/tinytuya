@@ -3,6 +3,7 @@
 ## Unreleased
 
 * **Python support**: TinyTuya now requires Python 3.10 or newer, and CI adds Python 3.15. Python 3.7, 3.8 and 3.9 are end-of-life and no longer run on GitHub's current runners. `setup.py` declares `python_requires=">=3.10"`, so pip on older Pythons keeps installing v1.20.0. Via [#748](https://github.com/jasonacox/tinytuya/pull/748) by @jasonacox.
+* **Scanner robustness**: a malformed `devices.json` row (missing `id` or `key`, or not an object) no longer crashes a scan, Ctrl-C on the first loop pass no longer raises `NameError`, and the scanner no longer reads from a socket a device replaced while reconnecting. Via [#750](https://github.com/jasonacox/tinytuya/pull/750), from fixes by @merodahero in [#735](https://github.com/jasonacox/tinytuya/pull/735).
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
