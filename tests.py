@@ -704,6 +704,7 @@ import hashlib
 import hmac as _hmac_mod
 import sys
 import types
+import zlib
 
 from tinytuya.core import command_types as CT
 
@@ -721,8 +722,10 @@ class FakeTuyaDevice(object):
 
     Transport-agnostic: connect() starts a TCP session and receive_bytes(data)
     returns the bytes the device answers with, so any I/O layer (the sync
-    socket shim below, or a future asyncio transport) can drive it.  Frames it
-    cannot authenticate or decrypt, or that break the version-header rule
+    socket shim below, or a future asyncio transport) can drive it.  It frames
+    and parses 55AA/6699 itself, from PROTOCOL.md, so a framing change made on
+    both sides of message_helper still fails; only AES comes from AESCipher.
+    Frames it cannot authenticate or decrypt, or that break the version-header rule
     (3.2+ commands outside HEADERLESS carry it), or lack this version's frame
     prefix and suffix are dropped.
 
@@ -740,6 +743,11 @@ class FakeTuyaDevice(object):
     # header.NO_PROTOCOL_HEADER_CMDS so a change to that list fails the round trips.
     HEADERLESS = frozenset((CT.DP_QUERY, CT.DP_QUERY_NEW, CT.UPDATEDPS, CT.HEART_BEAT, CT.SESS_KEY_NEG_START,
                             CT.SESS_KEY_NEG_RESP, CT.SESS_KEY_NEG_FINISH, CT.LAN_EXT_STREAM))
+    # PROTOCOL.md "Packet Format": 55AA = prefix, seq, cmd, length (from the retcode/payload
+    # through the footer); 6699 = prefix, 2 reserved bytes, seq, cmd, length (IV through tag),
+    # with those 14 bytes after the prefix as the GCM AAD, then a footer outside the length.
+    PREFIX_55AA, SUFFIX_55AA, HEADER_55AA = b'\x00\x00\x55\xaa', b'\x00\x00\xaa\x55', 16
+    PREFIX_6699, SUFFIX_6699, HEADER_6699 = b'\x00\x00\x66\x99', b'\x00\x00\x99\x66', 18
 
     def __init__(self, version, local_key=LOCAL_KEY, dev_id='DEVICE_ID_HERE', dps=None, children=None, device22=False):
         self.version = float(version)
@@ -783,14 +791,19 @@ class FakeTuyaDevice(object):
         self._rx += data
         out = b''
         while len(self._rx) >= 4:
-            fmt = mh.H.MESSAGE_HEADER_FMT_6699 if self._rx[:4] == mh.H.PREFIX_6699_BIN else mh.H.MESSAGE_HEADER_FMT_55AA
-            if len(self._rx) < struct.calcsize(fmt):
-                break  # wait for the rest of the header (18 bytes for 6699, 16 for 55AA)
-            header = mh.parse_header(self._rx)
-            if len(self._rx) < header.total_length:
+            is_6699 = self._rx[:4] == self.PREFIX_6699
+            if not is_6699 and self._rx[:4] != self.PREFIX_55AA:
+                self.dropped += 1   # not a frame start: discard what we have
+                self._rx = b''
                 break
-            frame, self._rx = self._rx[:header.total_length], self._rx[header.total_length:]
-            out += self._handle(frame, header)
+            header_len = self.HEADER_6699 if is_6699 else self.HEADER_55AA
+            if len(self._rx) < header_len:
+                break  # wait for the rest of the header
+            total = header_len + struct.unpack('>I', self._rx[header_len - 4:header_len])[0] + (4 if is_6699 else 0)
+            if len(self._rx) < total:
+                break
+            frame, self._rx = self._rx[:total], self._rx[total:]
+            out += self._handle(frame)
         return out
 
     def _status(self, dps, cid=None):
@@ -848,48 +861,69 @@ class FakeTuyaDevice(object):
         md5 = hashlib.md5(b'data=' + enc + b'||lpv=3.1||' + self.key).hexdigest()
         return b'3.1' + md5[8:24].encode()
 
+    def _mac(self, data):
+        """55AA integrity field: HMAC-SHA256 for 3.4, CRC32 before that."""
+        if self.version >= 3.4:
+            return _hmac_mod.new(self.key, data, hashlib.sha256).digest()
+        return struct.pack('>I', zlib.crc32(data) & 0xFFFFFFFF)
+
     def _frame(self, cmd, payload, seqno, retcode=0, data=True):
+        """A device->client frame; the retcode leads the payload (inside the GCM ciphertext for 6699)."""
+        body = struct.pack('>I', retcode) + payload
         if self.version >= 3.5:
             self._seqno += 1
-            msg = mh.TuyaMessage(self._seqno, cmd, retcode, payload, 0, True, mh.H.PREFIX_6699_VALUE, True)
-            frame = mh.pack_message(msg, hmac_key=self.key)
+            header = struct.pack('>4sHIII', self.PREFIX_6699, 0, self._seqno, cmd, 12 + len(body) + 16)
+            iv = struct.pack('>III', self._seqno, cmd, 0x5a5a5a5a)  # unique per frame
+            sealed = mh.AESCipher(self.key).encrypt(body, use_base64=False, pad=False, iv=iv, header=header[4:])
             if data and self.corrupt_tags:
                 self.corrupt_tags -= 1
-                frame = frame[:-5] + bytes([frame[-5] ^ 1]) + frame[-4:]
+                sealed = sealed[:-1] + bytes([sealed[-1] ^ 1])
+            frame = header + sealed + self.SUFFIX_6699
         else:
-            payload = struct.pack('>I', retcode) + payload
-            msg = mh.TuyaMessage(seqno, cmd, None, payload, 0, True, mh.H.PREFIX_55AA_VALUE, False)
-            frame = mh.pack_message(msg, hmac_key=self.key if self.version >= 3.4 else None)
+            header = struct.pack('>4sIII', self.PREFIX_55AA, seqno, cmd, len(body) + len(self._mac(b'')) + 4)
+            frame = header + body + self._mac(header + body) + self.SUFFIX_55AA
         noise, self.noise = self.noise, b''
         return noise + frame
 
-    def _handle(self, frame, header):
+    def _unframe(self, frame):
+        """(seqno, cmd, payload) of a client->device frame (no retcode), or ValueError."""
         if self.version >= 3.5:
-            prefix, suffix = mh.H.PREFIX_6699_VALUE, mh.H.SUFFIX_6699_BIN
-        else:
-            prefix, suffix = mh.H.PREFIX_55AA_VALUE, mh.H.SUFFIX_55AA_BIN
-        if header.prefix != prefix or not frame.endswith(suffix):  # unpack_message() only logs a bad suffix
-            self.dropped += 1
-            return b''
-        msg = mh.unpack_message(frame, hmac_key=self.key if self.version >= 3.4 else None, header=header, no_retcode=True)
+            if frame[:4] != self.PREFIX_6699 or frame[-4:] != self.SUFFIX_6699:
+                raise ValueError('not a 6699 frame')
+            seqno, cmd = struct.unpack('>II', frame[6:14])
+            iv, ciphertext, tag = frame[18:30], frame[30:-20], frame[-20:-4]
+            try:
+                payload = mh.AESCipher(self.key).decrypt(ciphertext, use_base64=False, decode_text=False, iv=iv,
+                                                        header=frame[4:18], tag=tag)
+            except Exception:  # each backend raises its own InvalidTag/ValueError
+                raise ValueError('bad GCM tag')
+            return seqno, cmd, payload
+        mac_len = len(self._mac(b''))
+        if frame[:4] != self.PREFIX_55AA or frame[-4:] != self.SUFFIX_55AA:
+            raise ValueError('not a 55AA frame')
+        if frame[-4 - mac_len:-4] != self._mac(frame[:-4 - mac_len]):
+            raise ValueError('bad CRC/HMAC')
+        seqno, cmd = struct.unpack('>II', frame[4:12])
+        return seqno, cmd, frame[16:-4 - mac_len]
+
+    def _handle(self, frame):
         try:
-            if not msg.crc_good:
-                raise ValueError('bad CRC/HMAC/tag')
-            payload = self._open(msg.cmd, msg.payload)
-            if msg.cmd == CT.SESS_KEY_NEG_START:
-                return self._negotiate_start(payload, msg.seqno)
-            if msg.cmd == CT.SESS_KEY_NEG_FINISH:
+            seqno, cmd, payload = self._unframe(frame)
+            payload = self._open(cmd, payload)
+            if cmd == CT.SESS_KEY_NEG_START:
+                return self._negotiate_start(payload, seqno)
+            if cmd == CT.SESS_KEY_NEG_FINISH:
                 return self._negotiate_finish(payload)
             request = json.loads(payload) if payload else {}
         except ValueError:
             self.dropped += 1
             return b''
-        self.requests.append((msg.cmd, request))
+        self.requests.append((cmd, request))
         if self.silent:
             return b''
-        out = b''.join(self._frame(CT.STATUS, self._seal(p, True), msg.seqno) for p in self._pushes)
+        out = b''.join(self._frame(CT.STATUS, self._seal(p, True), seqno) for p in self._pushes)
         self._pushes = []
-        return out + self._reply(msg.cmd, msg.seqno, request)
+        return out + self._reply(cmd, seqno, request)
 
     def _negotiate_start(self, client_nonce, seqno):
         self._client_nonce = client_nonce
