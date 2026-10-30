@@ -4,9 +4,9 @@ import logging
 
 import unittest
 try:
-    from unittest.mock import MagicMock  # Python 3
+    from unittest.mock import MagicMock, patch  # Python 3
 except ImportError:
-    from mock import MagicMock  # py2 use https://pypi.python.org/pypi/mock
+    from mock import MagicMock, patch  # py2 use https://pypi.python.org/pypi/mock
 import json
 import struct
 
@@ -694,6 +694,310 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
         self.assertTrue(_accepts_nowait(lambda x, **kw: None))
         self.assertFalse(_accepts_nowait(lambda x: None))
+
+
+
+class _FakeScanClock:
+    """Stands in for the scanner's `time` module so scans run instantly.
+
+    Every time() call advances 10 ms and sleep() advances by its argument, so the
+    scanner's timing loops make progress without real waiting.
+    """
+
+    def __init__(self, start=1000.0):
+        self.now = start
+
+    def time(self):
+        self.now += 0.01
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+class TestConfiguredDeviceScanner(unittest.TestCase):
+    """devices.json rows not heard over UDP are polled once at their saved IP."""
+
+    DEV_ID = 'abcdefghijklmnopqrst'
+
+    @classmethod
+    def _row(cls, ip='192.0.2.10', version='3.5', **extra):
+        # schema the wizard writes (product_id, not productKey)
+        row = {'id': cls.DEV_ID, 'key': LOCAL_KEY, 'ip': ip, 'version': version,
+               'name': 'Configured test device', 'product_id': 'testproduct'}
+        row.update(extra)
+        return row
+
+    def _scan(self, rows, outcomes=None, broadcasts=(), verbose=False, slow_discovery=False, **kwargs):
+        """Run scanner.devices() offline and return (result, stdout, polled_ips).
+
+        outcomes: {ip: True | False | 'inflight'} for each configured poll (default True).
+        broadcasts: [(seconds_after_start, payload)] UDP packets delivered once the fake
+        clock passes that point (only when discover=True).
+        slow_discovery: from the second discovery request on, sending it takes 100s of fake time.
+        """
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+
+        clock = _FakeScanClock()
+        start = clock.now
+        outcomes = outcomes or {}
+        pending = sorted(broadcasts, key=lambda b: b[0])
+        udp = [MagicMock(), MagicMock(), MagicMock()]
+        current = {}
+        polled = []
+        sends = []
+
+        def discovery_request(*args, **kw):
+            sends.append(args)
+            if slow_discovery and len(sends) > 1:
+                clock.now += 100
+
+        def configured_connect(dev):
+            polled.append(dev.ip)
+            outcome = outcomes.get(dev.ip, True)
+            if outcome == 'inflight':
+                dev.sock = MagicMock()
+                dev.write = True
+                dev.timeo = clock.now + 5
+                return
+            if outcome:
+                dev.finished = True
+                dev.deviceinfo['dps'] = {'dps': {'1': True}}
+                dev.deviceinfo['err'] = ''
+            else:
+                dev.deviceinfo['err'] = 'No response'
+            dev.close()
+
+        def broadcast_connect(dev):
+            dev.finished = True
+            dev.deviceinfo['dps'] = {'dps': {'1': False}}
+            dev.deviceinfo['err'] = ''
+            dev.close()
+
+        def fake_select(read_socks, write_socks, error_socks, timeout):
+            if pending and clock.now >= start + pending[0][0]:
+                current['payload'] = pending.pop(0)[1]
+                udp[0].recvfrom.return_value = (b'packet', (current['payload']['ip'], scanner.UDPPORT))
+                return ([udp[0]], [], [])
+            return ([], [], [])
+
+        kwargs.setdefault('discover', False)
+        kwargs.setdefault('poll_configured', True)
+        out = io.StringIO()
+        with patch.object(scanner, 'time', clock), \
+                patch.object(scanner.socket, 'socket', side_effect=udp), \
+                patch.object(scanner.select, 'select', side_effect=fake_select), \
+                patch.object(scanner, 'get_ip_to_broadcast', return_value={}), \
+                patch.object(scanner, 'send_discovery_request', side_effect=discovery_request), \
+                patch.object(scanner, 'save_snapshotfile'), \
+                patch.object(tinytuya, 'decrypt_udp', side_effect=lambda data: json.dumps(current['payload'])), \
+                patch.object(scanner.ConfiguredDevice, 'connect', configured_connect), \
+                patch.object(scanner.PollDevice, 'connect', broadcast_connect), \
+                redirect_stdout(out):
+            result = scanner.devices(verbose=verbose, byID=True, tuyadevices=rows, **kwargs)
+        return result, out.getvalue(), polled
+
+    # --- defaults and plumbing ---
+
+    def test_library_configured_poll_defaults_are_opt_in(self):
+        import inspect
+        from tinytuya import scanner, wizard
+
+        for function in (tinytuya.deviceScan, tinytuya.scan, scanner.devices,
+                         scanner.scan, scanner.poll_and_display,
+                         scanner.alldevices, wizard.wizard):
+            with self.subTest(function=function.__name__):
+                self.assertIs(inspect.signature(function).parameters[
+                    'poll_configured'].default, False)
+        with patch.object(scanner, 'devices', return_value={}) as devices:
+            tinytuya.deviceScan()
+            self.assertIs(devices.call_args[1]['poll_configured'], False)
+            tinytuya.deviceScan(poll_configured=True)
+            self.assertIs(devices.call_args[1]['poll_configured'], True)
+        with patch.object(scanner, 'scan') as scan:
+            tinytuya.scan()
+            self.assertIs(scan.call_args[1]['poll_configured'], False)
+            tinytuya.scan(poll_configured=True)
+            self.assertIs(scan.call_args[1]['poll_configured'], True)
+
+    def test_interactive_cli_explicitly_enables_configured_polling(self):
+        import runpy
+        import sys
+        from tinytuya import scanner, wizard
+
+        for command, module, target in (('scan', scanner, 'scan'),
+                                        ('devices', scanner, 'alldevices'),
+                                        ('wizard', wizard, 'wizard')):
+            for flag in ([], ['-no-poll-configured']):
+                with self.subTest(command=command, flag=flag), \
+                        patch.object(sys, 'argv', ['tinytuya', command] + flag), \
+                        patch.object(module, target) as run:
+                    runpy.run_module('tinytuya', run_name='__main__')
+                    self.assertIs(run.call_args[1]['poll_configured'], not bool(flag))
+
+    def test_off_by_default_and_requires_poll(self):
+        for kwargs in ({'poll_configured': False}, {'poll': False}):
+            with self.subTest(**kwargs):
+                result, _, polled = self._scan([self._row()], **kwargs)
+                self.assertEqual(polled, [])
+                self.assertEqual(result, {})
+
+    # --- results ---
+
+    def test_found_device_is_reported_as_configured(self):
+        result, _, polled = self._scan([self._row()])
+        self.assertEqual(polled, ['192.0.2.10'])
+        dev = result[self.DEV_ID]
+        self.assertEqual(dev['origin'], 'configured')
+        self.assertEqual(dev['ip'], '192.0.2.10')
+        self.assertEqual(dev['dps'], {'dps': {'1': True}})
+        self.assertEqual(dev['productKey'], 'testproduct')
+
+    def test_verbose_output_shows_phase_label_and_key(self):
+        _, out, _ = self._scan([self._row()], verbose=True)
+        self.assertIn('Polling 1 devices.json IPs not heard by broadcast', out)
+        self.assertIn('[Configured IP]', out)
+        # local keys are shown on purpose, like every other scan result
+        self.assertIn(LOCAL_KEY, out)
+        self.assertIn('Configured IPs: 1 found, 0 not found', out)
+        self.assertIn('Broadcasted: 0', out)
+
+    def test_unanswered_row_is_left_out_and_listed(self):
+        result, out, polled = self._scan([self._row(name='Old Plug')], outcomes={'192.0.2.10': False}, verbose=True)
+        self.assertEqual(polled, ['192.0.2.10'])
+        self.assertEqual(result, {})
+        self.assertIn('Configured IPs: 0 found, 1 not found', out)
+        self.assertIn('Old Plug (192.0.2.10: No response)', out)
+
+    def test_caller_rows_are_not_mutated(self):
+        row = self._row()
+        before = dict(row)
+        self._scan([row])
+        self.assertEqual(row, before)
+
+    def test_configured_pass_runs_when_window_closes_at_end_of_loop(self):
+        # the UDP window closes during the slow discovery send at the end of a loop pass;
+        # the scan must still go round once more to run the configured-IP pass
+        result, _, polled = self._scan([self._row()], discover=True, scantime=6.6, slow_discovery=True)
+        self.assertEqual(polled, ['192.0.2.10'])
+        self.assertIn(self.DEV_ID, result)
+
+    # --- broadcast precedence ---
+
+    def test_device_heard_by_broadcast_is_not_polled_again(self):
+        for bcast_ip in ('192.0.2.10', '192.0.2.99'):  # same IP, and moved to a new IP
+            with self.subTest(bcast_ip=bcast_ip):
+                payload = {'gwId': self.DEV_ID, 'ip': bcast_ip, 'version': '3.5', 'productKey': 'p'}
+                result, _, polled = self._scan([self._row()], broadcasts=[(0.5, payload)],
+                                               discover=True, scantime=2)
+                self.assertEqual(polled, [])
+                self.assertEqual(result[self.DEV_ID]['origin'], 'broadcast')
+                self.assertEqual(result[self.DEV_ID]['ip'], bcast_ip)
+
+    def test_late_broadcast_replaces_in_flight_configured_poll(self):
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.10', 'version': '3.5', 'productKey': 'p'}
+        # the UDP window is 2s, so the broadcast at 3s lands while the configured poll is in flight
+        result, out, polled = self._scan([self._row()], outcomes={'192.0.2.10': 'inflight'},
+                                         broadcasts=[(3, payload)], discover=True, scantime=2, verbose=True)
+        self.assertEqual(polled, ['192.0.2.10'])
+        self.assertEqual(result[self.DEV_ID]['origin'], 'broadcast')
+        # the aborted configured poll is neither a result nor reported as not found
+        self.assertIn('Configured IPs: 0 found, 0 not found', out)
+
+    def test_keyless_row_keeps_its_name_for_a_broadcast(self):
+        # regression guard: a broadcast device whose devices.json row has no key is
+        # "Missing Local Key", not "Unknown"
+        row = {'id': self.DEV_ID, 'key': '', 'name': 'Keyless Lamp'}
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.11', 'version': '3.3', 'productKey': 'p'}
+        result, out, polled = self._scan([row], broadcasts=[(0.5, payload)], discover=True,
+                                         scantime=2, verbose=True)
+        self.assertEqual(polled, [])
+        self.assertEqual(result[self.DEV_ID]['name'], 'Keyless Lamp')
+        self.assertIn('Missing Local Key: 1', out)
+        self.assertNotIn('Unknown Devices', out)
+
+    # --- interaction with wantids / wantips / maxdevices ---
+
+    def test_configured_find_satisfies_wanted_ids(self):
+        result, out, _ = self._scan([self._row()], wantids=[self.DEV_ID], verbose=True)
+        self.assertIn(self.DEV_ID, result)
+        self.assertNotIn('Did not find', out)
+
+    def test_wanted_ips_are_left_to_the_force_scan(self):
+        from tinytuya import scanner
+        rows = [self._row(), self._row(ip='192.0.2.20', id='zzzzzzzzzzzzzzzzzzzz')]
+        candidates = scanner._configured_candidates(rows, set(), set(), skip_ips=['192.0.2.10'])
+        self.assertEqual(list(candidates), ['192.0.2.20'])
+
+    def test_maxdevices_caps_configured_results(self):
+        rows = [self._row(), self._row(ip='192.0.2.20', id='zzzzzzzzzzzzzzzzzzzz')]
+        result, _, polled = self._scan(rows, maxdevices=1)
+        self.assertEqual(len(polled), 2)
+        self.assertEqual(len(result), 1)
+
+    # --- row validation ---
+
+    def test_only_complete_top_level_rows_are_polled(self):
+        from tinytuya import scanner
+        good = self._row()
+        self.assertIsNotNone(scanner._configured_device_info(good))
+        bad_rows = (
+            None, 'row', [],
+            dict(good, key=''), dict(good, key=None), dict(good, key=123),
+            dict(good, id=''), dict(good, id=['x']),
+            dict(good, ip=''), dict(good, ip='not-an-ip'), dict(good, ip='2001:db8::40'),
+            dict(good, ip='0.0.0.0'), dict(good, ip='224.0.0.1'),
+            dict(good, version=''), dict(good, version='3.0'), dict(good, version='3.6'), dict(good, version='x'),
+            dict(good, sub=True), dict(good, node_id='a1'), dict(good, parent='gateway01'),
+        )
+        for row in bad_rows:
+            with self.subTest(row=row):
+                self.assertIsNone(scanner._configured_device_info(row))
+
+    def test_version_is_normalized(self):
+        from tinytuya import scanner
+        for version in ('3.3', '3.30', 3.3):
+            with self.subTest(version=version):
+                self.assertEqual(scanner._configured_device_info(self._row(version=version))['version'], '3.3')
+
+    def test_first_row_wins_for_duplicate_ip_or_id(self):
+        from tinytuya import scanner
+        rows = [self._row(name='first'),
+                self._row(name='same ip', id='yyyyyyyyyyyyyyyyyyyy'),
+                self._row(name='same id', ip='192.0.2.30')]
+        candidates = scanner._configured_candidates(rows, set(), set())
+        self.assertEqual([info['name'] for info in candidates.values()], ['first'])
+
+    # --- ConfiguredDevice ---
+
+    def _configured_device(self):
+        from tinytuya import scanner
+        options = {'connect_timeout': 3, 'data_timeout': 3, 'termcolors': MagicMock(),
+                   'verbose': False, 'retries': 2, 'tuyadevices': [], 'keylist': []}
+        info = scanner._configured_device_info(self._row())
+        return scanner.ConfiguredDevice(info['ip'], info, options, False)
+
+    def test_single_connect_attempt(self):
+        dev = self._configured_device()
+        self.assertEqual(dev.retries, 0)
+        dev.timeout()  # first timeout is final
+        self.assertTrue(dev.remove)
+        self.assertFalse(dev.found)
+
+    def test_found_only_on_decoded_status(self):
+        for finished, dps, err, expected in ((True, {'dps': {'1': True}}, '', True),
+                                             (True, None, 'Unable to poll', False),
+                                             (False, None, 'No response', False)):
+            with self.subTest(finished=finished, err=err):
+                dev = self._configured_device()
+                dev.finished = finished
+                dev.deviceinfo['dps'] = dps
+                dev.deviceinfo['err'] = err
+                dev.close()
+                self.assertIs(dev.found, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -39,8 +39,10 @@ Subclasses add device-specific helpers on top.
 
 ## Module-Level Functions
 
-### `deviceScan(verbose=False, maxretry=15, color=True, poll=True, forcescan=False)`
-Scans the local network for Tuya devices and returns a dictionary of results.
+### `deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=False)`
+Scans the local network for Tuya devices and returns a dictionary of results. Each result's `origin` is `broadcast`, `forcescan`, or `configured`.
+
+Set `poll_configured=True` to also find devices that don't broadcast: after the UDP window, each `devices.json` device (with ID, key, IPv4 IP and version) that wasn't heard is polled once at its saved IP. It requires `poll=True` (the default), and a device that does broadcast always wins. Devices that don't answer are polled in parallel and add about 3 seconds (one connect timeout) to the scan.
 
 ```python
 import tinytuya
@@ -49,8 +51,10 @@ for ip, info in devices.items():
     print(ip, info.get('gwId'), info.get('version'))
 ```
 
-### `scan(maxretry=15, color=True, poll=True, forcescan=False)`
-Interactive scan that prints discovered devices to stdout.
+### `scan(maxretry=None, color=True, forcescan=False, poll_configured=False)`
+Interactive scan that prints discovered devices to stdout. `poll_configured=True` adds the configured-IP pass described under `deviceScan`.
+
+`scanner.scan()`, `scanner.devices()`, `scanner.poll_and_display()`, `scanner.alldevices()` and `wizard.wizard()` take the same final `poll_configured=False` parameter. The CLI `scan`, `devices` and `wizard` commands turn it on; add `-no-poll-configured` to turn it off. `snapshot()` and `snapshotjson()` never use it.
 
 ```python
 tinytuya.scan()
@@ -896,8 +900,8 @@ TinyTuya ships a built-in CLI available as `tinytuya` (pipx) or `python -m tinyt
 
 ```bash
 tinytuya wizard    # Interactive setup – fetches local keys from Tuya Cloud
-tinytuya scan      # Broadcast scan to find devices on the LAN
-tinytuya devices   # Poll all devices listed in devices.json
+tinytuya scan      # Broadcast scan, then poll devices.json IPs not heard (-no-poll-configured to skip)
+tinytuya devices   # Poll all devices listed in devices.json (-no-poll-configured to skip IPs not heard)
 tinytuya snapshot  # Poll devices listed in snapshot.json
 tinytuya json      # Same as snapshot but outputs raw JSON
 ```

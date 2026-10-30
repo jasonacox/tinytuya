@@ -3,6 +3,7 @@
 ## Unreleased
 
 * **Python support**: TinyTuya now requires Python 3.10 or newer, and CI adds Python 3.15. Python 3.7, 3.8 and 3.9 are end-of-life and no longer run on GitHub's current runners. `setup.py` declares `python_requires=">=3.10"`, so pip on older Pythons keeps installing v1.20.0. Via [#748](https://github.com/jasonacox/tinytuya/pull/748) by @jasonacox.
+* **Scanner: find devices that don't broadcast**: `scan`, `devices` and `wizard` now also poll each `devices.json` device that wasn't heard over UDP, once, at its saved IP, so silent devices (some v3.5 meters, or devices across a VLAN) appear as *Configured IP* results; devices that don't answer add about 3 seconds and are listed in the scan summary (skip with `-no-poll-configured`). Library calls opt in with `poll_configured=True`. Via [#735](https://github.com/jasonacox/tinytuya/pull/735) by @merodahero.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
