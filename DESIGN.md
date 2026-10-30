@@ -101,17 +101,7 @@ Commands in `NO_PROTOCOL_HEADER_CMDS` (header.py) — DP_QUERY, DP_QUERY_NEW, UP
 
 Devices broadcast on UDP 6666 (3.1, plaintext) and 6667 (3.2+, AES-ECB under the well-known key `MD5("yGAdlopoPVldABfn")`); newer 3.5 devices stay silent until solicited via an app-style broadcast on UDP 7000 (6699/GCM frames, same key). `scanner.devices()` runs a single-threaded `select()` loop that listens on all three ports and can optionally "force scan" TCP 6668 across address ranges, brute-forcing version/key from `devices.json`. `udp_helper.decrypt_udp()` transparently handles raw-ECB, 55AA-framed, and 6699-GCM broadcast formats.
 
-Configured-IP discovery is an optional authenticated fallback after the UDP
-window and explicit force scans drain. `_ConfiguredPollScheduler` feeds
-`StaticDevice` (a `PollDevice` state machine) into the same select loop, owning
-candidate selection, ID/IP deduplication and socket/result-slot reservations.
-It shares `max_parallel` and the existing ten-starts-per-loop cap; requested
-ID/IP sets select only matching rows, without serializing large lists. Only a
-decoded status response counts as a static result, and UDP discovery at the
-same IP or for the same ID supersedes it. Library APIs default to opt-out; CLI
-discovery commands opt in explicitly. Snapshot-only commands remain opt-out.
-The loop is a local function called inside a cleanup `try/finally`, so all
-state-machine and listener sockets are closed on normal exit or interruption.
+Configured-IP pass: with `poll_configured=True`, once the UDP window and its polls finish, `devices()` polls each `devices.json` row that was not heard (by IP or ID) at its saved IP. It reuses the force-scan dispatch that `snapshot` uses, with `ConfiguredDevice`: a `PollDevice` that makes one connect attempt and counts as found only on a decoded status reply. A broadcast for the same IP or ID always wins. Library APIs leave it off; the CLI `scan`, `devices` and `wizard` commands turn it on.
 
 ## Cloud
 
@@ -124,7 +114,7 @@ Recorded here so future work moves toward the target state rather than adding to
 1. **`XenonDevice` is a god class** (~1350 lines): discovery, sockets, retry policy, three crypto generations, session negotiation, templating, gateway routing, and caching in one class. Target: extract a frame codec (shared with Monitor) and a transport object.
 2. **Four error-signaling conventions coexist** — error dicts (`_send_receive`), int-or-True (`_get_socket`), `None`/`True`/`False`/message (`_send_receive_quick`), and raised `RuntimeError` (auto-IP failure in `__init__`). New code should use `error_json()` dicts at API boundaries.
 3. **Network I/O inside constructors** — auto-IP scans the LAN in `__init__`; `set_version(3.2)` can trigger a multi-round-trip DPS scan. Prefer lazy/first-use I/O for new features.
-4. **`scanner.devices()` is a ~450-line function** driven by module-level globals that `__main__.py` mutates (`DEVICEFILE`, `SNAPSHOTFILE`), which makes the scanner awkward as a library. New scanner features should go into the `DeviceDetect` state-machine classes, not the main loop.
+4. **`scanner.devices()` is a ~700-line function** driven by module-level globals that `__main__.py` mutates (`DEVICEFILE`, `SNAPSHOTFILE`), which makes the scanner awkward as a library. New scanner features should go into the `DeviceDetect` state-machine classes, not the main loop.
 5. **Wildcard re-exports without `__all__`** leak internals (`tinytuya.socket`, `tinytuya.json`, ...) into the public namespace, so renaming module-level names is riskier than it looks.
 6. **Monitor/`_receive()` framing duplication** — two independent implementations of prefix scanning and header parsing must be kept in sync until a shared codec exists.
 7. **Python 2 remnants** — `IS_PY2` branches and shims are dead (Monitor.py's f-strings make py2 imports fail anyway) and should be removed rather than extended.

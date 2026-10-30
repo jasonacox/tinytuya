@@ -606,7 +606,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
   help           Show detailed help and usage examples.
 
   Wizard
-      tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll]
+      tinytuya wizard [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] [-no-poll] [-no-poll-configured]
                 [-device-file FILE] [-raw-response-file FILE] [-snapshot-file FILE] [-credentials-file FILE]
                 [-key KEY] [-secret SECRET] [-region {cn,eu,eu-w,in,sg,us,us-e}] [-device DEVICE [DEVICE ...]]
                 [-dry-run] [max_time]
@@ -619,6 +619,7 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
         -h, -help            Show usage help for command.
         -yes, -y             Answer "yes" to all questions
         -no-poll, -no        Answer "no" to "Poll?" (overrides -yes)
+        -no-poll-configured  Don't poll devices.json IPs that were not heard by broadcast (scan, devices, wizard)
         -device-file FILE    JSON file to load devices from [Default: devices.json]
         -snapshot-file FILE  JSON file to load/save snapshot from/to [Default: snapshot.json]
         -force [0.0.0.0/24 ...], -f [0.0.0.0/24 ...]
@@ -636,11 +637,11 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 
   Scan
       tinytuya scan [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] 
-                [-device-file FILE] [-snapshot-file FILE] [max_time]
+                [-no-poll-configured] [-device-file FILE] [-snapshot-file FILE] [max_time]
 
   Devices
       tinytuya devices [-h] [-debug] [-force [0.0.0.0/24 ...]] [-no-broadcasts] [-nocolor] [-yes] 
-                [-no-poll] [-device-file FILE] [-snapshot-file FILE] [max_time]
+                [-no-poll] [-no-poll-configured] [-device-file FILE] [-snapshot-file FILE] [max_time]
 
   Snapshot
       tinytuya snapshot [-h] [-debug] [-nocolor] [-yes] [-no-poll] [-device-file FILE] [-snapshot-file FILE]
@@ -714,32 +715,21 @@ tinytuya <command> [-debug] [-nocolor] [-h] [-yes] [-no-poll] [-device-file FILE
 ```
 
 ### Scan Tool 
-The function `tinytuya.scan()` listens on UDP ports 6666, 6667, and 7000 and identifies Tuya devices broadcasting their Address, Device ID, Product ID, and Version. The `tinytuya.deviceScan()` function returns found devices and their stats as a dictionary. Library calls default to `poll_configured=False`; opt in with `poll_configured=True` to poll complete `devices.json` rows (ID, local key, IPv4 address, and supported protocol version) at their configured IP after UDP discovery, allowing silent devices to be found. CLI `scan`, `devices` and `wizard` commands explicitly enable this fallback by default; use `-no-poll-configured` to skip it for stale addresses.
+The function `tinytuya.scan()` listens on your local network (UDP 6666, 6667 and 7000), identifies Tuya devices broadcasting their Address, Device ID, Product ID and Version, and prints them and their status to stdout. The `tinytuya.deviceScan()` function returns the devices it finds and their status as a dictionary.
+
+Some devices never broadcast (seen on some v3.5 meters), and broadcasts don't cross VLANs or reach Docker containers without host networking. To find those, the `scan`, `devices` and `wizard` commands also poll each `devices.json` device that wasn't heard, once, at its saved IP. Those devices show up as `[Configured IP]`, and the summary lists any that didn't answer. Devices that don't answer add about 3 seconds to the scan; add `-no-poll-configured` to skip this. In Python it's off by default; pass `poll_configured=True` to turn it on:
 
 ```python
 scan(maxretry=None, color=True, forcescan=False, poll_configured=False)
 deviceScan(verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False, poll_configured=False)
 ```
 
-The library helpers `scanner.scan`, `scanner.devices`, `scanner.poll_and_display`,
-`scanner.alldevices` and `wizard.wizard` likewise accept a final
-`poll_configured=False` parameter. Requested ID/IP sets use bounded parallel
-polls of matching configured rows, sharing the scanner's socket limit and
-existing ten-starts-per-loop cap. Protocol versions in static and broadcast
-results are strings.
-
-Configured polling waits for explicit force scans to finish, respects `maxdevices`
-and requested ID/IP early stops, and skips malformed credentials. Snapshot commands
-(`snapshot` and `snapshotjson`) poll only the addresses in the saved snapshot; they
-do not add the configured-IP fallback. When requested IPs are missing, configured
-polling is tried before the implicit force scan of those IPs.
-
 You can run the scanner from the command line using these interactive commands:
   ```bash
   # Listen for Tuya Devices and match to devices.json if available
   python -m tinytuya scan
 
-  # Skip direct polling of configured IPs (useful with stale devices.json rows)
+  # Broadcast only: don't poll devices.json IPs that were not heard
   python -m tinytuya scan -no-poll-configured
 
   # The above creates a snapshot.json file with IP addresses for devices

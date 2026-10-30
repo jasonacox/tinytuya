@@ -76,7 +76,7 @@ for sp in cmd_list:
             if sp in ('scan', 'devices', 'wizard'):
                 subparsers[sp].add_argument(
                     '-no-poll-configured', '--no-poll-configured',
-                    help='Skip static-IP polling of configured devices',
+                    help='Do not poll devices.json IPs that were not heard by broadcast',
                     action='store_true',
                 )
 
@@ -148,7 +148,7 @@ Usage: python -m tinytuya <command> [options]
 Setup & Discovery Commands:
   wizard       Launch Setup Wizard to get Device Local Keys from Tuya Cloud
                  python -m tinytuya wizard
-  scan         Scan local network for Tuya devices (UDP broadcast)
+  scan         Scan local network for Tuya devices (UDP broadcast + devices.json IPs)
                  python -m tinytuya scan
                  python -m tinytuya scan 30               # scan for 30 seconds
   devices      Scan all devices listed in devices.json and show status

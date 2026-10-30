@@ -2,9 +2,8 @@
 
 ## Unreleased
 
-* **Scanner diagnostics**: Statically polled devices display `Local Key` like broadcast and force-scanned results; remove keys before sharing output publicly (PR #735 by @merodahero).
-
 * **Python support**: TinyTuya now requires Python 3.10 or newer, and CI adds Python 3.15. Python 3.7, 3.8 and 3.9 are end-of-life and no longer run on GitHub's current runners. `setup.py` declares `python_requires=">=3.10"`, so pip on older Pythons keeps installing v1.20.0. Via [#748](https://github.com/jasonacox/tinytuya/pull/748) by @jasonacox.
+* **Scanner: find devices that don't broadcast**: `scan`, `devices` and `wizard` now also poll each `devices.json` device that wasn't heard over UDP, once, at its saved IP, so silent devices (some v3.5 meters, or devices across a VLAN) appear as *Configured IP* results; devices that don't answer add about 3 seconds and are listed in the scan summary (skip with `-no-poll-configured`). Library calls opt in with `poll_configured=True`. Via [#735](https://github.com/jasonacox/tinytuya/pull/735) by @merodahero.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
@@ -24,9 +23,6 @@ are listed here so the release changelog is complete.
 ### Session crypto hardening (see security PR)
 * AES-GCM message nonces and the v3.4/v3.5 session-key client nonce now use `os.urandom` instead of a time-derived/constant value, eliminating nonce/IV reuse under a session key. Wire-compatible.
 * 6699/GCM frames that fail their authentication tag are rejected instead of being passed on as raw ciphertext.
-
-### Discovery feature
-* Configured-IP polling finds non-broadcasting devices from complete `devices.json` rows in bounded parallel batches, preserving UDP authority and snapshot-only scope. Library APIs opt in with `poll_configured=True`; CLI `scan`, `devices` and `wizard` enable it by default with `-no-poll-configured` to opt out (PR #735 by @merodahero).
 
 ### Bug fixes (see bug-fix PR)
 * Cloud token-refresh retry preserves the query string; Cloud helpers return error dicts instead of raising on failed/empty responses.

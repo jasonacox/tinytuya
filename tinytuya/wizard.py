@@ -65,6 +65,7 @@ def wizard(color=True, retries=None, forcescan=False, nocloud=False, assume_yes=
         color = True or False, print output in color [Default: True]
         retries = Number of retries to find IP address of Tuya Devices
         forcescan = True or False, force network scan for device IP addresses
+        poll_configured = True or False [Default: False], also poll devices.json IPs not heard over UDP
 
     Description
         Setup Wizard will prompt user for Tuya IoT Developer credentials and will gather all of
