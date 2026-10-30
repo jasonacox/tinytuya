@@ -1560,39 +1560,65 @@ def _api_md_signatures():
     return found
 
 
-def _signature_problem(key):
-    """None when the code matches API.md for this entry, else a description."""
-    lineno, owner, name, documented = _api_md_signatures()[key]
+def _code_params(owner, name):
+    """[(param, default)] of owner.name in the code, or None when it does not exist."""
     obj = getattr(owner, name, None)
     if obj is None or (inspect.isclass(owner) and name not in vars(owner) and name != '__init__'
                        and not any(name in vars(base) for base in owner.__mro__[1:] if base is not object)):
+        return None
+    return [(p.name, p.default) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
+
+
+def _signature_problem(key):
+    """None when the code matches API.md for this entry, else a description."""
+    lineno, owner, name, documented = _api_md_signatures()[key]
+    actual = _code_params(owner, name)
+    if actual is None:
         return 'API.md:%d documents %s, which does not exist' % (lineno, key)
-    actual = [(p.name, p.default) for p in inspect.signature(obj).parameters.values() if p.name != 'self']
     if actual != documented:
         return 'API.md:%d documents %s%r, code has %r' % (lineno, key, documented, actual)
     return None
 
 
-# file:line in the code for each, so the list can be acted on directly
+# key: (the code's parameters today, or None when it has no such method; note with file:line).
+# The code stays pinned to those parameters, so a change beyond the known mismatch still fails.
 API_SIGNATURE_DEVIATIONS = {
-    'tinytuya.deviceScan': 'core/core.py:235 has maxretry=None and an undocumented byID=False',
-    'tinytuya.scan': 'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter',
-    'XenonDevice.__init__': 'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0',
-    'XenonDevice.add_dps_to_request': 'XenonDevice.py:1154 names the parameter dp_indicies, not index',
-    'XenonDevice.heartbeat': 'documented under XenonDevice, but only Device (core/Device.py:47) has it',
-    'XenonDevice.updatedps': 'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)',
-    'BulbDevice.set_musicmode': 'no such method (BulbDevice.py:24 docstring lists it too)',
-    'CoverDevice.open_cover': 'CoverDevice.py:236 defaults switch=None, not 1',
-    'CoverDevice.close_cover': 'CoverDevice.py:251 defaults switch=None, not 1',
-    'CoverDevice.stop_cover': 'CoverDevice.py:266 defaults switch=None, not 1',
-    'Cloud.setregion': 'Cloud.py:128 defaults apiRegion=None; API.md shows it required',
-    'Cloud.getstatus': 'Cloud.py:626 defaults deviceid=None (returns ERR_PARAMS); API.md shows it required',
-    'Cloud.getfunctions': 'Cloud.py:632 defaults deviceid=None; API.md shows it required',
-    'Cloud.getproperties': 'Cloud.py:638 defaults deviceid=None; API.md shows it required',
-    'Cloud.getdps': 'Cloud.py:644 defaults deviceid=None; API.md shows it required',
-    'Cloud.sendcommand': 'Cloud.py:669 defaults deviceid=None, commands=None; API.md shows them required',
-    'Cloud.getconnectstatus': 'Cloud.py:694 defaults deviceid=None; API.md shows it required',
-    'Cloud.getdevicelog': 'Cloud.py:717 defaults deviceid=None; API.md shows it required',
+    'tinytuya.deviceScan': ('verbose=False, maxretry=None, color=True, poll=True, forcescan=False, byID=False',
+        'core/core.py:235 has maxretry=None and an undocumented byID=False'),
+    'tinytuya.scan': ('maxretry=None, color=True, forcescan=False',
+        'core/core.py:228 is scan(maxretry=None, color=True, forcescan=False): no poll parameter'),
+    'XenonDevice.__init__': ("dev_id, address=None, local_key='', dev_type='default', connection_timeout=5, version=3.1, persist=False, cid=None, node_id=None, parent=None, connection_retry_limit=5, connection_retry_delay=5, port=6668, max_simultaneous_dps=0",
+        'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0'),
+    'XenonDevice.add_dps_to_request': ('dp_indicies',
+        'XenonDevice.py:1154 names the parameter dp_indicies, not index'),
+    'XenonDevice.heartbeat': (None,
+        'documented under XenonDevice, but only Device (core/Device.py:47) has it'),
+    'XenonDevice.updatedps': (None,
+        'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)'),
+    'BulbDevice.set_musicmode': (None,
+        'no such method (BulbDevice.py:24 docstring lists it too)'),
+    'CoverDevice.open_cover': ('switch=None, nowait=False',
+        'CoverDevice.py:236 defaults switch=None, not 1'),
+    'CoverDevice.close_cover': ('switch=None, nowait=False',
+        'CoverDevice.py:251 defaults switch=None, not 1'),
+    'CoverDevice.stop_cover': ('switch=None, nowait=False',
+        'CoverDevice.py:266 defaults switch=None, not 1'),
+    'Cloud.setregion': ('apiRegion=None',
+        'Cloud.py:128 defaults apiRegion=None; API.md shows it required'),
+    'Cloud.getstatus': ('deviceid=None',
+        'Cloud.py:626 defaults deviceid=None (returns ERR_PARAMS); API.md shows it required'),
+    'Cloud.getfunctions': ('deviceid=None',
+        'Cloud.py:632 defaults deviceid=None; API.md shows it required'),
+    'Cloud.getproperties': ('deviceid=None',
+        'Cloud.py:638 defaults deviceid=None; API.md shows it required'),
+    'Cloud.getdps': ('deviceid=None',
+        'Cloud.py:644 defaults deviceid=None; API.md shows it required'),
+    'Cloud.sendcommand': ("deviceid=None, commands=None, uri='iot-03/devices/'",
+        'Cloud.py:669 defaults deviceid=None, commands=None; API.md shows them required'),
+    'Cloud.getconnectstatus': ('deviceid=None',
+        'Cloud.py:694 defaults deviceid=None; API.md shows it required'),
+    'Cloud.getdevicelog': ('deviceid=None, start=None, end=None, evtype=None, size=0, max_fetches=50, start_row_key=None, params=None',
+        'Cloud.py:717 defaults deviceid=None; API.md shows it required'),
 }
 
 API_CONTRIB_DEVIATIONS = {
@@ -1616,8 +1642,12 @@ class TestApiContract(unittest.TestCase):
     def test_signatures_match_api_md(self):
         signatures = _api_md_signatures()
         self.assertGreater(len(signatures), 60, 'API.md headings no longer parse')
-        for key in API_SIGNATURE_DEVIATIONS:
-            self.assertIn(key, signatures, 'stale deviation entry')
+        for key, (code, _) in API_SIGNATURE_DEVIATIONS.items():
+            with self.subTest(key=key):
+                self.assertIn(key, signatures, 'stale deviation entry')
+                _, owner, name, documented = signatures[key]
+                pinned = None if code is None else _params_from_def(code)
+                self.assertIn(_code_params(owner, name), (pinned, documented), 'changed beyond the known deviation')
         for key in sorted(set(signatures) - set(API_SIGNATURE_DEVIATIONS)):
             with self.subTest(key=key):
                 self.assertIsNone(_signature_problem(key))
@@ -1696,7 +1726,7 @@ class TestApiContract(unittest.TestCase):
                 self.assertIn(module, listed)
 
 
-_add_deviation_tests(TestApiContract, API_SIGNATURE_DEVIATIONS,
+_add_deviation_tests(TestApiContract, {key: note for key, (_, note) in API_SIGNATURE_DEVIATIONS.items()},
                      lambda self, key: self.assertIsNone(_signature_problem(key)))
 _add_deviation_tests(TestApiContract, {'contrib_' + k: v for k, v in API_CONTRIB_DEVIATIONS.items()},
                      lambda self, key: self.assertIn(key[len('contrib_'):], {m for m, _ in _api_md_contrib_table()}))
@@ -1727,9 +1757,9 @@ PRINT_DEVIATIONS = {
     'tinytuya/Contrib/IRRemoteControlDevice.py:pulses_to_space_encoded_head_key': (2, 'IRRemoteControlDevice.py:930,968 print on every call of pulses_to_space_encoded_head_key()'),
     'tinytuya/Contrib/WiFiDualMeterDevice.py:print_all': (26, 'WiFiDualMeterDevice.py:217-242: print_all() is a public method that prints'),
 }
-HEXLIFY_DEVIATIONS = {
-    'tinytuya/core/XenonDevice.py:_negotiate_session_key_generate_step_3': 'XenonDevice.py:944 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard',
-    'tinytuya/core/message_helper.py:unpack_message': 'message_helper.py:150 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard',
+HEXLIFY_DEVIATIONS = {  # 'path:function': (unguarded calls, note), as for PRINT_DEVIATIONS
+    'tinytuya/core/XenonDevice.py:_negotiate_session_key_generate_step_3': (1, 'XenonDevice.py:944 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard'),
+    'tinytuya/core/message_helper.py:unpack_message': (1, 'message_helper.py:150 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard'),
 }
 # AGENTS.md binds __all__ only for *new* wildcard-exported modules; these predate the rule
 WILDCARD_WITHOUT_ALL = {
@@ -1782,15 +1812,19 @@ class TestAgentsRules(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sources = _library_sources()
-        cls.unguarded_hexlify = {site for path, tree in cls.sources.items() for site in _unguarded_hexlify(path, tree)}
+        cls.unguarded_hexlify = collections.Counter(site for path, tree in cls.sources.items() for site in _unguarded_hexlify(path, tree))
         cls.print_sites = sum((_print_sites(path, tree) for path, tree in cls.sources.items() if path not in PRINT_ALLOWED),
                               collections.Counter())
 
+    def _assert_only_known_sites(self, found, deviations):
+        """Every site in `found` is a known deviation with exactly its recorded count (0 = fixed)."""
+        known = collections.Counter({site: count for site, (count, _) in deviations.items()})
+        self.assertEqual(found - known, collections.Counter())
+        partly_fixed = {site for site in known if 0 < found[site] < known[site]}
+        self.assertEqual(partly_fixed, set(), 'lower the deviation count')
+
     def test_no_print_in_library_modules(self):
-        known = collections.Counter({site: count for site, (count, _) in PRINT_DEVIATIONS.items()})
-        self.assertEqual(self.print_sites - known, collections.Counter())
-        partly_fixed = {site for site in known if 0 < self.print_sites[site] < known[site]}
-        self.assertEqual(partly_fixed, set(), 'lower the PRINT_DEVIATIONS count')
+        self._assert_only_known_sites(self.print_sites, PRINT_DEVIATIONS)
 
     def test_logging_configured_only_by_set_debug(self):
         config = {'basicConfig', 'addHandler', 'removeHandler', 'setFormatter', 'dictConfig', 'fileConfig',
@@ -1809,8 +1843,7 @@ class TestAgentsRules(unittest.TestCase):
                         self.assertEqual(ast.unparse(node.args[0]) if node.args else None, '__name__')
 
     def test_hexlify_logging_is_guarded(self):
-        self.assertEqual(self.unguarded_hexlify - set(HEXLIFY_DEVIATIONS), set())
-        self.assertEqual(set(HEXLIFY_DEVIATIONS) - self.unguarded_hexlify, set(), 'stale deviation entry')
+        self._assert_only_known_sites(self.unguarded_hexlify, HEXLIFY_DEVIATIONS)
 
     def test_crypto_imported_only_in_crypto_helper(self):
         crypto = {'cryptography', 'Crypto', 'Cryptodome', 'pyaes'}
@@ -1894,8 +1927,8 @@ class TestAgentsRules(unittest.TestCase):
 
 _add_deviation_tests(TestAgentsRules, {site: note for site, (_, note) in PRINT_DEVIATIONS.items()},
                      lambda self, site: self.assertEqual(self.print_sites[site], 0))
-_add_deviation_tests(TestAgentsRules, HEXLIFY_DEVIATIONS,
-                     lambda self, site: self.assertNotIn(site, self.unguarded_hexlify))
+_add_deviation_tests(TestAgentsRules, {site: note for site, (_, note) in HEXLIFY_DEVIATIONS.items()},
+                     lambda self, site: self.assertEqual(self.unguarded_hexlify[site], 0))
 
 
 if __name__ == '__main__':
