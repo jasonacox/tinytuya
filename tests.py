@@ -723,7 +723,8 @@ class FakeTuyaDevice(object):
     returns the bytes the device answers with, so any I/O layer (the sync
     socket shim below, or a future asyncio transport) can drive it.  Frames it
     cannot authenticate or decrypt, or that break the version-header rule
-    (3.2+ commands outside NO_PROTOCOL_HEADER_CMDS carry it), are dropped.
+    (3.2+ commands outside HEADERLESS carry it), or use the other version's
+    frame prefix are dropped.
 
     Knobs: dps / children ({cid: dps}) hold state; device22 answers DP_QUERY
     with "data unvalid"; raw_reply replaces the status body of query replies;
@@ -735,6 +736,10 @@ class FakeTuyaDevice(object):
     """
 
     NONCE = b'fedcba9876543210'
+    # PROTOCOL.md "Version Header": commands sent without it.  Kept apart from
+    # header.NO_PROTOCOL_HEADER_CMDS so a change to that list fails the round trips.
+    HEADERLESS = frozenset((CT.DP_QUERY, CT.DP_QUERY_NEW, CT.UPDATEDPS, CT.HEART_BEAT, CT.SESS_KEY_NEG_START,
+                            CT.SESS_KEY_NEG_RESP, CT.SESS_KEY_NEG_FINISH, CT.LAN_EXT_STREAM))
 
     def __init__(self, version, local_key=LOCAL_KEY, dev_id='DEVICE_ID_HERE', dps=None, children=None, device22=False):
         self.version = float(version)
@@ -808,7 +813,7 @@ class FakeTuyaDevice(object):
             if payload[:19] != self._envelope_31(enc):
                 raise ValueError('3.1 CONTROL lacks the "3.1" + MD5 envelope')
             return cipher.decrypt(enc, decode_text=False)
-        want_header = cmd not in mh.H.NO_PROTOCOL_HEADER_CMDS
+        want_header = cmd not in self.HEADERLESS
         if self.version < 3.4:
             # the 3.2/3.3 header is sent in the clear, ahead of the ciphertext
             if payload.startswith(self.vbytes + 12 * b'\x00') != want_header:
@@ -859,6 +864,9 @@ class FakeTuyaDevice(object):
         return noise + frame
 
     def _handle(self, frame, header):
+        if header.prefix != (mh.H.PREFIX_6699_VALUE if self.version >= 3.5 else mh.H.PREFIX_55AA_VALUE):
+            self.dropped += 1
+            return b''
         msg = mh.unpack_message(frame, hmac_key=self.key if self.version >= 3.4 else None, header=header, no_retcode=True)
         try:
             if not msg.crc_good:
@@ -1143,7 +1151,9 @@ class TestWireBehavior(_WireTestCase):
     def test_bad_gcm_tag_rejected_then_retried(self):
         d, fake = self.make(3.5, dps={'1': True})
         fake.corrupt_tags = 1
-        self.assertEqual(d.status()['dps'], {'1': True})
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            self.assertEqual(d.status()['dps'], {'1': True})
+        self.assertEqual(self._gcm_rejections(logs), 1)
         # the forged frame was discarded; the library reconnected and asked again
         self.assertEqual(fake.connections, 2)
         self.assertEqual(len(fake.requests), 2)
@@ -1151,9 +1161,31 @@ class TestWireBehavior(_WireTestCase):
     def test_bad_gcm_tag_every_time_returns_payload_error(self):
         d, fake = self.make(3.5)
         fake.corrupt_tags = 1000
-        result = d.status()
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            result = d.status()
         self.assertEqual(result['Err'], str(tinytuya.ERR_PAYLOAD))
         self.assertNotIn('dps', result)
+        self.assertGreater(self._gcm_rejections(logs), 1)
+
+    @staticmethod
+    def _gcm_rejections(logs):
+        # assertLogs also keeps these expected tracebacks off stderr, where CI's
+        # Python problem matcher would turn each one into a failure annotation
+        return sum(1 for r in logs.records if r.exc_info and 'GCM authentication failed' in str(r.exc_info[1]))
+
+    def test_header_skip_list_matches_protocol_md(self):
+        self.assertEqual(set(mh.H.NO_PROTOCOL_HEADER_CMDS), FakeTuyaDevice.HEADERLESS)
+
+    def test_fake_drops_the_other_versions_frame_prefix(self):
+        frames = {3.5: mh.TuyaMessage(1, CT.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_55AA_VALUE, False)}
+        if HAS_GCM:
+            frames[3.4] = mh.TuyaMessage(1, CT.DP_QUERY_NEW, None, b'{}', 0, True, mh.H.PREFIX_6699_VALUE, True)
+        for version, msg in frames.items():
+            with self.subTest(version=version):
+                fake = FakeTuyaDevice(version)
+                fake.connect()
+                self.assertEqual(fake.receive_bytes(mh.pack_message(msg, hmac_key=fake.key)), b'')
+                self.assertEqual((fake.dropped, fake.requests), (1, []))
 
     def test_silent_device_times_out(self):
         d, fake = self.make(3.3)
@@ -1453,6 +1485,7 @@ class TestCloud(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 import ast
+import collections
 import functools
 import glob
 import inspect
@@ -1687,10 +1720,12 @@ def _calls(tree, names):
 
 # AGENTS.md: "only the CLI, wizard, and scanner user-facing output may print"
 PRINT_ALLOWED = {'tinytuya/__main__.py', 'tinytuya/cli.py', 'tinytuya/wizard.py', 'tinytuya/scanner.py'}
+# 'path:function': (print() calls, note); a new print anywhere, even in one of these functions, fails
 PRINT_DEVIATIONS = {
-    'tinytuya/Cloud.py': 'Cloud.py:39-41 print a WARN banner at import time when requests is missing',
-    'tinytuya/Contrib/IRRemoteControlDevice.py': 'IRRemoteControlDevice.py:930,968 print on every call of pulses_to_space_encoded_head_key(); 413-494 sit in an "if False:" block',
-    'tinytuya/Contrib/WiFiDualMeterDevice.py': 'WiFiDualMeterDevice.py:217-242: print_all() is a public method that prints',
+    'tinytuya/Cloud.py:<module>': (3, 'Cloud.py:39-41 print a WARN banner at import time when requests is missing'),
+    'tinytuya/Contrib/IRRemoteControlDevice.py:head_key_to_pulses': (14, 'IRRemoteControlDevice.py:413-494 debug prints in head_key_to_pulses(), inside "if False:" blocks'),
+    'tinytuya/Contrib/IRRemoteControlDevice.py:pulses_to_space_encoded_head_key': (2, 'IRRemoteControlDevice.py:930,968 print on every call of pulses_to_space_encoded_head_key()'),
+    'tinytuya/Contrib/WiFiDualMeterDevice.py:print_all': (26, 'WiFiDualMeterDevice.py:217-242: print_all() is a public method that prints'),
 }
 HEXLIFY_DEVIATIONS = {
     'tinytuya/core/XenonDevice.py:_negotiate_session_key_generate_step_3': 'XenonDevice.py:944 HMAC-mismatch log.debug() hexlifies without an isEnabledFor() guard',
@@ -1708,6 +1743,20 @@ CONTRIB_PREDATES_CHECKLIST = {
     'RFRemoteControlDevice', 'SocketDevice', 'SoriaInverterDevice', 'ThermostatDevice',
     'TowelRailHeaterDevice', 'WiFiDualMeterDevice',
 }
+
+
+def _print_sites(path, tree):
+    """Counter of 'path:function' for print() calls (innermost def, or <module>)."""
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    sites = collections.Counter()
+    for node in ast.walk(tree):
+        func = getattr(node, 'func', None)
+        if not (isinstance(node, ast.Call) and getattr(func, 'id', getattr(func, 'attr', None)) == 'print'):
+            continue
+        while node in parents and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node = parents[node]
+        sites['%s:%s' % (path, getattr(node, 'name', '<module>'))] += 1
+    return sites
 
 
 def _unguarded_hexlify(path, tree):
@@ -1734,13 +1783,14 @@ class TestAgentsRules(unittest.TestCase):
     def setUpClass(cls):
         cls.sources = _library_sources()
         cls.unguarded_hexlify = {site for path, tree in cls.sources.items() for site in _unguarded_hexlify(path, tree)}
+        cls.print_sites = sum((_print_sites(path, tree) for path, tree in cls.sources.items() if path not in PRINT_ALLOWED),
+                              collections.Counter())
 
     def test_no_print_in_library_modules(self):
-        for path, tree in self.sources.items():
-            if path in PRINT_ALLOWED or path in PRINT_DEVIATIONS:
-                continue
-            with self.subTest(path=path):
-                self.assertEqual(list(_calls(tree, {'print'})), [])
+        known = collections.Counter({site: count for site, (count, _) in PRINT_DEVIATIONS.items()})
+        self.assertEqual(self.print_sites - known, collections.Counter())
+        partly_fixed = {site for site in known if 0 < self.print_sites[site] < known[site]}
+        self.assertEqual(partly_fixed, set(), 'lower the PRINT_DEVIATIONS count')
 
     def test_logging_configured_only_by_set_debug(self):
         config = {'basicConfig', 'addHandler', 'removeHandler', 'setFormatter', 'dictConfig', 'fileConfig',
@@ -1842,8 +1892,8 @@ class TestAgentsRules(unittest.TestCase):
                 self.assertIn(module, testcontrib)
 
 
-_add_deviation_tests(TestAgentsRules, PRINT_DEVIATIONS,
-                     lambda self, path: self.assertEqual(list(_calls(self.sources[path], {'print'})), []))
+_add_deviation_tests(TestAgentsRules, {site: note for site, (_, note) in PRINT_DEVIATIONS.items()},
+                     lambda self, site: self.assertEqual(self.print_sites[site], 0))
 _add_deviation_tests(TestAgentsRules, HEXLIFY_DEVIATIONS,
                      lambda self, site: self.assertNotIn(site, self.unguarded_hexlify))
 
