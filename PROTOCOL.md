@@ -504,6 +504,8 @@ Notes:
 3. Return code (if present in responses) is decrypted first 4 bytes before JSON.
 
 ### DP Query / device22
+`DP_QUERY` is sent as `DP_QUERY_NEW` with the payload `{"data":{"dps":{}}}`; some IR/RF hubs reject a bare `{}` with `json obj data unvalid`.
+
 Device22 command overrides still apply if `dev_type='device22'` was set manually or carried over (CONTROL_NEW / DP_QUERY_NEW), but the `data unvalid` auto-detection never fires on 3.5 (it is gated to 3.3/3.4). Library wraps resulting JSON in GCM.
 
 ### Retcode & Header Decode Order
