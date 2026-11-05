@@ -695,5 +695,71 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertTrue(_accepts_nowait(lambda x, **kw: None))
         self.assertFalse(_accepts_nowait(lambda x: None))
 
+
+class TestSendRetryLimit(unittest.TestCase):
+    """send_retry_limit must bound payload re-sends after a receive timeout,
+    independently of socketRetryLimit (connection establishment).  A write
+    that gets no reply must be sent exactly once when sendRetryLimit is 0.
+    Regression test for issue #753."""
+
+    def _make(self, **kw):
+        d = tinytuya.OutletDevice(
+            "0123456789abcdef0123", "127.0.0.1", "0123456789abcdef",
+            version=3.3, connection_timeout=0.05, connection_retry_delay=0,
+            **kw)
+        # local socketpair: peer accepts but never replies -> receive timeout
+        sock, peer = _socket_mod.socketpair()
+        self.addCleanup(sock.close)
+        self.addCleanup(peer.close)
+        sock.settimeout(0.05)
+        sends = []
+
+        class _CountingSock:
+            # socket attributes are read-only; wrap instead to count sends
+            def __init__(self, inner):
+                self._inner = inner
+            def sendall(self, data):
+                sends.append(data)
+                self._inner.sendall(data)
+            def recv(self, *a):
+                return self._inner.recv(*a)
+            def settimeout(self, *a):
+                return self._inner.settimeout(*a)
+            def close(self):
+                return self._inner.close()
+
+        d._get_socket = MagicMock(return_value=True)
+        d.socket = _CountingSock(sock)
+        d._check_socket_close = MagicMock()
+        payload = d.generate_payload(18, {"1": True})  # CT.CONTROL
+        return d, payload, sends
+
+    def test_default_send_retry_matches_connection_retry(self):
+        d, payload, sends = self._make(connection_retry_limit=1)
+        res = d._send_receive(payload)
+        self.assertEqual(res["Err"], "902")
+        # default keeps historical behavior: initial send + 1 retry = 2 frames
+        self.assertEqual(len(sends), 2)
+
+    def test_send_retry_limit_zero_sends_exactly_once(self):
+        d, payload, sends = self._make(send_retry_limit=0)
+        res = d._send_receive(payload)
+        self.assertEqual(res["Err"], "902")
+        self.assertEqual(len(sends), 1)
+
+    def test_set_send_retry_limit(self):
+        d, payload, sends = self._make(send_retry_limit=2)
+        d.set_sendRetryLimit(0)
+        res = d._send_receive(payload)
+        self.assertEqual(res["Err"], "902")
+        self.assertEqual(len(sends), 1)
+
+    def test_send_retry_limit_counts_resends(self):
+        d, payload, sends = self._make(send_retry_limit=2)
+        res = d._send_receive(payload)
+        self.assertEqual(res["Err"], "902")
+        # initial send + 2 retries = 3 frames
+        self.assertEqual(len(sends), 3)
+
 if __name__ == '__main__':
     unittest.main()

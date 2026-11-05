@@ -228,6 +228,19 @@ Maximum number of reconnect attempts. Default: `5`.
 d.set_socketRetryLimit(3)
 ```
 
+#### `set_sendRetryLimit(limit)`
+Number of times a payload may be re-sent after a receive timeout or connection
+error in `_send_receive()`. Use `0` to send each payload exactly once — useful
+for toggle or relative writes, where a duplicate send after a lost reply would
+apply the command twice. Connection retries are controlled separately by
+`set_socketRetryLimit()`. Default: same value as `set_socketRetryLimit()`
+(historical behavior). Can also be set at construction with
+`send_retry_limit=`.
+
+```python
+d.set_sendRetryLimit(0)
+```
+
 #### `set_socketRetryDelay(delay)`
 Seconds to wait between reconnect attempts. Default: `5`.
 
