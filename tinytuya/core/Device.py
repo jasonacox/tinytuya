@@ -30,7 +30,7 @@ class Device(XenonDevice):
         payload = self.generate_payload(CT.CONTROL, {switch: on})
 
         data = self._send_receive(payload, getresponse=(not nowait))
-        log.debug("set_status received data=%r", data)
+        self._device_logger(log).debug("set_status received data=%r", data)
 
         return data
 
@@ -42,7 +42,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         payload = self.generate_payload(CT.AP_CONFIG)
         data = self._send_receive(payload, 0)
-        log.debug("product received data=%r", data)
+        self._device_logger(log).debug("product received data=%r", data)
         return data
 
     def heartbeat(self, nowait=True):
@@ -57,7 +57,7 @@ class Device(XenonDevice):
         # open device, send request, then close connection
         payload = self.generate_payload(CT.HEART_BEAT)
         data = self._send_receive(payload, 0, getresponse=(not nowait))
-        log.debug("heartbeat received data=%r", data)
+        self._device_logger(log).debug("heartbeat received data=%r", data)
         return data
 
     def updatedps(self, index=None, nowait=False):
@@ -71,11 +71,11 @@ class Device(XenonDevice):
         if index is None:
             index = [1]
 
-        log.debug("updatedps() entry (dev_type is %s)", self.dev_type)
+        self._device_logger(log).debug("updatedps() entry (dev_type is %s)", self.dev_type)
         # open device, send request, then close connection
         payload = self.generate_payload(CT.UPDATEDPS, index)
         data = self._send_receive(payload, 0, getresponse=(not nowait))
-        log.debug("updatedps received data=%r", data)
+        self._device_logger(log).debug("updatedps received data=%r", data)
         return data
 
     def set_value(self, index, value, nowait=False):
@@ -191,11 +191,11 @@ class Device(XenonDevice):
                     devices_numbers.sort()
                 dps_id = devices_numbers[-1]
             else:
-                log.debug("set_timer received error=%r", status)
+                self._device_logger(log).debug("set_timer received error=%r", status)
                 return status
 
         payload = self.generate_payload(CT.CONTROL, {dps_id: num_secs})
 
         data = self._send_receive(payload, getresponse=(not nowait))
-        log.debug("set_timer received data=%r", data)
+        self._device_logger(log).debug("set_timer received data=%r", data)
         return data

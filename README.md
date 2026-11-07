@@ -790,6 +790,7 @@ By default, the scan functions will listen for about 18 seconds to find new devi
   data =  a.status()
   print(data)
   ```
+* **Debugging several devices at once:** debug lines from device methods are prefixed with the device ID (e.g. `[0123456789abcdef] sending payload`) and the log record carries a `device_id` attribute, so you can add `%(device_id)s` to a formatter or filter on it. Logger names are unchanged (`tinytuya.core.XenonDevice`, `tinytuya.core.Device`, ...).
 * Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
   ```
   reg add HKEY_CURRENT_USER\Console /v VirtualTerminalLevel /t REG_DWORD /d 0x00000001 /f

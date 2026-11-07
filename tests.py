@@ -451,6 +451,48 @@ class TestCloudDeviceLog(unittest.TestCase):
         c, calls = self._cloud(pages=10)
         c.getdevicelog('0123456789abcdef', size=50)
         self.assertEqual(len(calls), 1)
+class TestDeviceLogContext(unittest.TestCase):
+    """Debug lines from device methods carry the device ID; logger names stay __name__ (#746)."""
+
+    def test_xenondevice_lines_tagged_with_device_id(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_1', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d.status()
+        self.assertTrue(cm.records)
+        for rec in cm.records:
+            self.assertEqual(rec.name, 'tinytuya.core.XenonDevice')
+            self.assertEqual(rec.device_id, 'LOGCTX_DEVICE_1')
+            self.assertTrue(rec.getMessage().startswith('[LOGCTX_DEVICE_1] '))
+            self.assertNotIn(LOCAL_KEY, rec.getMessage().split('] ', 1)[0])
+
+    def test_device_module_keeps_its_logger_name(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_2', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.Device', level='DEBUG') as cm:
+            d.set_status(True)
+        self.assertEqual(cm.records[0].name, 'tinytuya.core.Device')
+        self.assertEqual(cm.records[0].device_id, 'LOGCTX_DEVICE_2')
+        self.assertIn('[LOGCTX_DEVICE_2] set_status received', cm.output[0])
+
+    def test_two_devices_are_distinguishable(self):
+        d1 = tinytuya.OutletDevice('LOGCTX_A', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d2 = tinytuya.OutletDevice('LOGCTX_B', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        for d in (d1, d2):
+            d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d1.status()
+            d2.status()
+        ids = {rec.device_id for rec in cm.records}
+        self.assertEqual(ids, {'LOGCTX_A', 'LOGCTX_B'})
+
+    def test_caller_extra_is_merged(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_3', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d.log.debug('hello %s', 'world', extra={'foo': 'bar'})
+        self.assertEqual(cm.records[0].foo, 'bar')
+        self.assertEqual(cm.records[0].device_id, 'LOGCTX_DEVICE_3')
+        self.assertEqual(cm.records[0].getMessage(), '[LOGCTX_DEVICE_3] hello world')
 
 
 class TestLoadDeviceFile(unittest.TestCase):
