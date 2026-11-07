@@ -563,9 +563,9 @@ class XenonDevice(object):
 
         if (not payload) and getresponse and self.received_wrong_cid_queue:
             if (not self.children) or (not from_child):
-                r = self.received_wrong_cid_queue[0]
-                self.received_wrong_cid_queue = self.received_wrong_cid_queue[1:]
-                return r
+                # queue entries are (child, result) tuples; return just the result
+                r = self.received_wrong_cid_queue.pop(0)
+                return r[1]
             found_rq = False
             for rq in self.received_wrong_cid_queue:
                 if rq[0] == from_child:
