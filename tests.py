@@ -349,6 +349,44 @@ class TestRFRemoteControlDevice(unittest.TestCase):
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
+class _FakeResponse:
+    def __init__(self, body):
+        self.text = json.dumps(body)
+        self.content = self.text.encode()
+        self.status_code = 200
+
+
+class TestCloudTokenRetry(unittest.TestCase):
+    """After a token refresh, _tuyaplatform() retries the request; the retry
+    must sign the same un-encoded query string as the first attempt."""
+
+    def test_retry_signs_unencoded_dict_query(self):
+        import sys, hashlib, hmac
+        from unittest.mock import patch
+        cloudmod = sys.modules['tinytuya.Cloud']
+        key, secret = 'abcdefghijklmnop123456', '0123456789abcdef0123456789abcdef'
+        c = tinytuya.Cloud(apiRegion='us', apiKey=key, apiSecret=secret, initial_token='expired_token')
+        responses = [
+            _FakeResponse({'success': False, 'msg': 'token invalid'}),
+            _FakeResponse({'success': True, 'result': {'access_token': 'new_token'}}),
+            _FakeResponse({'success': True, 'result': {'logs': []}}),
+        ]
+        with patch.object(cloudmod.requests, 'get', side_effect=responses) as mock_get, \
+             patch.object(cloudmod.time, 'time', return_value=1700000000.0):
+            result = c.cloudrequest('/v1.0/devices/0123456789abcdef/logs', query={'type': '1,7', 'size': 100})
+
+        self.assertEqual(result, {'success': True, 'result': {'logs': []}})
+        self.assertEqual(c.token, 'new_token')
+        # Tuya signs the sorted query *before* URL-encoding (the comma stays a comma)
+        string_to_sign = (key + 'new_token' + '1700000000000' + 'GET\n' +
+                          hashlib.sha256(b'').hexdigest() + '\n\n' +
+                          '/v1.0/devices/0123456789abcdef/logs?size=100&type=1,7')
+        expected = hmac.new(secret.encode(), string_to_sign.encode(), hashlib.sha256).hexdigest().upper()
+        retry_headers = mock_get.call_args_list[2][1]['headers']
+        self.assertEqual(retry_headers['access_token'], 'new_token')
+        self.assertEqual(retry_headers['sign'], expected)
+
+
 class TestLoadDeviceFile(unittest.TestCase):
     """Tests for the load_devicefile() helper."""
 
