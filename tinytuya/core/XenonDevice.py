@@ -1313,8 +1313,8 @@ class XenonDevice(object):
             # complain about missing attribs, so just include them all unless otherwise specified
             json_data = {"gwId": "", "devId": "", "uid": "", "t": ""}
 
-        # make sure we don't modify payload_dict
-        json_data = json_data.copy()
+        # make sure we don't modify payload_dict (templates may contain a nested "data" dict)
+        json_data = _deepcopy(json_data)
 
         if "gwId" in json_data:
             if gwId is not None:
