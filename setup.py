@@ -40,6 +40,9 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://github.com/jasonacox/tinytuya',
+    # SPDX license expression (PEP 639); replaces the deprecated license classifier
+    license_expression="MIT",
+    license_files=["LICENSE"],
     packages=setuptools.find_packages(exclude=("sandbox",)),
     # pip on older Pythons keeps installing the last release that supported them
     python_requires=">=3.10",
@@ -54,7 +57,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
         "Programming Language :: Python :: 3.15",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
 )
