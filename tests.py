@@ -747,6 +747,15 @@ class TestSendRetryLimit(unittest.TestCase):
         self.assertEqual(res["Err"], "902")
         self.assertEqual(len(sends), 1)
 
+
+    def test_default_send_retry_follows_later_socketRetryLimit(self):
+        # regression: default must track socketRetryLimit set AFTER construction
+        d, payload, sends = self._make()
+        d.set_socketRetryLimit(1)
+        res = d._send_receive(payload)
+        self.assertEqual(res["Err"], "902")
+        self.assertEqual(len(sends), 2)
+
     def test_set_send_retry_limit(self):
         d, payload, sends = self._make(send_retry_limit=2)
         d.set_sendRetryLimit(0)

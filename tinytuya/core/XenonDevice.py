@@ -280,7 +280,7 @@ class XenonDevice(object):
         # retries for re-sending a payload in _send_receive() after a timeout or
         # connection error; None keeps the historical behavior (same limit as
         # connection retries). 0 = send each payload exactly once.
-        self.sendRetryLimit = connection_retry_limit if send_retry_limit is None else send_retry_limit
+        self.sendRetryLimit = send_retry_limit
         self.version = 0
         self.version_str = None
         self.version_bytes = None
@@ -651,13 +651,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
-                    retries, self.sendRetryLimit
+                    retries, self._send_retry_limit()
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self.sendRetryLimit:
+                if retries > self._send_retry_limit():
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self.sendRetryLimit
+                        self._send_retry_limit()
                     )
                     # timeout reached - return error
                     return error_json(ERR_TIMEOUT)
@@ -682,13 +682,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
-                    retries, self.sendRetryLimit, exc_info=True
+                    retries, self._send_retry_limit(), exc_info=True
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self.sendRetryLimit:
+                if retries > self._send_retry_limit():
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self.sendRetryLimit
+                        self._send_retry_limit()
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
@@ -1202,6 +1202,11 @@ class XenonDevice(object):
         payload exactly once (connection retries are controlled separately by
         set_socketRetryLimit())."""
         self.sendRetryLimit = limit
+
+    def _send_retry_limit(self):
+        """Resolve the payload re-send limit: None follows socketRetryLimit
+        (historical behavior), otherwise the explicit send_retry_limit."""
+        return self.socketRetryLimit if self.sendRetryLimit is None else self.sendRetryLimit
 
     def set_socketRetryDelay(self, delay):
         self.socketRetryDelay = delay
