@@ -95,10 +95,10 @@ class RFRemoteControlDevice(IRRemoteControlDevice):
                         command[k] = key_data
             else:
                 command = { RFRemoteControlDevice.NSDP_CONTROL: mode, 'rf_type': data['rf_type'], 'study_feq': data['freq'], 'ver': data['ver'] }
-            self.set_value( RFRemoteControlDevice.DP_SEND_IR, json.dumps(command), nowait=True )
+            self.set_value( RFRemoteControlDevice.DP_SEND_IR, json.dumps(command, separators=(",", ":")), nowait=True )
         elif mode == 'send_cmd':
             data[RFRemoteControlDevice.NSDP_CONTROL] = mode
-            self.set_value( RFRemoteControlDevice.DP_SEND_IR, json.dumps(data), nowait=True )
+            self.set_value( RFRemoteControlDevice.DP_SEND_IR, json.dumps(data, separators=(",", ":")), nowait=True )
         else:
             super(RFRemoteControlDevice, self).send_command( mode, data )
 

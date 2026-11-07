@@ -221,7 +221,7 @@ class IRRemoteControlDevice(Device):
                 elif 'head' in data and 'key' in data:
                     command[IRRemoteControlDevice.NSDP_HEAD] = data['head']
                     command[IRRemoteControlDevice.NSDP_KEY1] = '0' + data['key']
-                self.set_value( IRRemoteControlDevice.DP_SEND_IR, json.dumps(command), nowait=True )
+                self.set_value( IRRemoteControlDevice.DP_SEND_IR, json.dumps(command, separators=(",", ":")), nowait=True )
             elif self.control_type == 2:
                 mode = 'study_key' if 'base64_code' in data else 'send_ir'
                 command = {
@@ -236,7 +236,7 @@ class IRRemoteControlDevice(Device):
                 self.set_multiple_values( command, nowait=True )
         elif self.control_type == 1:
             command = { IRRemoteControlDevice.NSDP_CONTROL: mode }
-            self.set_value( IRRemoteControlDevice.DP_SEND_IR, json.dumps(command), nowait=True )
+            self.set_value( IRRemoteControlDevice.DP_SEND_IR, json.dumps(command, separators=(",", ":")), nowait=True )
         elif self.control_type == 2:
             self.set_value( IRRemoteControlDevice.DP_MODE, mode, nowait=True )
 

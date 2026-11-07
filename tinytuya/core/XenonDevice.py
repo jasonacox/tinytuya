@@ -1363,9 +1363,10 @@ class XenonDevice(object):
         if json_data == "":
             payload = ""
         else:
-            payload = json.dumps(json_data)
-        # if spaces are not removed device does not respond!
-        payload = payload.replace(" ", "")
+            # devices do not respond if the JSON contains separator whitespace, so
+            # serialize compactly instead of stripping spaces (which also mangled
+            # spaces inside string values)
+            payload = json.dumps(json_data, separators=(',', ':'))
         payload = payload.encode("utf-8")
         log.debug("building command %s payload=%r", command, payload)
 

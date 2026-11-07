@@ -135,6 +135,17 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_generate_payload_keeps_spaces_in_values(self):
+        # only JSON separator whitespace may be removed, never spaces inside string values
+        for ver in (3.1, 3.3, 3.4, 3.5):
+            d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=ver)
+            msg = d.generate_payload(tinytuya.CONTROL, {'5': 'hello world', '6': True})
+            self.assertNotIn(b', ', msg.payload)
+            self.assertNotIn(b': ', msg.payload)
+            payload = json.loads(msg.payload.decode('utf-8'))
+            dps = payload['data']['dps'] if 'data' in payload else payload['dps']
+            self.assertEqual(dps, {'5': 'hello world', '6': True})
+
     def test_set_colour_A(self):
         # arrange
         d = build_mock_bulb('A')
@@ -347,6 +358,15 @@ class TestRFRemoteControlDevice(unittest.TestCase):
 
         self.assertIn('key1', payload)
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
+
+    def test_rf_send_button_nested_json_is_compact(self):
+        # generate_payload() no longer strips spaces from string values, so the
+        # nested command JSON must be serialized without separator whitespace
+        d = build_mock_rf()
+        button_data = {"study_feq": "433", "ver": "2"}
+        d.rf_send_button(base64.b64encode(json.dumps(button_data).encode()).decode())
+        sent = d.set_value.call_args[0][1]
+        self.assertNotIn(' ', sent)
 
 
 class TestLoadDeviceFile(unittest.TestCase):
