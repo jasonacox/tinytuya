@@ -755,6 +755,28 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertEqual(result[self.DEV_ID]['name'], 'Keyless Lamp')
         self.assertIn('Missing Local Key: 1', out)
 
+    def test_force_scan_key_match_skips_malformed_rows(self):
+        from types import SimpleNamespace
+        from tinytuya import scanner
+        rows = ['not-a-row', {'name': 'No Id', 'key': LOCAL_KEY}, {'id': self.DEV_ID, 'key': LOCAL_KEY}]
+        dev = SimpleNamespace(options={'tuyadevices': rows}, deviceinfo={'key': LOCAL_KEY},
+                              device=SimpleNamespace(id=None), key_found=False)
+        scanner.ForceScannedDevice.found_key(dev)
+        self.assertTrue(dev.key_found)
+        self.assertEqual((dev.deviceinfo['id'], dev.deviceinfo['name'], dev.device.id), (self.DEV_ID, '', self.DEV_ID))
+
+    def test_device_listing_skips_malformed_rows(self):
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+        rows = ['not-a-row', {'key': LOCAL_KEY}, {'id': self.DEV_ID, 'key': LOCAL_KEY}]
+        with patch.object(scanner, 'devices', return_value={}) as scan, \
+                patch.object(tinytuya, 'load_devicefile', return_value=rows), \
+                patch.object(scanner, 'save_snapshotfile'), redirect_stdout(io.StringIO()):
+            scanner.alldevices(color=False, assume_yes=True)
+        self.assertEqual(scan.call_args.kwargs['wantids'], [self.DEV_ID])
+        self.assertIs(scan.call_args.kwargs['tuyadevices'], rows)
+
     def test_interrupt_on_first_pass_does_not_raise(self):
         calls = []
 

@@ -893,8 +893,9 @@ class ForceScannedDevice(DeviceDetect):
 
     def found_key( self ):
         for dev in self.options['tuyadevices']:
-            if dev['key'] == self.deviceinfo['key']:
-                self.deviceinfo['name'] = dev['name']
+            # skip malformed devices.json rows, as devices() does when it builds the key list
+            if isinstance(dev, dict) and isinstance(dev.get('id'), str) and dev.get('key') == self.deviceinfo['key']:
+                self.deviceinfo['name'] = dev.get('name') or ''
                 self.deviceinfo['id'] = self.deviceinfo['gwId'] = dev['id']
                 if 'mac' in dev and dev['mac'] and ('mac' not in self.deviceinfo or not self.deviceinfo['mac']):
                     self.deviceinfo['mac'] = dev['mac']
@@ -1818,6 +1819,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     log.debug("Scan complete with %s devices found", found_count)
     return devices
 
+def _row_name( row ):
+    """Sort key for devices.json rows; malformed rows sort first instead of raising."""
+    return (row.get('name') or '') if isinstance(row, dict) else ''
+
 def _get_gwid( old ):
     if 'gwId' in old and old['gwId']:
         return old["gwId"]
@@ -2035,7 +2040,7 @@ def alldevices(color=True, scantime=None, forcescan=False, discover=True, assume
 
     # Display device list
     print("\n\n" + term.bold + "Device Listing\n" + term.dim)
-    output = json.dumps(sorted(tuyadevices,key=lambda x: x['name']), indent=4)
+    output = json.dumps(sorted(tuyadevices, key=_row_name), indent=4)
     print(output)
 
     # Find out if we should poll all devices
@@ -2056,7 +2061,9 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
     termcolors = tinytuya.termcolor(color)
     term = TermColors( *termcolors )
 
-    by_id = [x['id'] for x in tuyadevices]
+    # the scan copes with malformed devices.json rows itself; the listing below needs an id
+    rows = [x for x in tuyadevices if isinstance(x, dict) and x.get('id')]
+    by_id = [x['id'] for x in rows]
     # Scan network for devices and provide polling data
     print(term.normal + "\nScanning local network for Tuya devices...")
     result = devices(verbose=False, poll=True, byID=True, scantime=scantime, wantids=by_id, show_timer=True, forcescan=forcescan, tuyadevices=tuyadevices, discover=discover)
@@ -2066,7 +2073,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
     polling = []
     print("Polling local devices...")
     # devices = sorted(data["devices"], key=lambda x: x['name'])
-    for idx in sorted(tuyadevices, key=lambda x: x['name']):
+    for idx in sorted(rows, key=_row_name):
         gwId = _get_gwid( idx )
         if gwId and gwId in result:
             item = _build_item( idx, result[gwId] )
