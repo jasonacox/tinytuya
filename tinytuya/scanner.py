@@ -1073,9 +1073,7 @@ class ConfiguredDevice(PollDevice):
         # An open TCP port proves nothing; only a decoded status reply counts
         self.found = bool( self.finished and self.deviceinfo.get('dps') and not self.deviceinfo.get('err') )
         DeviceDetect.close(self)
-        if self.found and self.options['verbose']:
-            _print_device_info( self.deviceinfo, 'Configured IP', self.options['termcolors'], self.message )
-            self.displayed = True
+        # printed by devices() once late broadcasts can no longer replace this result
 
     def abort(self):
         # A broadcast from this IP arrived; the normal broadcast poll takes over
@@ -1548,6 +1546,10 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                             if current_ip in broadcasted_devices:
                                 continue
                             elif current_ip in configured_pending:
+                                # a late broadcast may already have announced this ID at another IP
+                                gwid = configured_pending[current_ip]['gwId']
+                                if any( dev.deviceinfo.get('gwId') == gwid for dev in broadcasted_devices.values() ):
+                                    continue
                                 ip = current_ip
                                 configured_devices[ip] = ConfiguredDevice( ip, configured_pending[ip], options, ip in debug_ips )
                                 configured_devices[ip].connect()
@@ -1800,10 +1802,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             iface['socket'].close()
             del iface['socket']
 
-    if verbose:
-        print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
-        #print( len(response_list), response_list )
-
     # Configured-IP results join the broadcast results; a broadcast for the same IP or ID wins
     heard_ids = {dev.deviceinfo['gwId'] for dev in broadcasted_devices.values()}
     configured_found = []
@@ -1817,6 +1815,13 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         broadcasted_devices[dev.ip] = dev
         if wantids and dev.deviceinfo['gwId'] in wantids:
             wantids.remove( dev.deviceinfo['gwId'] )
+        if verbose:
+            _print_device_info( dev.deviceinfo, 'Configured IP', term, dev.message )
+            dev.displayed = True
+
+    if verbose:
+        print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
+        #print( len(response_list), response_list )
 
     ver_count = { '3.1': 0, '3.2': 0, '3.3': 0, '3.4': 0, '3.5': 0 }
     unknown_dev_count = 0

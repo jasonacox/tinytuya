@@ -906,6 +906,28 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         # the aborted configured poll is neither a result nor reported as not found
         self.assertIn('Configured IPs: 0 found, 0 not found', out)
 
+    def test_late_broadcast_suppresses_printed_configured_result(self):
+        # this row's poll finishes at once, but another one keeps the scan running until the
+        # broadcast for the same device lands; only the broadcast may be shown
+        other = self._row(ip='192.0.2.20', id='zyxwvutsrqponmlkjihg')
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.10', 'version': '3.5', 'productKey': 'p'}
+        result, out, polled = self._scan([self._row(), other], outcomes={'192.0.2.20': 'inflight'},
+                                         broadcasts=[(3, payload)], discover=True, scantime=2, verbose=True)
+        self.assertEqual(sorted(polled), ['192.0.2.10', '192.0.2.20'])
+        self.assertEqual(result[self.DEV_ID]['origin'], 'broadcast')
+        self.assertNotIn('[Configured IP]', out)
+
+    def test_late_broadcast_of_pending_id_at_new_ip_skips_its_poll(self):
+        # one poll at a time: the second row is still pending when its ID is announced at a new IP
+        from tinytuya import scanner
+        other = self._row(ip='192.0.2.20', id='zyxwvutsrqponmlkjihg')
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.99', 'version': '3.5', 'productKey': 'p'}
+        with patch.object(scanner, 'max_parallel', 1):
+            result, _, polled = self._scan([other, self._row()], outcomes={'192.0.2.20': 'inflight'},
+                                           broadcasts=[(3, payload)], discover=True, scantime=2)
+        self.assertEqual(polled, ['192.0.2.20'])
+        self.assertEqual(result[self.DEV_ID]['ip'], '192.0.2.99')
+
     def test_keyless_row_keeps_its_name_for_a_broadcast(self):
         # regression guard: a broadcast device whose devices.json row has no key is
         # "Missing Local Key", not "Unknown"
