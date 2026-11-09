@@ -233,12 +233,17 @@ Signalling JSON uses `header` and `msg` objects rather than a DPS map. The
 include `offer`, `answer`, `candidate`, and `disconnect`. Responses must be
 associated with the current `sessionid`, independently of the frame sequence.
 Local offer/answer exchange and SD media reception were verified with a
-separate experimental client. These signalling frames carry session metadata;
+separate experimental client. A subsequent independent local client also
+received and decoded H.264 video at 1280x720 and PCM signed-16 little-endian
+mono audio at 8 kHz using the observed IMM/AES-KCP media transport. Physical
+speech reception was confirmed in the downstream Home Assistant integration.
+This does not add media support to TinyTuya. These signalling frames carry session metadata;
 they are not themselves video frames or an RTSP URL.
 
 This is a single-device observation, not a portable camera API or a complete
-signalling/authentication specification. HD and other firmware were not
-established. SD capture also worked with WAN forwarding blocked after the
+signalling/authentication specification. Other firmware was not tested.
+The media credential was recovered from an existing authorized app session;
+its lifetime and cloud-free provisioning remain unknown. SD capture also worked with WAN forwarding blocked after the
 device was initialized; a fully offline cold start was not established.
 The experiment used existing device credentials; it did not establish
 cloud-free credential provisioning. TinyTuya does not currently define command 0x20 or implement
