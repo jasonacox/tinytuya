@@ -1136,6 +1136,59 @@ def _configured_candidates(tuyadevices, heard_ips, heard_ids, skip_ips=()):
     return candidates
 
 
+class _ConfiguredPass(object):
+    """The configured-IP pass, kept out of devices()'s main loop (DESIGN.md: scanner debt).
+
+    plan() picks the devices.json rows to poll once the UDP window has closed, start() opens
+    one poll unless a late broadcast already announced that device, and merge() adds the
+    found results after the scan, letting a broadcast for the same IP or ID win.
+    """
+
+    def __init__( self, enabled, tuyadevices, options, debug_ips ):
+        self.waiting = enabled      # until plan() runs
+        self.tuyadevices = tuyadevices
+        self.options = options
+        self.debug_ips = debug_ips
+        self.pending = {}           # ip -> deviceinfo
+        self.devices = {}           # ip -> ConfiguredDevice
+        self.found = []
+        self.missed = []
+
+    def plan( self, broadcasted_devices, scanned_devices, wantips ):
+        """Return the IPs to poll: rows not heard by broadcast or force-scan (wanted IPs are left to the force-scan)."""
+        self.waiting = False
+        heard_ids = {dev.deviceinfo['gwId'] for dev in broadcasted_devices.values()}
+        heard_ids.update(dev.deviceinfo['gwId'] for dev in scanned_devices.values() if dev.found)
+        self.pending = _configured_candidates(
+            self.tuyadevices, set(broadcasted_devices) | set(scanned_devices), heard_ids, wantips or () )
+        return list(self.pending)
+
+    def start( self, ip, broadcasted_devices ):
+        """Open the poll for a pending IP, or return None if a late broadcast announced that ID at another IP."""
+        gwid = self.pending[ip]['gwId']
+        if any( dev.deviceinfo.get('gwId') == gwid for dev in broadcasted_devices.values() ):
+            return None
+        dev = self.devices[ip] = ConfiguredDevice( ip, self.pending[ip], self.options, ip in self.debug_ips )
+        dev.connect()
+        return dev
+
+    def merge( self, broadcasted_devices, maxdevices, wantids ):
+        """Move found results into broadcasted_devices (a broadcast for the same IP or ID wins) and print them."""
+        heard_ids = {dev.deviceinfo['gwId'] for dev in broadcasted_devices.values()}
+        for ip, dev in self.devices.items():
+            if ip not in broadcasted_devices and dev.deviceinfo['gwId'] not in heard_ids:
+                (self.found if dev.found else self.missed).append(dev)
+        if maxdevices:
+            self.found = self.found[:maxdevices]
+        for dev in self.found:
+            broadcasted_devices[dev.ip] = dev
+            if wantids and dev.deviceinfo['gwId'] in wantids:
+                wantids.remove( dev.deviceinfo['gwId'] )
+            if self.options['verbose']:
+                _print_device_info( dev.deviceinfo, 'Configured IP', self.options['termcolors'], dev.message )
+                dev.displayed = True
+
+
 # Scan function shortcut
 def scan(scantime=None, color=True, forcescan=False, discover=True, assume_yes=False, poll_configured=False):
     """Scans your network for Tuya devices with output to stdout"""
@@ -1357,10 +1410,6 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     timeout_time = time.time() + 5
     scan_ips = None
     current_ip = None
-    want_configured = bool(poll and poll_configured)
-    configured_planned = False
-    configured_pending = {} # ip -> deviceinfo for the configured-IP pass
-    configured_devices = {}
     need_sleep = 0.1
     user_break_count = 0
     client_ip_broadcast_list = {}
@@ -1379,6 +1428,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         # skip malformed devices.json rows instead of crashing the scan
         if isinstance(i, dict) and isinstance(i.get('id'), str) and isinstance(i.get('key'), str):
             options['keylist'].append( KeyObj( i['id'], i['key'] ) )
+
+    configured = _ConfiguredPass( bool(poll and poll_configured), tuyadevices, options, debug_ips )
 
     wantips = [] if not wantips else list(wantips) #['192.168.1.3']
     wantids = [] if not wantids else list(wantids) #['abcdef']
@@ -1455,7 +1506,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         client_ip_broadcast_list[addr] = { 'broadcast': bcast }
 
     while ip_scan_running or scan_end_time > time.time() or device_end_time > time.time() or connect_next_round or \
-            (want_configured and not configured_planned and not user_break_count and not ip_force_wants_end):
+            (configured.waiting and not user_break_count and not ip_force_wants_end):
         if client:
             read_socks = [client, clients, clientapp]
         else:
@@ -1545,17 +1596,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                         else:
                             if current_ip in broadcasted_devices:
                                 continue
-                            elif current_ip in configured_pending:
-                                # a late broadcast may already have announced this ID at another IP
-                                gwid = configured_pending[current_ip]['gwId']
-                                if any( dev.deviceinfo.get('gwId') == gwid for dev in broadcasted_devices.values() ):
-                                    continue
-                                ip = current_ip
-                                configured_devices[ip] = ConfiguredDevice( ip, configured_pending[ip], options, ip in debug_ips )
-                                configured_devices[ip].connect()
-                                devicelist.append( configured_devices[ip] )
-                                check_end_time = time.time() + connect_timeout
-                                if check_end_time > device_end_time: device_end_time = check_end_time
+                            elif current_ip in configured.pending:
+                                dev = configured.start( current_ip, broadcasted_devices )
+                                if dev:
+                                    devicelist.append( dev )
+                                    check_end_time = time.time() + connect_timeout
+                                    if check_end_time > device_end_time: device_end_time = check_end_time
                             elif current_ip in snapshot and snapshot[current_ip]['version'] and snapshot[current_ip]['gwId']:
                                 ip = current_ip
                                 broadcasted_devices[ip] = PollDevice( ip, snapshot[current_ip], options, ip in debug_ips )
@@ -1744,18 +1790,14 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
 
         # After the UDP window and its polls finish, poll devices.json rows that were not heard.
         # Wanted IPs are left to the force-scan below.
-        if want_configured and not configured_planned and (not ip_scan_running) and (not ip_force_wants_end) and \
+        if configured.waiting and (not ip_scan_running) and (not ip_force_wants_end) and \
                 scan_end_time <= time.time() and device_end_time <= time.time() and not user_break_count:
-            configured_planned = True
-            heard_ids = {dev.deviceinfo['gwId'] for dev in broadcasted_devices.values()}
-            heard_ids.update(dev.deviceinfo['gwId'] for dev in scanned_devices.values() if dev.found)
-            configured_pending = _configured_candidates(
-                tuyadevices, set(broadcasted_devices) | set(scanned_devices), heard_ids, wantips or () )
-            if configured_pending:
+            configured_ips = configured.plan( broadcasted_devices, scanned_devices, wantips )
+            if configured_ips:
                 if verbose:
                     print( "%sPolling %d devices.json IPs not heard by broadcast (skip with -no-poll-configured)...%s" %
-                           (term.dim, len(configured_pending), term.normal) )
-                scan_ips = iter(list(configured_pending))
+                           (term.dim, len(configured_ips), term.normal) )
+                scan_ips = iter(configured_ips)
                 ip_scan_running = True
 
         if (not ip_scan_running) and wantips and scan_end_time <= time.time() and device_end_time <= time.time() and not user_break_count:
@@ -1802,22 +1844,8 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             iface['socket'].close()
             del iface['socket']
 
-    # Configured-IP results join the broadcast results; a broadcast for the same IP or ID wins
-    heard_ids = {dev.deviceinfo['gwId'] for dev in broadcasted_devices.values()}
-    configured_found = []
-    configured_missed = []
-    for ip, dev in configured_devices.items():
-        if ip not in broadcasted_devices and dev.deviceinfo['gwId'] not in heard_ids:
-            (configured_found if dev.found else configured_missed).append(dev)
-    if maxdevices:
-        configured_found = configured_found[:maxdevices]
-    for dev in configured_found:
-        broadcasted_devices[dev.ip] = dev
-        if wantids and dev.deviceinfo['gwId'] in wantids:
-            wantids.remove( dev.deviceinfo['gwId'] )
-        if verbose:
-            _print_device_info( dev.deviceinfo, 'Configured IP', term, dev.message )
-            dev.displayed = True
+    # Configured-IP results join the broadcast results now that late broadcasts are settled
+    configured.merge( broadcasted_devices, maxdevices, wantids )
 
     if verbose:
         print( 'Scan completed in', round( time.time() - start_time, 4 ), 'seconds' )
@@ -1870,12 +1898,12 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             "                    \n%sScan Complete!  Found %s devices."
             % (term.normal, found_count)
         )
-        print( 'Broadcasted:', len(broadcasted_devices) - len(configured_found) )
-        if configured_devices:
-            print( 'Configured IPs: %d found, %d not found' % (len(configured_found), len(configured_missed)) )
-            if configured_missed:
+        print( 'Broadcasted:', len(broadcasted_devices) - len(configured.found) )
+        if configured.devices:
+            print( 'Configured IPs: %d found, %d not found' % (len(configured.found), len(configured.missed)) )
+            if configured.missed:
                 missed = ', '.join( '%s (%s: %s)' % (dev.deviceinfo['name'] or dev.deviceinfo['gwId'], dev.ip,
-                                                    dev.deviceinfo.get('err') or 'No response') for dev in configured_missed )
+                                                    dev.deviceinfo.get('err') or 'No response') for dev in configured.missed )
                 print( '%s    Not found at saved IP (offline, moved, or key changed): %s%s' % (term.alertdim, missed, term.normal) )
         if ip_scan:
             key_found = gwid_found = err_found = invalid = unmatched = 0
@@ -1937,7 +1965,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         devicesarray = list(devices.values())
         # Add devices from devices.json even if they didn't poll
         for item in tuyadevices:
-            if not isinstance(item, dict) or not item.get("id"):
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
                 continue
             k = item["id"]
             if not any(d['gwId'] == k for d in devicesarray):
@@ -2196,7 +2224,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
     term = TermColors( *termcolors )
 
     # the scan copes with malformed devices.json rows itself; the listing below needs an id
-    rows = [x for x in tuyadevices if isinstance(x, dict) and x.get('id')]
+    rows = [x for x in tuyadevices if isinstance(x, dict) and isinstance(x.get('id'), str) and x['id']]
     by_id = [x['id'] for x in rows]
     # Scan network for devices and provide polling data
     print(term.normal + "\nScanning local network for Tuya devices...")

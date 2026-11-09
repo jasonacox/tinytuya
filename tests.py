@@ -928,6 +928,21 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(polled, ['192.0.2.20'])
         self.assertEqual(result[self.DEV_ID]['ip'], '192.0.2.99')
 
+    def test_plan_skips_ids_heard_at_other_ips(self):
+        # a device that moved is heard at its new IP (by broadcast or force-scan), not polled at the old one
+        from types import SimpleNamespace
+        from tinytuya import scanner
+        moved = self._row(ip='192.0.2.10')
+        scanned = self._row(ip='192.0.2.20', id='zyxwvutsrqponmlkjihg')
+        silent = self._row(ip='192.0.2.30', id='silentsilentsilentsi')
+        heard = lambda gwid, found=True: SimpleNamespace(deviceinfo={'gwId': gwid}, found=found)
+        configured = scanner._ConfiguredPass(True, [moved, scanned, silent], {}, [])
+        ips = configured.plan({'192.0.2.99': heard(self.DEV_ID)},
+                              {'192.0.2.98': heard('zyxwvutsrqponmlkjihg'), '192.0.2.97': heard('silentsilentsilentsi', False)},
+                              None)
+        self.assertEqual(ips, ['192.0.2.30'])
+        self.assertFalse(configured.waiting)
+
     def test_keyless_row_keeps_its_name_for_a_broadcast(self):
         # regression guard: a broadcast device whose devices.json row has no key is
         # "Missing Local Key", not "Unknown"
@@ -1094,7 +1109,8 @@ class TestScannerRobustness(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
         from tinytuya import scanner
-        rows = ['not-a-row', {'key': LOCAL_KEY}, {'id': self.DEV_ID, 'key': LOCAL_KEY}]
+        rows = ['not-a-row', {'key': LOCAL_KEY}, {'id': ['not', 'a', 'string'], 'key': LOCAL_KEY},
+                {'id': self.DEV_ID, 'key': LOCAL_KEY}]
         with patch.object(scanner, 'devices', return_value={}) as scan, \
                 patch.object(tinytuya, 'load_devicefile', return_value=rows), \
                 patch.object(scanner, 'save_snapshotfile'), redirect_stdout(io.StringIO()):
