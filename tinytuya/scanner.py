@@ -1778,7 +1778,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
                 for dev in devicelist:
                     if dev.ip == ip:
                         if verbose:
-                            print('Aborting force-scan for device', ip, 'due to received broadcast')
+                            print('Aborting %s for device' % ('configured-IP poll' if isinstance(dev, ConfiguredDevice) else 'force-scan'), ip, 'due to received broadcast')
                         dev.abort()
                         break
 
@@ -1904,7 +1904,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if configured.missed:
                 missed = ', '.join( '%s (%s: %s)' % (dev.deviceinfo['name'] or dev.deviceinfo['gwId'], dev.ip,
                                                     dev.deviceinfo.get('err') or 'No response') for dev in configured.missed )
-                print( '%s    Not found at saved IP (offline, moved, or key changed): %s%s' % (term.alertdim, missed, term.normal) )
+                print( '%s    Not found at saved IP (offline, moved, or key or version changed): %s%s' % (term.alertdim, missed, term.normal) )
         if ip_scan:
             key_found = gwid_found = err_found = invalid = unmatched = 0
             for ip in scanned_devices:

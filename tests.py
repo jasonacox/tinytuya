@@ -870,6 +870,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(result, {})
         self.assertIn('Configured IPs: 0 found, 1 not found', out)
         self.assertIn('Old Plug (192.0.2.10: No response)', out)
+        self.assertIn('Not found at saved IP (offline, moved, or key or version changed)', out)
 
     def test_caller_rows_are_not_mutated(self):
         row = self._row()
@@ -905,6 +906,7 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
         self.assertEqual(result[self.DEV_ID]['origin'], 'broadcast')
         # the aborted configured poll is neither a result nor reported as not found
         self.assertIn('Configured IPs: 0 found, 0 not found', out)
+        self.assertIn('Aborting configured-IP poll for device 192.0.2.10', out)
 
     def test_late_broadcast_suppresses_printed_configured_result(self):
         # this row's poll finishes at once, but another one keeps the scan running until the
