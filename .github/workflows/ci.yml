@@ -57,6 +57,31 @@ jobs:
       - name: Contrib tests
         run: python testcontrib.py
 
+  test-os:
+    name: "Test ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Socket, broadcast and console (colorama) behaviour differs per platform
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Byte-compile all modules
+        run: python -m compileall -q tinytuya
+      - name: Unit tests
+        run: python -m tests
+      - name: Contrib tests
+        run: python testcontrib.py
+
   crypto:
     name: "Crypto backend ${{ matrix.backend }}"
     runs-on: ubuntu-26.04
