@@ -490,6 +490,24 @@ class TestHexvalueRoundTrip(unittest.TestCase):
             self.assertAlmostEqual(s, es, delta=0.01)
             self.assertAlmostEqual(v, ev, delta=0.01)
 
+    def test_rgb8_accepts_float_rgb(self):
+        # set_colour() documents r/g/b as floats 0.0-255.0; %x used to raise TypeError
+        self.assertEqual(tinytuya.BulbDevice.rgb_to_hexvalue(255.0, 0.0, 127.6, 'rgb8')[:6], 'ff0080')
+
+    def test_hsv_to_hexvalue_rgb8(self):
+        # hsv_to_hexvalue() feeds float RGB into rgb_to_hexvalue(), so set_hsv() on rgb8 bulbs always crashed
+        hexvalue = tinytuya.BulbDevice.hsv_to_hexvalue(0.0, 1.0, 1.0, 'rgb8')
+        self.assertEqual(hexvalue, 'ff00000000ffff')
+        self.assertEqual(tinytuya.BulbDevice.hexvalue_to_rgb(hexvalue, 'rgb8'), (255, 0, 0))
+
+    def test_set_hsv_A(self):
+        d = build_mock_bulb('A')
+        d.set_hsv(0.5, 0.5, 0.5)
+        result_cmd, result_payload = get_results_from_mock(d)
+        self.assertEqual(result_cmd, tinytuya.CONTROL)
+        self.assertEqual(result_payload['dps']['5'], '40808000b47f7f')
+        self.assertEqual(result_payload['dps']['2'], 'colour')
+
 
 class TestSessionCrypto(unittest.TestCase):
     """Session-key negotiation and GCM nonces must use fresh randomness so the
