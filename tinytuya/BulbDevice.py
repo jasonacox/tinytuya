@@ -216,7 +216,8 @@ class BulbDevice(Device):
 
         if hexformat == 'rgb8':
             # r:0-255,g:0-255,b:0-255|rgb|
-            hexvalue = '%02x%02x%02x' % (r, g, b)
+            # %x requires ints; set_colour() and hsv_to_hexvalue() may pass floats
+            hexvalue = '%02x%02x%02x' % (int(round(r)), int(round(g)), int(round(b)))
             # h:0-360,s:0-255,v:0-255|hsv|
             hexvalue += '%04x%02x%02x' % (int(hsv[0] * 360), int(hsv[1] * 255), int(hsv[2] * 255))
         elif hexformat == 'hsv16':
