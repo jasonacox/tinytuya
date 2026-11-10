@@ -698,7 +698,7 @@ class XenonDevice(object):
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self._send_retry_limit_for(from_child):
-                    self.log.debug(
+                    self._log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
                         self._send_retry_limit_for(from_child)
                     )
@@ -729,7 +729,7 @@ class XenonDevice(object):
                 )
                 # if we exceed the limit of retries then lets get out of here
                 if retries > self._send_retry_limit_for(from_child):
-                    self.log.debug(
+                    self._log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
                         self._send_retry_limit_for(from_child)
                     )

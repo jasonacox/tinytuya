@@ -553,6 +553,46 @@ class TestDeviceLogContext(unittest.TestCase):
         finally:
             logger.removeFilter(filt)
 
+    def test_filter_belongs_on_the_handler_not_the_logger(self):
+        """Filters on the 'tinytuya' logger never run for records propagated
+        from child loggers (tinytuya.core.*), so the README's DeviceIdFilter
+        must be attached to the handler that formats the records."""
+        class DeviceIdFilter(logging.Filter):
+            def filter(self, record):
+                if not hasattr(record, 'device_id'):
+                    record.device_id = '-'
+                return True
+
+        root = logging.getLogger('tinytuya')
+        child = logging.getLogger('tinytuya.core.XenonDevice')
+        # no propagate-suppression or handlers on 'tinytuya' in the test env;
+        # use a private child logger so the setup is hermetic
+        child = logging.getLogger('tinytuya.core.LogFilterTest')
+        fmt = logging.Formatter('%(device_id)s %(message)s')
+
+        # logger-level filter: must NOT be consulted for the child's records
+        root_filter = DeviceIdFilter()
+        root.addFilter(root_filter)
+        try:
+            rec = logging.LogRecord(child.name, logging.DEBUG, __file__, 1,
+                                    'unadapted message', None, None)
+            self.assertFalse(hasattr(rec, 'device_id'),
+                             'a logger filter cannot run on propagated child records')
+
+            # handler-level filter: fills the default before the formatter runs
+            import io
+            stream = io.StringIO()
+            handler = logging.StreamHandler(stream)
+            handler.setFormatter(fmt)
+            handler.addFilter(DeviceIdFilter())
+            rec2 = logging.LogRecord(child.name, logging.DEBUG, __file__, 1,
+                                     'unadapted message', None, None)
+            # the handler pipeline renders what the logger pipeline cannot
+            handler.handle(rec2)
+            self.assertEqual(stream.getvalue(), '- unadapted message\n')
+        finally:
+            root.removeFilter(root_filter)
+
     def test_caller_extra_is_merged(self):
         d = tinytuya.OutletDevice('LOGCTX_DEVICE_3', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
         with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:

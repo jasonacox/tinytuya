@@ -790,7 +790,7 @@ By default, the scan functions will listen for about 18 seconds to find new devi
   data =  a.status()
   print(data)
   ```
-* **Debugging several devices at once:** debug lines from device methods are prefixed with the device ID (e.g. `[0123456789abcdef] sending payload`) and each record carries a `device_id` attribute. Logger names are unchanged (`tinytuya.core.XenonDevice`, `tinytuya.core.Device`, ...). `device_id` is only present on records emitted by device methods, so a shared formatter using `%(device_id)s` must add a filter that supplies a default first, for example:
+* **Debugging several devices at once:** debug lines from device methods are prefixed with the device ID (e.g. `[0123456789abcdef] sending payload`) and each record carries a `device_id` attribute. Logger names are unchanged (`tinytuya.core.XenonDevice`, `tinytuya.core.Device`, ...). `device_id` is only present on records emitted by device methods, so a shared formatter using `%(device_id)s` must add a filter that supplies a default first. Attach the filter to the *handler* (not the `tinytuya` logger): filters on a logger do not run for records propagated up from child loggers like `tinytuya.core.XenonDevice`, so some records would still fail to format:
   ```python
   import logging
   class DeviceIdFilter(logging.Filter):
@@ -798,7 +798,11 @@ By default, the scan functions will listen for about 18 seconds to find new devi
           if not hasattr(record, 'device_id'):
               record.device_id = '-'
           return True
-  logging.getLogger('tinytuya').addFilter(DeviceIdFilter())
+  handler = logging.StreamHandler()
+  handler.setFormatter(logging.Formatter('%(device_id)s %(message)s'))
+  handler.addFilter(DeviceIdFilter())
+  logging.getLogger('tinytuya').addHandler(handler)
+  logging.getLogger('tinytuya').setLevel(logging.DEBUG)
   ```
 * Windows 10 Users - TinyTuya `wizard` and `scan` interactive tools use ANSI color. This will work correctly in PowerShell but will show cryptic escape codes when run in Windows `CMD`.  You can fix this by using the `-nocolor` option on tinytuya, or by changing the Windows `CMD` console registry to process ANSI escape codes by doing something like this:
   ```
