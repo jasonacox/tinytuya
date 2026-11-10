@@ -10,6 +10,7 @@
 * **Cloud token refresh**: a request retried after a token refresh is now signed over the un-encoded query, so retried calls with a comma in a query value (such as `getdevicelog()` event types) no longer fail with a bad signature. Via [#757](https://github.com/jasonacox/tinytuya/pull/757) by @kochj23.
 * **Gateways**: `receive()` on a gateway now returns the result dict for an update queued for another child, not a `(child, result)` tuple. Via [#759](https://github.com/jasonacox/tinytuya/pull/759) by @kochj23.
 * **Payloads**: `generate_payload()` no longer modifies the device's cached command template, so the DPs from one `set_value()` can't leak into a later command (v3.4/3.5 and Zigbee children). Via [#761](https://github.com/jasonacox/tinytuya/pull/761) by @kochj23.
+* **Packaging**: the license is declared as an SPDX expression (PEP 639), which removes the setuptools deprecation warning. Building from source now needs setuptools 77 or newer (pip fetches it automatically). Via [#762](https://github.com/jasonacox/tinytuya/pull/762) by @kochj23.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
