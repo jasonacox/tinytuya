@@ -486,10 +486,43 @@ class TestDeviceLogContext(unittest.TestCase):
         ids = {rec.device_id for rec in cm.records}
         self.assertEqual(ids, {'LOGCTX_A', 'LOGCTX_B'})
 
+    def test_device_id_read_at_emit_time(self):
+        """A device whose id is filled in later (e.g. by a force scan) logs the current id."""
+        d = tinytuya.OutletDevice('', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as first:
+            d._log.debug('before discovery')
+        self.assertIn('[] ', first.records[0].getMessage())
+        d.id = 'LATE_ASSIGNED_ID'
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as second:
+            d._log.debug('after discovery')
+        self.assertTrue(second.records[0].getMessage().startswith('[LATE_ASSIGNED_ID] '))
+        self.assertEqual(second.records[0].device_id, 'LATE_ASSIGNED_ID')
+
+    def test_shared_formatter_needs_a_filter_default(self):
+        """Records that bypass the adapter have no device_id; a filter that
+        supplies a default makes '%(device_id)s' safe in a shared formatter."""
+        class DeviceIdFilter(logging.Filter):
+            def filter(self, record):
+                if not hasattr(record, 'device_id'):
+                    record.device_id = '-'
+                return True
+
+        logger = logging.getLogger('tinytuya.core.XenonDevice')
+        filt = DeviceIdFilter()
+        logger.addFilter(filt)
+        try:
+            with self.assertLogs(logger, level='DEBUG') as cm:
+                logger.debug('no device context here')  # e.g. load_devicefile()/find_device() paths
+            rec = cm.records[0]
+            self.assertEqual(rec.device_id, '-')
+            self.assertEqual(('%(device_id)s' % rec.__dict__), '-')
+        finally:
+            logger.removeFilter(filt)
+
     def test_caller_extra_is_merged(self):
         d = tinytuya.OutletDevice('LOGCTX_DEVICE_3', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
         with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
-            d.log.debug('hello %s', 'world', extra={'foo': 'bar'})
+            d._log.debug('hello %s', 'world', extra={'foo': 'bar'})
         self.assertEqual(cm.records[0].foo, 'bar')
         self.assertEqual(cm.records[0].device_id, 'LOGCTX_DEVICE_3')
         self.assertEqual(cm.records[0].getMessage(), '[LOGCTX_DEVICE_3] hello world')
@@ -2836,12 +2869,24 @@ def _print_sites(path, tree):
     return sites
 
 
+def _log_receiver(func):
+    """'log' or 'self._log' when `func` calls one of those, else None."""
+    if isinstance(func.value, ast.Name) and func.value.id == 'log':
+        return 'log'
+    if (isinstance(func.value, ast.Attribute) and func.value.attr == '_log'
+            and isinstance(func.value.value, ast.Name) and func.value.value.id == 'self'):
+        return 'self._log'
+    return None
+
 def _unguarded_hexlify(path, tree):
-    """'path:function' of log calls that hexlify outside an isEnabledFor() check."""
+    """'path:function' of log calls (module `log` or the device adapter `self._log`) that hexlify outside an isEnabledFor() check."""
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     for node in ast.walk(tree):
         func = getattr(node, 'func', None)
-        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == 'log'):
+        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute)):
+            continue
+        receiver = _log_receiver(func)
+        if not receiver:
             continue
         if not any(getattr(getattr(n, 'func', None), 'attr', None) == 'hexlify' for arg in node.args for n in ast.walk(arg)):
             continue
@@ -2850,7 +2895,7 @@ def _unguarded_hexlify(path, tree):
             child, p = p, parents[p]
             # only the body of `if log.isEnabledFor(logging.DEBUG):` counts, not its else or another level
             guarded = guarded or (isinstance(p, ast.If) and child in p.body
-                                  and ast.unparse(p.test) == 'log.isEnabledFor(logging.DEBUG)')
+                                  and ast.unparse(p.test) == receiver + '.isEnabledFor(logging.DEBUG)')
         if not guarded:
             yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
 

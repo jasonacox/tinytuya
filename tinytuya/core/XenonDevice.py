@@ -26,13 +26,19 @@ class _DeviceLogAdapter(logging.LoggerAdapter):
     Adds per-device context to log messages without changing the logger name:
     messages are prefixed with "[<device id>] " and the LogRecord gets a
     `device_id` attribute (usable in formatters and filters).  Never add keys here.
+    The device's *current* id is read when each record is emitted, so devices
+    whose id is filled in or changed after construction (e.g. by a force scan)
+    are tagged correctly.
     """
+    def __init__(self, logger, device):
+        super(_DeviceLogAdapter, self).__init__(logger, None)
+        self.device = device
+
     def process(self, msg, kwargs):
-        extra = dict(self.extra)
-        if kwargs.get('extra'):
-            extra.update(kwargs['extra'])
+        extra = kwargs.get('extra') or {}
+        extra['device_id'] = getattr(self.device, 'id', None)
         kwargs['extra'] = extra
-        return '[%s] %s' % (self.extra['device_id'], msg), kwargs
+        return '[%s] %s' % (extra['device_id'], msg), kwargs
 
 # Python 2 Support
 IS_PY2 = sys.version_info[0] == 2
@@ -249,7 +255,7 @@ payload_dict = {
 
 class XenonDevice(object):
     # fallbacks in case a subclass logs before XenonDevice.__init__() has run
-    log = log
+    _log = log
     _log_adapters = None
 
     def __init__(
@@ -280,7 +286,7 @@ class XenonDevice(object):
 
         self.id = dev_id
         self._log_adapters = {}
-        self.log = self._device_logger(log)
+        self._log = self._device_logger(log)
         self.cid = cid if cid else node_id
         self.address = address
         self.auto_ip = False
@@ -342,7 +348,7 @@ class XenonDevice(object):
             if not self.cid:
                 # not fatal as the user could have set the device_id to the cid
                 # in that case dev_type should be 'zigbee' to set the proper fields in requests
-                self.log.debug( 'Child device but no cid/node_id given!' )
+                self._log.debug( 'Child device but no cid/node_id given!' )
             XenonDevice.set_version(self, self.parent.version)
             self.parent._register_child(self)
         elif (not address) or address == "Auto" or address == "0.0.0.0":
@@ -350,7 +356,7 @@ class XenonDevice(object):
             self.auto_ip = True
             bcast_data = find_device(dev_id)
             if bcast_data['ip'] is None:
-                self.log.debug("Unable to find device on network (specify IP address)")
+                self._log.debug("Unable to find device on network (specify IP address)")
                 raise RuntimeError("Unable to find device on network (specify IP address)")
             self.address = bcast_data['ip']
             self.set_version(float(bcast_data['version']))
@@ -368,7 +374,7 @@ class XenonDevice(object):
             return logger
         adapter = self._log_adapters.get(logger.name)
         if adapter is None:
-            adapter = self._log_adapters[logger.name] = _DeviceLogAdapter(logger, {'device_id': self.id})
+            adapter = self._log_adapters[logger.name] = _DeviceLogAdapter(logger, self)
         return adapter
 
     def __del__(self):
@@ -396,7 +402,7 @@ class XenonDevice(object):
                 if self.auto_ip and not self.address:
                     bcast_data = find_device(self.id)
                     if bcast_data['ip'] is None:
-                        self.log.debug("Unable to find device on network (specify IP address)")
+                        self._log.debug("Unable to find device on network (specify IP address)")
                         return ERR_OFFLINE
                     self.address = bcast_data['ip']
                     new_version = float(bcast_data['version'])
@@ -410,14 +416,14 @@ class XenonDevice(object):
                         self.payload_dict = None
 
                 if not self.address:
-                    self.log.debug("No address for device!")
+                    self._log.debug("No address for device!")
                     return ERR_OFFLINE
 
                 if (self.version > 3.1) and ((not self.local_key) or (len(self.local_key) != 16)):
                     if not self.local_key:
-                        self.log.debug("No local key for device!")
+                        self._log.debug("No local key for device!")
                     else:
-                        self.log.debug("Bad local key length for device!")
+                        self._log.debug("Bad local key length for device!")
                     return ERR_KEY_OR_VER
 
                 family = socket.AF_INET6 if ':' in self.address else socket.AF_INET
@@ -441,14 +447,14 @@ class XenonDevice(object):
                         return True
                 except socket.timeout as e:
                     # unable to open socket
-                    self.log.debug(
+                    self._log.debug(
                         "socket unable to connect (timeout) - retry %d/%d",
                         retries, self.socketRetryLimit
                     )
                     err = ERR_OFFLINE
                 except Exception as e:
                     # unable to open socket
-                    self.log.debug(
+                    self._log.debug(
                         "socket unable to connect (exception) - retry %d/%d",
                         retries, self.socketRetryLimit, exc_info=True
                     )
@@ -478,7 +484,7 @@ class XenonDevice(object):
         while length > 0:
             newdata = self.socket.recv(length)
             if not newdata or len(newdata) == 0:
-                self.log.debug("_recv_all(): no data? %r", newdata)
+                self._log.debug("_recv_all(): no data? %r", newdata)
                 # connection closed?
                 tries -= 1
                 if tries == 0:
@@ -510,8 +516,8 @@ class XenonDevice(object):
         prefix_offset_6699 = data.find( H.PREFIX_6699_BIN )
 
         while prefix_offset_55AA != 0 and prefix_offset_6699 != 0:
-            self.log.debug('Message prefix not at the beginning of the received data!')
-            self.log.debug('Offset 55AA: %d, 6699: %d, Received data: %r', prefix_offset_55AA, prefix_offset_6699, data)
+            self._log.debug('Message prefix not at the beginning of the received data!')
+            self._log.debug('Offset 55AA: %d, 6699: %d, Received data: %r', prefix_offset_55AA, prefix_offset_6699, data)
             if prefix_offset_55AA < 0 and prefix_offset_6699 < 0:
                 data = data[1-prefix_len:]
             else:
@@ -533,8 +539,8 @@ class XenonDevice(object):
         if remaining > 0:
             data += self._recv_all( remaining )
 
-        if self.log.isEnabledFor(logging.DEBUG):
-            self.log.debug("received data=%r", binascii.hexlify(data))
+        if self._log.isEnabledFor(logging.DEBUG):
+            self._log.debug("received data=%r", binascii.hexlify(data))
         hmac_key = self.local_key if self.version >= 3.4 else None
         no_retcode = False #None if self.version >= 3.5 else False
         msg = unpack_message(data, header=header, hmac_key=hmac_key, no_retcode=no_retcode)
@@ -550,7 +556,7 @@ class XenonDevice(object):
         if self.parent:
             return self.parent._send_receive_quick(payload, recv_retries, from_child=self)
 
-        self.log.debug("sending payload quick")
+        self._log.debug("sending payload quick")
         self.raw_sent = None
         self.raw_recv = []
         self.cmd_retcode = None
@@ -580,9 +586,9 @@ class XenonDevice(object):
                     return msg
             recv_retries -= 1
             if recv_retries == 0:
-                self.log.debug("received null payload (%r) but out of recv retries, giving up", msg)
+                self._log.debug("received null payload (%r) but out of recv retries, giving up", msg)
             else:
-                self.log.debug("received null payload (%r), fetch new one - %s retries remaining", msg, recv_retries)
+                self._log.debug("received null payload (%r), fetch new one - %s retries remaining", msg, recv_retries)
         return False
 
     def _send_receive(self, payload, minresponse=28, getresponse=True, decode_response=True, from_child=None):
@@ -632,7 +638,7 @@ class XenonDevice(object):
             # send request to device
             try:
                 if payload is not None and do_send:
-                    self.log.debug("sending payload")
+                    self._log.debug("sending payload")
                     enc_payload = self._encode_message(payload) if type(payload) == MessagePayload else payload
                     self.socket.sendall(enc_payload)
                     try:
@@ -653,19 +659,19 @@ class XenonDevice(object):
                         self.raw_recv.append(rmsg)
                         self._get_retcode(self.raw_sent, rmsg) # set self.cmd_retcode
                     if (not msg or len(msg.payload) == 0) and recv_retries <= max_recv_retries:
-                        self.log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
+                        self._log.debug("received null payload (%r), fetch new one - retry %s / %s", msg, recv_retries, max_recv_retries)
                         recv_retries += 1
                         if recv_retries > max_recv_retries:
                             success = True
                     else:
                         success = True
-                        self.log.debug("received message=%r", msg)
+                        self._log.debug("received message=%r", msg)
                 else:
                     # legacy/default mode avoids persisting socket across commands
                     self._check_socket_close()
                     return None
             except (KeyboardInterrupt, SystemExit) as err:
-                self.log.debug("Keyboard Interrupt - Exiting")
+                self._log.debug("Keyboard Interrupt - Exiting")
                 raise
             except socket.timeout as err:
                 # a socket timeout occurred
@@ -677,7 +683,7 @@ class XenonDevice(object):
                 retries += 1
                 # toss old socket and get new one
                 self._check_socket_close(True)
-                self.log.debug(
+                self._log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
                     retries, self._send_retry_limit_for(from_child)
                 )
@@ -692,7 +698,7 @@ class XenonDevice(object):
                 # wait a bit before retrying
                 time.sleep(0.1)
             except DecodeError as err:
-                self.log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
+                self._log.debug("Error decoding received data - read retry %s/%s", recv_retries, max_recv_retries, exc_info=True)
                 recv_retries += 1
                 if recv_retries > max_recv_retries:
                     # we recieved at least 1 valid message with a null payload, so the send was successful
@@ -708,7 +714,7 @@ class XenonDevice(object):
                 retries += 1
                 # toss old socket and get new one
                 self._check_socket_close(True)
-                self.log.debug(
+                self._log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
                     retries, self._send_retry_limit_for(from_child), exc_info=True
                 )
@@ -718,7 +724,7 @@ class XenonDevice(object):
                         "Exceeded tinytuya send retry limit (%s)",
                         self._send_retry_limit_for(from_child)
                     )
-                    self.log.debug("Unable to connect to device ")
+                    self._log.debug("Unable to connect to device ")
                     # timeout reached - return error
                     return error_json(ERR_CONNECT)
                 # wait a bit before retrying
@@ -737,7 +743,7 @@ class XenonDevice(object):
     def _process_message( self, msg, dev_type=None, from_child=None, minresponse=28, decode_response=True ):
         # null packet, nothing to decode
         if not msg or len(msg.payload) == 0:
-            self.log.debug("raw unpacked message = %r", msg)
+            self._log.debug("raw unpacked message = %r", msg)
             # legacy/default mode avoids persisting socket across commands
             self._check_socket_close()
             return None
@@ -749,18 +755,18 @@ class XenonDevice(object):
         # and return payload decrypted
         try:
             # Data available: seqno cmd retcode payload crc
-            self.log.debug("raw unpacked message = %r", msg)
+            self._log.debug("raw unpacked message = %r", msg)
             result = self._decode_payload(msg.payload)
 
             if result is None:
-                self.log.debug("_decode_payload() failed!")
+                self._log.debug("_decode_payload() failed!")
         except:
-            self.log.debug("error unpacking or decoding tuya JSON payload", exc_info=True)
+            self._log.debug("error unpacking or decoding tuya JSON payload", exc_info=True)
             result = error_json(ERR_PAYLOAD)
 
         # Did we detect a device22 device? Return ERR_DEVTYPE error.
         if dev_type and dev_type != self.dev_type:
-            self.log.debug(
+            self._log.debug(
                 "Device22 detected and updated (%s -> %s) - Update payload and try again",
                 dev_type,
                 self.dev_type,
@@ -783,7 +789,7 @@ class XenonDevice(object):
 
             if from_child and from_child is not True and from_child != found_child:
                 # async update from different CID, try again
-                self.log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, from_child.cid )
+                self._log.debug( 'Recieved async update for wrong CID %s while looking for CID %s, trying again', found_cid, from_child.cid )
                 if self.socketPersistent:
                     # if persistent, save response until the next receive() call
                     # otherwise, trash it
@@ -796,7 +802,7 @@ class XenonDevice(object):
                     self.received_wrong_cid_queue.append( (found_child, result) )
                     # cap the queue so a stream of wrong-CID updates cannot grow it unbounded
                     if len(self.received_wrong_cid_queue) > 100:
-                        self.log.debug( 'received_wrong_cid_queue exceeded 100 entries, dropping oldest' )
+                        self._log.debug( 'received_wrong_cid_queue exceeded 100 entries, dropping oldest' )
                         self.received_wrong_cid_queue.pop(0)
                 # events should not be coming in so fast that we will never timeout a read, so don't worry about loops
                 return self._send_receive( None, minresponse, True, decode_response, from_child=from_child)
@@ -812,20 +818,20 @@ class XenonDevice(object):
         return self._process_response(result)
 
     def _decode_payload(self, payload):
-        self.log.debug("decode payload=%r", payload)
+        self._log.debug("decode payload=%r", payload)
         cipher = AESCipher(self.local_key)
 
         if self.version == 3.4:
             # 3.4 devices encrypt the version header in addition to the payload
             try:
-                self.log.debug("decrypting=%r", payload)
+                self._log.debug("decrypting=%r", payload)
                 payload = cipher.decrypt(payload, False, decode_text=False)
             except:
-                self.log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                self._log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
                 return error_json(ERR_PAYLOAD)
 
-            self.log.debug("decrypted 3.x payload=%r", payload)
-            self.log.debug("payload type = %s", type(payload))
+            self._log.debug("decrypted 3.x payload=%r", payload)
+            self._log.debug("payload type = %s", type(payload))
 
         if payload.startswith(H.PROTOCOL_VERSION_BYTES_31):
             # Received an encrypted payload
@@ -838,22 +844,22 @@ class XenonDevice(object):
             # Trim header for non-default device type
             if payload.startswith( self.version_bytes ):
                 payload = payload[len(self.version_header) :]
-                self.log.debug("removing 3.x=%r", payload)
+                self._log.debug("removing 3.x=%r", payload)
             elif self.dev_type == "device22" and (len(payload) & 0x0F) != 0:
                 payload = payload[len(self.version_header) :]
-                self.log.debug("removing device22 3.x header=%r", payload)
+                self._log.debug("removing device22 3.x header=%r", payload)
 
             if self.version < 3.4:
                 try:
-                    self.log.debug("decrypting=%r", payload)
+                    self._log.debug("decrypting=%r", payload)
                     payload = cipher.decrypt(payload, False, decode_text=False)
                 except:
-                    self.log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                    self._log.debug("incomplete payload=%r (len:%d)", payload, len(payload), exc_info=True)
                     return error_json(ERR_PAYLOAD)
 
-                self.log.debug("decrypted 3.x payload=%r", payload)
+                self._log.debug("decrypted 3.x payload=%r", payload)
                 # Try to detect if device22 found
-                self.log.debug("payload type = %s", type(payload))
+                self._log.debug("payload type = %s", type(payload))
 
             if isinstance(payload, str):
                 payload = payload.encode('utf-8')
@@ -862,13 +868,13 @@ class XenonDevice(object):
                 self.dev_type = "device22"
                 # set at least one DPS
                 self.dps_to_request = {"1": None}
-                self.log.debug(
+                self._log.debug(
                     "'data unvalid' error detected: switching to dev_type %r",
                     self.dev_type,
                 )
                 return None
         elif not payload.startswith(b"{"):
-            self.log.debug("Unexpected payload=%r", payload)
+            self._log.debug("Unexpected payload=%r", payload)
             return error_json(ERR_PAYLOAD, payload)
 
         invalid_json = None
@@ -887,10 +893,10 @@ class XenonDevice(object):
 
             # if .decode() threw an exception, `payload` will still be bytes
             if not isinstance(payload, str):
-                self.log.debug("payload was not string type and decoding failed")
+                self._log.debug("payload was not string type and decoding failed")
                 return error_json(ERR_JSON, payload)
 
-        self.log.debug("decoded results=%r", payload)
+        self._log.debug("decoded results=%r", payload)
         try:
             json_payload = json.loads(payload)
         except:
@@ -916,9 +922,9 @@ class XenonDevice(object):
         if (not self.socketPersistent) or (not self.socket):
             return
 
-        self.log.debug('caching: %s', response)
+        self._log.debug('caching: %s', response)
         merge_dps_results(self._last_status, response)
-        self.log.debug('merged: %s', self._last_status)
+        self._log.debug('merged: %s', self._last_status)
 
     def _process_response(self, response): # pylint: disable=R0201
         """
@@ -949,38 +955,38 @@ class XenonDevice(object):
     def _negotiate_session_key_generate_step_3( self, rkey ):
         if not rkey or type(rkey) != TuyaMessage or len(rkey.payload) < 48:
             # error
-            self.log.debug("session key negotiation failed on step 1")
+            self._log.debug("session key negotiation failed on step 1")
             return False
 
         if rkey.cmd != CT.SESS_KEY_NEG_RESP:
-            self.log.debug("session key negotiation step 2 returned wrong command: %d", rkey.cmd)
+            self._log.debug("session key negotiation step 2 returned wrong command: %d", rkey.cmd)
             return False
 
         payload = rkey.payload
         if self.version == 3.4:
             try:
-                self.log.debug("decrypting=%r", payload)
+                self._log.debug("decrypting=%r", payload)
                 cipher = AESCipher(self.real_local_key)
                 payload = cipher.decrypt(payload, False, decode_text=False)
             except:
-                self.log.debug("session key step 2 decrypt failed, payload=%r (len:%d)", payload, len(payload), exc_info=True)
+                self._log.debug("session key step 2 decrypt failed, payload=%r (len:%d)", payload, len(payload), exc_info=True)
                 return False
 
-        self.log.debug("decrypted session key negotiation step 2 payload=%r", payload)
-        self.log.debug("payload type = %s len = %d", type(payload), len(payload))
+        self._log.debug("decrypted session key negotiation step 2 payload=%r", payload)
+        self._log.debug("payload type = %s len = %d", type(payload), len(payload))
 
         if len(payload) < 48:
-            self.log.debug("session key negotiation step 2 failed, too short response")
+            self._log.debug("session key negotiation step 2 failed, too short response")
             return False
 
         self.remote_nonce = payload[:16]
         hmac_check = hmac.new(self.local_key, self.local_nonce, sha256).digest()
 
         if hmac_check != payload[16:48]:
-            self.log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
+            self._log.debug("session key negotiation step 2 failed HMAC check! wanted=%r but got=%r", binascii.hexlify(hmac_check), binascii.hexlify(payload[16:48]))
             return False
 
-        self.log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
+        self._log.debug("session local nonce: %r remote nonce: %r", self.local_nonce, self.remote_nonce)
 
         rkey_hmac = hmac.new(self.local_key, self.remote_nonce, sha256).digest()
         return MessagePayload(CT.SESS_KEY_NEG_FINISH, rkey_hmac)
@@ -991,17 +997,17 @@ class XenonDevice(object):
             self.local_key = ''.join(k)
         else:
             self.local_key = bytes( [ a^b for (a,b) in zip(self.local_nonce,self.remote_nonce) ] )
-        self.log.debug("Session nonce XOR'd: %r", self.local_key)
+        self._log.debug("Session nonce XOR'd: %r", self.local_key)
 
         cipher = AESCipher(self.real_local_key)
         if self.version == 3.4:
             self.local_key = cipher.encrypt( self.local_key, False, pad=False )
         else:
             iv = self.local_nonce[:12]
-            self.log.debug("Session IV: %r", iv)
+            self._log.debug("Session IV: %r", iv)
             self.local_key = cipher.encrypt( self.local_key, use_base64=False, pad=False, iv=iv )[12:28]
 
-        self.log.debug("Session key negotiate success! session key: %r", self.local_key)
+        self._log.debug("Session key negotiate success! session key: %r", self.local_key)
         return True
 
     # adds protocol header (if needed) and encrypts
@@ -1019,7 +1025,7 @@ class XenonDevice(object):
             if msg.cmd not in H.NO_PROTOCOL_HEADER_CMDS:
                 # add the 3.x header
                 payload = self.version_header + payload
-            self.log.debug('final payload: %r', payload)
+            self._log.debug('final payload: %r', payload)
 
             if self.version >= 3.5:
                 iv = True
@@ -1027,8 +1033,8 @@ class XenonDevice(object):
                 msg = TuyaMessage(self.seqno, msg.cmd, None, payload, 0, True, H.PREFIX_6699_VALUE, True)
                 self.seqno += 1  # increase message sequence number
                 data = pack_message(msg,hmac_key=self.local_key)
-                if self.log.isEnabledFor(logging.DEBUG):
-                    self.log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
+                if self._log.isEnabledFor(logging.DEBUG):
+                    self._log.debug("payload [%d] encrypted=%r",self.seqno, binascii.hexlify(data) )
                 return data
 
             payload = self.cipher.encrypt(payload, False)
@@ -1063,8 +1069,8 @@ class XenonDevice(object):
         msg = TuyaMessage(self.seqno, msg.cmd, 0, payload, 0, True, H.PREFIX_55AA_VALUE, False)
         self.seqno += 1  # increase message sequence number
         buffer = pack_message(msg,hmac_key=hmac_key)
-        if self.log.isEnabledFor(logging.DEBUG):
-            self.log.debug("payload encrypted=%r",binascii.hexlify(buffer))
+        if self._log.isEnabledFor(logging.DEBUG):
+            self._log.debug("payload encrypted=%r",binascii.hexlify(buffer))
         return buffer
 
     def _get_retcode(self, sent, msg):
@@ -1081,7 +1087,7 @@ class XenonDevice(object):
 
     def _register_child(self, child):
         if child.id in self.children and child != self.children[child.id]:
-            self.log.debug('Replacing existing child %r!', child.id)
+            self._log.debug('Replacing existing child %r!', child.id)
         self.children[child.id] = child
         # disable device22 detection as some gateways return "json obj data unvalid" when the gateway is polled without a cid
         self.disabledetect = True
@@ -1105,20 +1111,20 @@ class XenonDevice(object):
     def status(self, nowait=False):
         """Return device status."""
         query_type = CT.DP_QUERY
-        self.log.debug("status() entry (dev_type is %s)", self.dev_type)
+        self._log.debug("status() entry (dev_type is %s)", self.dev_type)
         payload = self.generate_payload(query_type)
 
         data = self._send_receive(payload, 0, getresponse=(not nowait))
-        self.log.debug("status() received data=%r", data)
+        self._log.debug("status() received data=%r", data)
         # Error handling
         if (not nowait) and data and "Err" in data:
             if data["Err"] == str(ERR_DEVTYPE):
                 # Device22 detected and change - resend with new payload
-                self.log.debug("status() rebuilding payload for device22")
+                self._log.debug("status() rebuilding payload for device22")
                 payload = self.generate_payload(query_type)
                 data = self._send_receive(payload)
             elif data["Err"] == str(ERR_PAYLOAD):
-                self.log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
+                self._log.debug("Status request returned an error, is version %r and local key %r correct?", self.version, self.local_key)
 
         return data
 
@@ -1138,12 +1144,12 @@ class XenonDevice(object):
             return self._historic_status
         if (not self._have_status) or (not self.socketPersistent) or (not self.socket) or (not self._last_status):
             if not nowait:
-                self.log.debug("Last status caching not available, requesting status from device")
+                self._log.debug("Last status caching not available, requesting status from device")
                 return self.status()
-            self.log.debug("Last status caching not available, returning None")
+            self._log.debug("Last status caching not available, returning None")
             return None
 
-        #self.log.debug("Have status cache, returning it")
+        #self._log.debug("Have status cache, returning it")
         return self._last_status
 
     def cache_clear(self):
@@ -1174,7 +1180,7 @@ class XenonDevice(object):
             try:
                 data = self.status()
             except Exception as ex:
-                self.log.exception("Failed to get status: %s", ex)
+                self._log.exception("Failed to get status: %s", ex)
                 raise
             if data is not None and "dps" in data:
                 for k in data["dps"]:
@@ -1183,7 +1189,7 @@ class XenonDevice(object):
             if self.dev_type == "default":
                 self.dps_to_request = self.dps_cache
                 return self.dps_cache
-        self.log.debug("Detected dps: %s", self.dps_cache)
+        self._log.debug("Detected dps: %s", self.dps_cache)
         self.dps_to_request = self.dps_cache
         return self.dps_cache
 
@@ -1357,7 +1363,7 @@ class XenonDevice(object):
                 _merge_payload_dicts( self.payload_dict, payload_dict['zigbee_'+self.version_str] )
             if self.dev_type != 'default':
                 _merge_payload_dicts( self.payload_dict, payload_dict[self.dev_type] )
-            self.log.debug( 'final payload_dict for %r (%r/%r): %r', self.id, self.version_str, self.dev_type, self.payload_dict )
+            self._log.debug( 'final payload_dict for %r (%r/%r): %r', self.id, self.version_str, self.dev_type, self.payload_dict )
             # save it so we don't have to calculate this again unless something changes
             self.last_dev_type = self.dev_type
 
@@ -1434,7 +1440,7 @@ class XenonDevice(object):
         # if spaces are not removed device does not respond!
         payload = payload.replace(" ", "")
         payload = payload.encode("utf-8")
-        self.log.debug("building command %s payload=%r", command, payload)
+        self._log.debug("building command %s payload=%r", command, payload)
 
         # create Tuya message packet
         return MessagePayload(command_override, payload)

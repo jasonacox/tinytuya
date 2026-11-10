@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* **Per-device debug logging:** debug lines from device methods are prefixed with the device ID and each log record carries a `device_id` attribute, so output from several devices (e.g. Home Assistant or Monitor setups) can be told apart without changing logger names. Logger names, handlers and existing formatters are untouched. See [#746](https://github.com/jasonacox/tinytuya/issues/746), with the original idea from @uzlonewolf in [#300](https://github.com/jasonacox/tinytuya/pull/300), implemented by @kochj23 in [#758](https://github.com/jasonacox/tinytuya/pull/758).
+
 * **Python support**: TinyTuya now requires Python 3.10 or newer, and CI adds Python 3.15. Python 3.7, 3.8 and 3.9 are end-of-life and no longer run on GitHub's current runners. `setup.py` declares `python_requires=">=3.10"`, so pip on older Pythons keeps installing v1.20.0. Via [#748](https://github.com/jasonacox/tinytuya/pull/748) by @jasonacox.
 * **Scanner robustness**: a malformed `devices.json` row (missing `id` or `key`, or not an object) no longer crashes a scan or the `devices` listing, Ctrl-C on the first loop pass no longer raises `NameError`, and the scanner no longer reads from a socket a device replaced while reconnecting. Via [#750](https://github.com/jasonacox/tinytuya/pull/750), from fixes by @merodahero in [#735](https://github.com/jasonacox/tinytuya/pull/735).
 * **Scanner output**: a device that drops the connection mid-poll no longer prints a Python traceback during a scan. It's still reported as `Send Poll failed`, and the traceback goes to the debug log. Via [#765](https://github.com/jasonacox/tinytuya/pull/765) by @jasonacox.
