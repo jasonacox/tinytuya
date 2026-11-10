@@ -3,6 +3,12 @@
 ## Unreleased
 
 * **Python support**: TinyTuya now requires Python 3.10 or newer, and CI adds Python 3.15. Python 3.7, 3.8 and 3.9 are end-of-life and no longer run on GitHub's current runners. `setup.py` declares `python_requires=">=3.10"`, so pip on older Pythons keeps installing v1.20.0. Via [#748](https://github.com/jasonacox/tinytuya/pull/748) by @jasonacox.
+* **Scanner robustness**: a malformed `devices.json` row (missing `id` or `key`, or not an object) no longer crashes a scan or the `devices` listing, Ctrl-C on the first loop pass no longer raises `NameError`, and the scanner no longer reads from a socket a device replaced while reconnecting. Via [#750](https://github.com/jasonacox/tinytuya/pull/750), from fixes by @merodahero in [#735](https://github.com/jasonacox/tinytuya/pull/735).
+* **Scanner output**: a device that drops the connection mid-poll no longer prints a Python traceback during a scan. It's still reported as `Send Poll failed`, and the traceback goes to the debug log. Via [#765](https://github.com/jasonacox/tinytuya/pull/765) by @jasonacox.
+* **BulbDevice**: `set_hsv()` and `set_colour()` no longer crash on rgb8 (Type A) bulbs when given float values. Via [#755](https://github.com/jasonacox/tinytuya/pull/755) by @kochj23.
+* **Cloud logs**: `getdevicelog(size=...)` above 100 now keeps paging until it has the requested number of rows, instead of stopping after one 100-row page. Via [#756](https://github.com/jasonacox/tinytuya/pull/756) by @kochj23.
+* **Cloud token refresh**: a request retried after a token refresh is now signed over the un-encoded query, so retried calls with a comma in a query value (such as `getdevicelog()` event types) no longer fail with a bad signature. Via [#757](https://github.com/jasonacox/tinytuya/pull/757) by @kochj23.
+* **Gateways**: `receive()` on a gateway now returns the result dict for an update queued for another child, not a `(child, result)` tuple. Via [#759](https://github.com/jasonacox/tinytuya/pull/759) by @kochj23.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
