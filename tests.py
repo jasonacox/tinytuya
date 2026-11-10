@@ -135,6 +135,15 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_generate_payload_does_not_mutate_template(self):
+        # v3.4+/zigbee templates contain a nested "data" dict; a shallow copy let
+        # the DPs of one command leak into the cached template and later payloads
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.4)
+        d.generate_payload(tinytuya.CONTROL, {'1': True})
+        self.assertEqual(d.payload_dict[tinytuya.CONTROL]['command']['data'], {})
+        msg = d.generate_payload(tinytuya.CONTROL)
+        self.assertNotIn('dps', json.loads(msg.payload.decode('utf-8'))['data'])
+
     def test_set_colour_A(self):
         # arrange
         d = build_mock_bulb('A')
