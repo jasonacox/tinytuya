@@ -1282,6 +1282,21 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertEqual((retry.cmd, retry.payload, retry.crc_good), (first.cmd, first.payload, True))
         self.assertEqual(retry.seqno, first.seqno + 1)
 
+    def test_brute_forced_key_poll_goes_through_the_guarded_write(self):
+        # brute_force_found_key() also runs from timeout(), which the scan loop calls outside
+        # its socket-error guard; it used to send the poll directly and abort the scan on a dropped connection
+        from tinytuya import scanner
+        dev = self._force_scanned_device()
+        dev.cur_key = scanner.KeyObj(self.DEV_ID, LOCAL_KEY)
+        dev.sock.sendall.side_effect = BrokenPipeError(32, 'Broken pipe')
+        dev.brute_force_found_key()
+        dev.sock.sendall.assert_not_called()
+        self.assertEqual((dev.step, dev.write, dev.read, len(dev.send_queue)), (scanner.FSCAN_FINAL_POLL, True, False, 1))
+        dev.sock.sendall.side_effect = None
+        dev.write_data()
+        sent = mh.unpack_message(dev.sock.sendall.call_args.args[0], no_retcode=True)
+        self.assertEqual((sent.cmd, dev.send_queue, dev.read), (tinytuya.DP_QUERY, [], True))
+
     def test_socket_error_times_out_the_device_not_the_scan(self):
         # e.g. a v3.4/3.5 device drops the connection during key negotiation
         from tinytuya import scanner

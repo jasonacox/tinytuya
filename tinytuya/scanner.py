@@ -879,14 +879,16 @@ class ForceScannedDevice(DeviceDetect):
         if self.debug:
             print('ForceScannedDevice: v3.x brute forced key', self.cur_key.key, 'for', self.ip)
         self.brute_force_data = []
-        self.read = True
-        self.write = False
         self.ver_found = True
         self.deviceinfo['key'] = self.cur_key.key
         self.found_key()
         self.device.local_key = self.device.real_local_key = self.cur_key.key_encoded
-        self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
+        # queue the poll for write_data(): this also runs from timeout(), outside the scan
+        # loop's socket-error guard, so a direct send to a dropped connection would abort the scan
         self.step = FSCAN_FINAL_POLL
+        self.send_queue.append( self.device.generate_payload(tinytuya.DP_QUERY) )
+        self.read = False
+        self.write = True
         self.message = "%s    Polling %s Failed: No response to poll request" % (self.options['termcolors'].alertdim, self.ip)
         self.timeo = time.time() + 2.0
         self.cur_key.used = True
