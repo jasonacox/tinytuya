@@ -1,2 +1,2 @@
 [build-system]
-requires = ["setuptools", "colorama", "requests", "cryptography"]
+requires = ["setuptools>=77", "colorama", "requests", "cryptography"]

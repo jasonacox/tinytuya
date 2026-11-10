@@ -11,6 +11,7 @@
 * **Gateways**: `receive()` on a gateway now returns the result dict for an update queued for another child, not a `(child, result)` tuple. Via [#759](https://github.com/jasonacox/tinytuya/pull/759) by @kochj23.
 * **Payloads**: `generate_payload()` no longer modifies the device's cached command template, so the DPs from one `set_value()` can't leak into a later command (v3.4/3.5 and Zigbee children). Via [#761](https://github.com/jasonacox/tinytuya/pull/761) by @kochj23.
 * **Scanner: find devices that don't broadcast**: `scan`, `devices` and `wizard` now also poll each `devices.json` device that wasn't heard over UDP, once, at its saved IP, so silent devices (some v3.5 meters, or devices across a VLAN) appear as *Configured IP* results; devices that don't answer add about 3 seconds and are listed in the scan summary (skip with `-no-poll-configured`). Library calls opt in with `poll_configured=True`. Via [#735](https://github.com/jasonacox/tinytuya/pull/735) by @merodahero.
+* **Packaging**: the license is declared as an SPDX expression (PEP 639), which removes the setuptools deprecation warning. Building from source now needs setuptools 77 or newer (pip fetches it automatically). Via [#762](https://github.com/jasonacox/tinytuya/pull/762) by @kochj23.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 
