@@ -706,7 +706,7 @@ class TestScannerRobustness(unittest.TestCase):
         from contextlib import redirect_stdout
         from tinytuya import scanner
 
-        udp = MagicMock()
+        udp, tcp = MagicMock(), MagicMock()  # UDP listeners, and the TCP socket a polled device opens
         if payload:
             udp.recvfrom.return_value = (b'packet', (payload['ip'], scanner.UDPPORT))
         delivered = []
@@ -718,7 +718,7 @@ class TestScannerRobustness(unittest.TestCase):
             return ([], [], [])
 
         out = io.StringIO()
-        with patch.object(scanner.socket, 'socket', side_effect=lambda *a, **k: udp), \
+        with patch.object(scanner.socket, 'socket', side_effect=lambda *a, **k: tcp if a[1:2] == (scanner.socket.SOCK_STREAM,) else udp), \
                 patch.object(scanner.select, 'select', side_effect=select_fn or default_select), \
                 patch.object(scanner, 'get_ip_to_broadcast', return_value={}), \
                 patch.object(scanner, 'send_discovery_request'), \
@@ -776,6 +776,61 @@ class TestScannerRobustness(unittest.TestCase):
             scanner.alldevices(color=False, assume_yes=True)
         self.assertEqual(scan.call_args.kwargs['wantids'], [self.DEV_ID])
         self.assertIs(scan.call_args.kwargs['tuyadevices'], rows)
+
+    def _force_scanned_device(self):
+        from tinytuya import scanner
+        options = {'connect_timeout': 3, 'data_timeout': 3, 'termcolors': scanner.TermColors(*tinytuya.termcolor(False)),
+                   'verbose': False, 'retries': 2, 'tuyadevices': [], 'keylist': []}
+        with patch.object(scanner.socket, 'socket', return_value=MagicMock()):
+            dev = scanner.ForceScannedDevice('192.0.2.10', None, options, False)
+        dev.sock.getpeername.return_value = ('192.0.2.10', 6668)
+        return dev
+
+    def test_force_scan_resends_a_queued_frame_once(self):
+        # a failed first send is queued and retried on the next write event; the retry used to
+        # re-encode the already-encoded bytes and crash the scan with AttributeError
+        dev = self._force_scanned_device()
+        dev.sock.sendall.side_effect = [BrokenPipeError(32, 'Broken pipe'), None]
+        dev.write_data()
+        self.assertEqual(len(dev.send_queue), 1)
+        dev.write_data()
+        self.assertEqual(dev.send_queue, [])
+        # the retry is a fresh frame (next seqno) carrying the same command and payload
+        first, retry = [mh.unpack_message(c.args[0], no_retcode=True) for c in dev.sock.sendall.call_args_list]
+        self.assertEqual((retry.cmd, retry.payload, retry.crc_good), (first.cmd, first.payload, True))
+        self.assertEqual(retry.seqno, first.seqno + 1)
+
+    def test_socket_error_times_out_the_device_not_the_scan(self):
+        # e.g. a v3.4/3.5 device drops the connection during key negotiation
+        from tinytuya import scanner
+        dev = MagicMock(ip='192.0.2.10')
+        with self.assertLogs(scanner.log, logging.DEBUG):
+            scanner._handle_socket_event(dev, MagicMock(side_effect=ConnectionResetError(54, 'reset')))
+        dev.timeout.assert_called_once_with()
+        # anything other than a socket error is a bug and still surfaces
+        with self.assertRaises(KeyError):
+            scanner._handle_socket_event(dev, MagicMock(side_effect=KeyError('x')))
+
+    def test_socket_error_in_a_device_does_not_abort_a_scan(self):
+        from tinytuya import scanner
+        payload = {'gwId': self.DEV_ID, 'ip': '192.0.2.11', 'version': '3.3', 'productKey': 'p'}
+        rows = [{'id': self.DEV_ID, 'key': LOCAL_KEY, 'name': 'Lamp'}]
+        for event in ('write_data', 'read_data'):
+            calls = []
+
+            def select(read_socks, write_socks, error_socks, timeout):
+                calls.append(1)
+                if len(calls) == 1 and read_socks:
+                    return ([read_socks[0]], [], [])  # the broadcast
+                if write_socks and len(calls) < 4:
+                    dev_sock = write_socks[0]  # the polled device's TCP socket
+                    return ([], [dev_sock], []) if event == 'write_data' else ([dev_sock], [], [])
+                return ([], [], [])
+            with self.subTest(event=event), \
+                    patch.object(scanner.PollDevice, event, side_effect=BrokenPipeError(32, 'Broken pipe')) as handler:
+                result, _ = self._run(rows, select_fn=select, payload=payload, byID=True, scantime=0.1)
+                self.assertTrue(handler.called)
+                self.assertIn(self.DEV_ID, result)
 
     def test_interrupt_on_first_pass_does_not_raise(self):
         calls = []

@@ -636,10 +636,10 @@ class ForceScannedDevice(DeviceDetect):
         if msg:
             if self.debug:
                 print(" ForceScannedDevice: Sending Device %s Message %r" % (self.ip,msg))
-            msg = self.device._encode_message( msg )
             try:
-                self.sock.sendall( msg )
+                self.sock.sendall( self.device._encode_message( msg ) )
             except:
+                # queue the payload, not the encoded bytes: write_data() encodes queued payloads
                 self.send_queue.append( msg )
                 self.write = True
                 self.read = False
@@ -1058,6 +1058,16 @@ class PollDevice(DeviceDetect):
                 self.message = self.options['termcolors'].dim + "    Status: %s" % result["dps"]
                 self.close()
 
+
+
+def _handle_socket_event( dev, handler ):
+    """Run a device's write_data()/read_data(). A socket error (e.g. the device dropped the
+    connection mid-send) times out that device instead of aborting the whole scan."""
+    try:
+        handler()
+    except OSError:
+        log.debug("Socket error from %s, treating it as a timeout", dev.ip, exc_info=True)
+        dev.timeout()
 
 
 # Scan function shortcut
@@ -1513,7 +1523,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
         # these sockets are now writable (just connected) or failed
         for sock in wr:
             if sock in all_socks:
-                all_socks[sock].write_data()
+                _handle_socket_event( all_socks[sock], all_socks[sock].write_data )
 
         # these sockets are now have data waiting to be read
         for sock in rd:
@@ -1521,7 +1531,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
             if sock is not client and sock is not clients and sock is not clientapp:
                 # may not exist if user-interrupted; skip if the device reconnected while handling its write event
                 if sock in all_socks and all_socks[sock].sock is sock:
-                    all_socks[sock].read_data()
+                    _handle_socket_event( all_socks[sock], all_socks[sock].read_data )
                 continue
 
             # if we are here then it is from a UDP listener
