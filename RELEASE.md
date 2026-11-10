@@ -6,6 +6,7 @@
 * **Scanner robustness**: a malformed `devices.json` row (missing `id` or `key`, or not an object) no longer crashes a scan or the `devices` listing, Ctrl-C on the first loop pass no longer raises `NameError`, and the scanner no longer reads from a socket a device replaced while reconnecting. Via [#750](https://github.com/jasonacox/tinytuya/pull/750), from fixes by @merodahero in [#735](https://github.com/jasonacox/tinytuya/pull/735).
 * **Scanner output**: a device that drops the connection mid-poll no longer prints a Python traceback during a scan. It's still reported as `Send Poll failed`, and the traceback goes to the debug log. Via [#765](https://github.com/jasonacox/tinytuya/pull/765) by @jasonacox.
 * **BulbDevice**: `set_hsv()` and `set_colour()` no longer crash on rgb8 (Type A) bulbs when given float values. Via [#755](https://github.com/jasonacox/tinytuya/pull/755) by @kochj23.
+* **Cloud logs**: `getdevicelog(size=...)` above 100 now keeps paging until it has the requested number of rows, instead of stopping after one 100-row page. Via [#756](https://github.com/jasonacox/tinytuya/pull/756) by @kochj23.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 

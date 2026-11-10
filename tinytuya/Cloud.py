@@ -811,7 +811,7 @@ class Cloud(object):
                     again and max_fetches and
                     'logs' in result and
                     'has_next' in result and result['has_next'] and
-                    (not want_size or len(result['logs']) < size) and
+                    (not want_size or len(result['logs']) < want_size) and
                     'next_row_key' in result and result['next_row_key'] and next_row_key != result['next_row_key']
             ):
                 again =	False

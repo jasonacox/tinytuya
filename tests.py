@@ -349,6 +349,35 @@ class TestRFRemoteControlDevice(unittest.TestCase):
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
+class TestCloudDeviceLog(unittest.TestCase):
+    def _cloud(self, pages):
+        c = tinytuya.Cloud(apiRegion='us', apiKey='abcdefghijklmnop123456', apiSecret='0123456789abcdef0123456789abcdef', initial_token='token')
+        calls = []
+
+        def fake_request(url, action=None, post=None, query=None):
+            calls.append(dict(query))
+            n = len(calls)
+            return {'success': True, 'result': {
+                'logs': [{'event_id': 7, 'value': '%d-%d' % (n, i)} for i in range(100)],
+                'has_next': n < pages, 'next_row_key': 'row%d' % n}}
+
+        c.cloudrequest = fake_request
+        return c, calls
+
+    def test_size_over_100_fetches_multiple_pages(self):
+        # the server caps a page at 100 rows; size=250 must keep paging until 250 are collected
+        c, calls = self._cloud(pages=10)
+        result = c.getdevicelog('0123456789abcdef', size=250)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(result['result']['logs']), 300)
+        self.assertEqual(calls[0]['size'], 100)
+
+    def test_size_under_100_single_page(self):
+        c, calls = self._cloud(pages=10)
+        c.getdevicelog('0123456789abcdef', size=50)
+        self.assertEqual(len(calls), 1)
+
+
 class TestLoadDeviceFile(unittest.TestCase):
     """Tests for the load_devicefile() helper."""
 
