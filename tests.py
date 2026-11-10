@@ -681,11 +681,12 @@ class _FakeDevice:
     """Minimal stand-in for a tinytuya Device that Monitor can drive without a
     real network — _get_socket() hands back one end of a socketpair."""
 
-    def __init__(self, dev_id, retry_limit=5):
+    def __init__(self, dev_id, retry_limit=5, send_retry_limit=None):
         self.id = dev_id
         self.socket = None
         self.socketPersistent = False
         self.socketRetryLimit = retry_limit
+        self.sendRetryLimit = send_retry_limit
         self.children = {}
         self.version = 3.3
         self._peer = None
@@ -748,6 +749,22 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertEqual(dev.socketRetryLimit, 5)
         self.assertIsNone(dev.socket)
         self.assertNotIn('devA', mon._id_to_state)
+
+    def test_add_forces_send_retry_zero_and_remove_restores(self):
+        """An explicit send_retry_limit must not outlive Monitor ownership:
+        it is forced to 0 while monitored (else a stalled write would keep
+        re-sending inside the reactor thread, the #713 stall) and restored
+        on removal."""
+        mon = self._make()
+        dev = _FakeDevice('devS', retry_limit=5, send_retry_limit=3)
+        mon.add(dev)
+        self.assertEqual(dev.socketRetryLimit, 0)
+        self.assertEqual(dev.sendRetryLimit, 0)
+        state = mon._id_to_state['devS']
+        self.assertEqual(state.saved_send_retry_limit, 3)
+        mon.remove(dev)
+        self.assertEqual(dev.socketRetryLimit, 5)
+        self.assertEqual(dev.sendRetryLimit, 3)
 
     def test_heartbeat_failure_disconnects_and_enqueues_reconnect(self):
         disconnects = []

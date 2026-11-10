@@ -104,7 +104,7 @@ class _DeviceState:
     __slots__ = (
         'device', 'fileno', 'recv_buffer', 'heartbeat_interval',
         'last_heartbeat', 'on_status', 'on_connect', 'on_disconnect',
-        'saved_retry_limit',
+        'saved_retry_limit', 'saved_send_retry_limit',
     )
 
     def __init__(self, device, heartbeat_interval=12,
@@ -122,6 +122,7 @@ class _DeviceState:
         # forced to 0 so a failed send fails fast instead of blocking the reactor
         # thread or silently opening a new socket behind the selector's back.
         self.saved_retry_limit = getattr(device, 'socketRetryLimit', 5)
+        self.saved_send_retry_limit = getattr(device, 'sendRetryLimit', None)
 
 
 class _DeviceProxy:
@@ -279,7 +280,12 @@ class Monitor:
         # or (b) silently open a replacement socket the selector isn't watching.
         # The saved limit is restored for blocking (re)connects and on removal.
         state.saved_retry_limit = device.socketRetryLimit
+        state.saved_send_retry_limit = getattr(device, 'sendRetryLimit', None)
         device.socketRetryLimit = 0
+        # An explicit send_retry_limit would keep re-sending inside the
+        # reactor thread, so it is forced to 0 alongside socketRetryLimit
+        # and restored with it (#713).
+        device.sendRetryLimit = 0
 
         fd = sock.fileno()
         state.fileno = fd
@@ -326,6 +332,7 @@ class Monitor:
 
         # Hand the device back to the caller as we found it.
         device.socketRetryLimit = state.saved_retry_limit
+        device.sendRetryLimit = state.saved_send_retry_limit
 
     def command(self, device, method_name, *args, **kwargs):
         """
@@ -421,6 +428,7 @@ class Monitor:
                 pass
             device.socket = None
             device.socketRetryLimit = state.saved_retry_limit
+            device.sendRetryLimit = state.saved_send_retry_limit
         self._devices.clear()
         # Restore the retry limit for devices that disconnected mid-flight and
         # remained in _id_to_state awaiting auto-reconnect (not in _devices).
@@ -428,6 +436,7 @@ class Monitor:
         # — setting it again to saved_retry_limit is idempotent.
         for state in list(self._id_to_state.values()):
             state.device.socketRetryLimit = state.saved_retry_limit
+            state.device.sendRetryLimit = state.saved_send_retry_limit
         self._id_to_state.clear()
         with self._reconnect_lock:
             self._reconnect_queue.clear()
@@ -760,12 +769,14 @@ class Monitor:
             # the device's real retry limit for the connect, then put it back to
             # the reactor-safe fail-fast value before handing the socket back.
             device.socketRetryLimit = state.saved_retry_limit
+            device.sendRetryLimit = state.saved_send_retry_limit
             try:
                 result = device._get_socket(False)
             except Exception as exc:
                 result = str(exc)
             finally:
                 device.socketRetryLimit = 0
+                device.sendRetryLimit = 0
 
             if result is True and device.socket is not None:
                 # Success — hand off to reactor for selector registration
