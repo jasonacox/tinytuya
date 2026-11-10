@@ -7,6 +7,7 @@
 * **Scanner output**: a device that drops the connection mid-poll no longer prints a Python traceback during a scan. It's still reported as `Send Poll failed`, and the traceback goes to the debug log. Via [#765](https://github.com/jasonacox/tinytuya/pull/765) by @jasonacox.
 * **BulbDevice**: `set_hsv()` and `set_colour()` no longer crash on rgb8 (Type A) bulbs when given float values. Via [#755](https://github.com/jasonacox/tinytuya/pull/755) by @kochj23.
 * **Cloud logs**: `getdevicelog(size=...)` above 100 now keeps paging until it has the requested number of rows, instead of stopping after one 100-row page. Via [#756](https://github.com/jasonacox/tinytuya/pull/756) by @kochj23.
+* **Cloud token refresh**: a request retried after a token refresh is now signed over the un-encoded query, so retried calls with a comma in a query value (such as `getdevicelog()` event types) no longer fail with a bad signature. Via [#757](https://github.com/jasonacox/tinytuya/pull/757) by @kochj23.
 
 ## v1.20.0 - Monitor Reliability, Security & Bug Fixes
 

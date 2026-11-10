@@ -182,10 +182,11 @@ class Cloud(object):
                     sorted_query = []
                     for k in sorted(query.keys()):
                         sorted_query.append( (k, query[k]) )
-                    query = sorted_query
+                    # do not rebind `query`: the token-refresh retry below must get the
+                    # original dict, or it is signed over the URL-encoded string
                     # calculate signature without url-encoding
-                    sign_url += '?' + '&'.join( [str(x[0]) + '=' + str(x[1]) for x in query] )
-                    req = requests.Request(action, url, params=query).prepare()
+                    sign_url += '?' + '&'.join( [str(x[0]) + '=' + str(x[1]) for x in sorted_query] )
+                    req = requests.Request(action, url, params=sorted_query).prepare()
                     url = req.url
                 else:
                     req = requests.Request(action, url, params=query).prepare()
