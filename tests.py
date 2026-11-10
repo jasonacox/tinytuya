@@ -349,6 +349,33 @@ class TestRFRemoteControlDevice(unittest.TestCase):
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
+class TestGatewayWrongCidQueue(unittest.TestCase):
+    """Updates queued for a different child are stored as (child, result) tuples;
+    receive() must hand back only the result dict."""
+
+    def _build(self):
+        gw = tinytuya.Device('GATEWAY_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3, persist=True)
+        child1 = tinytuya.Device('CHILD1_ID_HERE', cid='cid1', parent=gw)
+        child2 = tinytuya.Device('CHILD2_ID_HERE', cid='cid2', parent=gw)
+        gw._get_socket = MagicMock(return_value=True)
+        return gw, child1, child2
+
+    def test_parent_receive_returns_dict(self):
+        gw, child1, _ = self._build()
+        result = {'dps': {'1': True}, 'device': child1}
+        gw.received_wrong_cid_queue.append((child1, result))
+        self.assertIs(gw.receive(), result)
+        self.assertEqual(gw.received_wrong_cid_queue, [])
+
+    def test_child_receive_returns_its_own_queued_dict(self):
+        gw, child1, child2 = self._build()
+        r1 = {'dps': {'1': True}, 'device': child1}
+        r2 = {'dps': {'1': False}, 'device': child2}
+        gw.received_wrong_cid_queue.extend([(child1, r1), (child2, r2)])
+        self.assertIs(child2.receive(), r2)
+        self.assertEqual(gw.received_wrong_cid_queue, [(child1, r1)])
+
+
 class _FakeResponse:
     def __init__(self, body):
         self.text = json.dumps(body)
