@@ -11,6 +11,7 @@ import socket
 import struct
 import time
 import sys
+import weakref
 
 from .const import DEVICEFILE, TCPPORT
 from .crypto_helper import AESCipher
@@ -29,14 +30,22 @@ class _DeviceLogAdapter(logging.LoggerAdapter):
     The device's *current* id is read when each record is emitted, so devices
     whose id is filled in or changed after construction (e.g. by a force scan)
     are tagged correctly.
+
+    The adapter holds only a weak reference to the device: a strong reference
+    would create a device -> adapter -> device cycle, so a dropped device
+    (and its socket, closed in ``__del__``) would linger until the cycle
+    collector ran instead of being freed immediately by refcounting.
     """
     def __init__(self, logger, device):
         super(_DeviceLogAdapter, self).__init__(logger, None)
-        self.device = device
+        self._device_ref = weakref.ref(device)
 
     def process(self, msg, kwargs):
-        extra = kwargs.get('extra') or {}
-        extra['device_id'] = getattr(self.device, 'id', None)
+        # Copy the caller's extra: mutating it in place would leak device_id
+        # into a dict the caller may reuse for other records.
+        extra = dict(kwargs.get('extra') or {})
+        device = self._device_ref()
+        extra['device_id'] = getattr(device, 'id', None) if device is not None else None
         kwargs['extra'] = extra
         return '[%s] %s' % (extra['device_id'], msg), kwargs
 

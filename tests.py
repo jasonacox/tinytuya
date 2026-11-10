@@ -16,6 +16,7 @@ logging.basicConfig()  # TODO include function name/line numbers in log
 log.setLevel(level=logging.INFO)
 log.setLevel(level=logging.DEBUG)  # Debug hack!
 
+import weakref
 import base64
 
 import tinytuya
@@ -497,6 +498,39 @@ class TestDeviceLogContext(unittest.TestCase):
             d._log.debug('after discovery')
         self.assertTrue(second.records[0].getMessage().startswith('[LATE_ASSIGNED_ID] '))
         self.assertEqual(second.records[0].device_id, 'LATE_ASSIGNED_ID')
+
+    def test_dropped_device_is_freed_and_adapter_logs_none(self):
+        """The adapter must not keep the device alive: dropping a device frees
+        it (and closes its socket) immediately, without the cycle collector,
+        and a record emitted after that logs [None]."""
+        import gc
+        d = tinytuya.OutletDevice('LOGCTX_GC', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        adapter = d._log
+        closed = []
+        d.close = lambda: closed.append(True)
+        ref = weakref.ref(d)
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            del d
+            self.assertIsNone(ref(), 'device must be freed by refcounting alone')
+            self.assertEqual(closed, [True])
+        finally:
+            if was_enabled:
+                gc.enable()
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            adapter.debug('emitted after the device was dropped')
+        self.assertIn('[None] ', cm.records[0].getMessage())
+        self.assertIsNone(cm.records[0].device_id)
+
+    def test_process_does_not_mutate_caller_extra(self):
+        d = tinytuya.OutletDevice('LOGCTX_EXTRA', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        caller_extra = {'custom': 'value'}
+        msg, kwargs = d._log.process('hello', {'extra': caller_extra})
+        self.assertEqual(caller_extra, {'custom': 'value'},
+                         'the dict passed by the caller must not be mutated')
+        self.assertEqual(kwargs['extra']['device_id'], 'LOGCTX_EXTRA')
+        self.assertEqual(kwargs['extra']['custom'], 'value')
 
     def test_shared_formatter_needs_a_filter_default(self):
         """Records that bypass the adapter have no device_id; a filter that
