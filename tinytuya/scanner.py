@@ -976,8 +976,9 @@ class PollDevice(DeviceDetect):
             #deviceslist[ip]["err"] = "Check DEVICE KEY - Invalid response"
             self.deviceinfo["err"] = "No response"
         except:
+            # e.g. the device dropped the connection; timeout() retries or reports "Send Poll failed"
             self.deviceinfo["err"] = "Send Poll failed"
-            print(traceback.format_exc())
+            log.debug("PollDevice: sending the poll to %s failed", self.ip, exc_info=True)
             self.timeout()
 
 

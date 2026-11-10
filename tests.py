@@ -777,6 +777,25 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertEqual(scan.call_args.kwargs['wantids'], [self.DEV_ID])
         self.assertIs(scan.call_args.kwargs['tuyadevices'], rows)
 
+    def test_poll_send_failure_is_logged_not_printed(self):
+        # a device that drops the connection mid-poll is reported as "Send Poll failed", without a traceback on stdout
+        import io
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from tinytuya import scanner
+        sock = MagicMock()
+        sock.sendall.side_effect = BrokenPipeError(32, 'Broken pipe')
+        dev = SimpleNamespace(ip='192.0.2.10', sock=sock, debug=False, deviceinfo={}, send_queue=[], write=True, read=False,
+                              options={'data_timeout': 5}, get_peer=lambda: '192.0.2.10', timeout=MagicMock(),
+                              device=tinytuya.Device(self.DEV_ID, '192.0.2.10', LOCAL_KEY, version=3.3))
+        out = io.StringIO()
+        with self.assertLogs(scanner.log, logging.DEBUG) as logs, redirect_stdout(out):
+            scanner.PollDevice.write_data(dev)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(dev.deviceinfo['err'], 'Send Poll failed')
+        dev.timeout.assert_called_once_with()
+        self.assertTrue(any(r.exc_info and isinstance(r.exc_info[1], BrokenPipeError) for r in logs.records))
+
     def test_interrupt_on_first_pass_does_not_raise(self):
         calls = []
 
