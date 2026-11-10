@@ -135,6 +135,15 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_generate_payload_does_not_mutate_template(self):
+        # v3.4+/zigbee templates contain a nested "data" dict; a shallow copy let
+        # the DPs of one command leak into the cached template and later payloads
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.4)
+        d.generate_payload(tinytuya.CONTROL, {'1': True})
+        self.assertEqual(d.payload_dict[tinytuya.CONTROL]['command']['data'], {})
+        msg = d.generate_payload(tinytuya.CONTROL)
+        self.assertNotIn('dps', json.loads(msg.payload.decode('utf-8'))['data'])
+
     def test_set_colour_A(self):
         # arrange
         d = build_mock_bulb('A')
@@ -349,6 +358,100 @@ class TestRFRemoteControlDevice(unittest.TestCase):
         self.assertIn('ver', payload['key1'], "key1 missing 'ver'")
 
 
+class TestGatewayWrongCidQueue(unittest.TestCase):
+    """Updates queued for a different child are stored as (child, result) tuples;
+    receive() must hand back only the result dict."""
+
+    def _build(self):
+        gw = tinytuya.Device('GATEWAY_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3, persist=True)
+        child1 = tinytuya.Device('CHILD1_ID_HERE', cid='cid1', parent=gw)
+        child2 = tinytuya.Device('CHILD2_ID_HERE', cid='cid2', parent=gw)
+        gw._get_socket = MagicMock(return_value=True)
+        return gw, child1, child2
+
+    def test_parent_receive_returns_dict(self):
+        gw, child1, _ = self._build()
+        result = {'dps': {'1': True}, 'device': child1}
+        gw.received_wrong_cid_queue.append((child1, result))
+        self.assertIs(gw.receive(), result)
+        self.assertEqual(gw.received_wrong_cid_queue, [])
+
+    def test_child_receive_returns_its_own_queued_dict(self):
+        gw, child1, child2 = self._build()
+        r1 = {'dps': {'1': True}, 'device': child1}
+        r2 = {'dps': {'1': False}, 'device': child2}
+        gw.received_wrong_cid_queue.extend([(child1, r1), (child2, r2)])
+        self.assertIs(child2.receive(), r2)
+        self.assertEqual(gw.received_wrong_cid_queue, [(child1, r1)])
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self.text = json.dumps(body)
+        self.content = self.text.encode()
+        self.status_code = 200
+
+
+class TestCloudTokenRetry(unittest.TestCase):
+    """After a token refresh, _tuyaplatform() retries the request; the retry
+    must sign the same un-encoded query string as the first attempt."""
+
+    def test_retry_signs_unencoded_dict_query(self):
+        import sys, hashlib, hmac
+        from unittest.mock import patch
+        cloudmod = sys.modules['tinytuya.Cloud']
+        key, secret = 'abcdefghijklmnop123456', '0123456789abcdef0123456789abcdef'
+        c = tinytuya.Cloud(apiRegion='us', apiKey=key, apiSecret=secret, initial_token='expired_token')
+        responses = [
+            _FakeResponse({'success': False, 'msg': 'token invalid'}),
+            _FakeResponse({'success': True, 'result': {'access_token': 'new_token'}}),
+            _FakeResponse({'success': True, 'result': {'logs': []}}),
+        ]
+        with patch.object(cloudmod.requests, 'get', side_effect=responses) as mock_get, \
+             patch.object(cloudmod.time, 'time', return_value=1700000000.0):
+            result = c.cloudrequest('/v1.0/devices/0123456789abcdef/logs', query={'type': '1,7', 'size': 100})
+
+        self.assertEqual(result, {'success': True, 'result': {'logs': []}})
+        self.assertEqual(c.token, 'new_token')
+        # Tuya signs the sorted query *before* URL-encoding (the comma stays a comma)
+        string_to_sign = (key + 'new_token' + '1700000000000' + 'GET\n' +
+                          hashlib.sha256(b'').hexdigest() + '\n\n' +
+                          '/v1.0/devices/0123456789abcdef/logs?size=100&type=1,7')
+        expected = hmac.new(secret.encode(), string_to_sign.encode(), hashlib.sha256).hexdigest().upper()
+        retry_headers = mock_get.call_args_list[2][1]['headers']
+        self.assertEqual(retry_headers['access_token'], 'new_token')
+        self.assertEqual(retry_headers['sign'], expected)
+
+
+class TestCloudDeviceLog(unittest.TestCase):
+    def _cloud(self, pages):
+        c = tinytuya.Cloud(apiRegion='us', apiKey='abcdefghijklmnop123456', apiSecret='0123456789abcdef0123456789abcdef', initial_token='token')
+        calls = []
+
+        def fake_request(url, action=None, post=None, query=None):
+            calls.append(dict(query))
+            n = len(calls)
+            return {'success': True, 'result': {
+                'logs': [{'event_id': 7, 'value': '%d-%d' % (n, i)} for i in range(100)],
+                'has_next': n < pages, 'next_row_key': 'row%d' % n}}
+
+        c.cloudrequest = fake_request
+        return c, calls
+
+    def test_size_over_100_fetches_multiple_pages(self):
+        # the server caps a page at 100 rows; size=250 must keep paging until 250 are collected
+        c, calls = self._cloud(pages=10)
+        result = c.getdevicelog('0123456789abcdef', size=250)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(result['result']['logs']), 300)
+        self.assertEqual(calls[0]['size'], 100)
+
+    def test_size_under_100_single_page(self):
+        c, calls = self._cloud(pages=10)
+        c.getdevicelog('0123456789abcdef', size=50)
+        self.assertEqual(len(calls), 1)
+
+
 class TestLoadDeviceFile(unittest.TestCase):
     """Tests for the load_devicefile() helper."""
 
@@ -489,6 +592,24 @@ class TestHexvalueRoundTrip(unittest.TestCase):
             self.assertAlmostEqual(h, eh, delta=0.01)
             self.assertAlmostEqual(s, es, delta=0.01)
             self.assertAlmostEqual(v, ev, delta=0.01)
+
+    def test_rgb8_accepts_float_rgb(self):
+        # set_colour() documents r/g/b as floats 0.0-255.0; %x used to raise TypeError
+        self.assertEqual(tinytuya.BulbDevice.rgb_to_hexvalue(255.0, 0.0, 127.6, 'rgb8')[:6], 'ff0080')
+
+    def test_hsv_to_hexvalue_rgb8(self):
+        # hsv_to_hexvalue() feeds float RGB into rgb_to_hexvalue(), so set_hsv() on rgb8 bulbs always crashed
+        hexvalue = tinytuya.BulbDevice.hsv_to_hexvalue(0.0, 1.0, 1.0, 'rgb8')
+        self.assertEqual(hexvalue, 'ff00000000ffff')
+        self.assertEqual(tinytuya.BulbDevice.hexvalue_to_rgb(hexvalue, 'rgb8'), (255, 0, 0))
+
+    def test_set_hsv_A(self):
+        d = build_mock_bulb('A')
+        d.set_hsv(0.5, 0.5, 0.5)
+        result_cmd, result_payload = get_results_from_mock(d)
+        self.assertEqual(result_cmd, tinytuya.CONTROL)
+        self.assertEqual(result_payload['dps']['5'], '40808000b47f7f')
+        self.assertEqual(result_payload['dps']['2'], 'colour')
 
 
 class TestSessionCrypto(unittest.TestCase):
@@ -1119,6 +1240,25 @@ class TestScannerRobustness(unittest.TestCase):
             scanner.alldevices(color=False, assume_yes=True)
         self.assertEqual(scan.call_args.kwargs['wantids'], [self.DEV_ID])
         self.assertIs(scan.call_args.kwargs['tuyadevices'], rows)
+
+    def test_poll_send_failure_is_logged_not_printed(self):
+        # a device that drops the connection mid-poll is reported as "Send Poll failed", without a traceback on stdout
+        import io
+        from contextlib import redirect_stdout
+        from types import SimpleNamespace
+        from tinytuya import scanner
+        sock = MagicMock()
+        sock.sendall.side_effect = BrokenPipeError(32, 'Broken pipe')
+        dev = SimpleNamespace(ip='192.0.2.10', sock=sock, debug=False, deviceinfo={}, send_queue=[], write=True, read=False,
+                              options={'data_timeout': 5}, get_peer=lambda: '192.0.2.10', timeout=MagicMock(),
+                              device=tinytuya.Device(self.DEV_ID, '192.0.2.10', LOCAL_KEY, version=3.3))
+        out = io.StringIO()
+        with self.assertLogs(scanner.log, logging.DEBUG) as logs, redirect_stdout(out):
+            scanner.PollDevice.write_data(dev)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(dev.deviceinfo['err'], 'Send Poll failed')
+        dev.timeout.assert_called_once_with()
+        self.assertTrue(any(r.exc_info and isinstance(r.exc_info[1], BrokenPipeError) for r in logs.records))
 
     def test_interrupt_on_first_pass_does_not_raise(self):
         calls = []
