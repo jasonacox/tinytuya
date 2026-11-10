@@ -651,13 +651,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
-                    retries, self._send_retry_limit()
+                    retries, self._send_retry_limit_for(from_child)
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self._send_retry_limit():
+                if retries > self._send_retry_limit_for(from_child):
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self._send_retry_limit()
+                        self._send_retry_limit_for(from_child)
                     )
                     # timeout reached - return error
                     return error_json(ERR_TIMEOUT)
@@ -682,13 +682,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
-                    retries, self._send_retry_limit(), exc_info=True
+                    retries, self._send_retry_limit_for(from_child), exc_info=True
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self._send_retry_limit():
+                if retries > self._send_retry_limit_for(from_child):
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self._send_retry_limit()
+                        self._send_retry_limit_for(from_child)
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error
@@ -1207,6 +1207,15 @@ class XenonDevice(object):
         """Resolve the payload re-send limit: None follows socketRetryLimit
         (historical behavior), otherwise the explicit send_retry_limit."""
         return self.socketRetryLimit if self.sendRetryLimit is None else self.sendRetryLimit
+
+    def _send_retry_limit_for(self, from_child=None):
+        """Resolve the payload re-send limit for a send that may be running on
+        behalf of a child device: a child's explicit send_retry_limit wins, and
+        otherwise the limit of the device actually sending (the gateway)."""
+        child_limit = getattr(from_child, 'sendRetryLimit', None) if from_child is not None else None
+        if child_limit is not None:
+            return child_limit
+        return self._send_retry_limit()
 
     def set_socketRetryDelay(self, delay):
         self.socketRetryDelay = delay

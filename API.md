@@ -189,6 +189,7 @@ XenonDevice(
     connection_retry_limit=5, # int
     connection_retry_delay=5, # int
     port=6668,                # int
+    max_simultaneous_dps=0,   # int  – Max DPs per CONTROL frame (0 = no limit)
     send_retry_limit=None,    # int  – Payload re-sends after a timeout (None = connection_retry_limit)
 )
 ```

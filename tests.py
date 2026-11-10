@@ -22,6 +22,7 @@ import tinytuya
 from tinytuya.Contrib.RFRemoteControlDevice import RFRemoteControlDevice
 from tinytuya.core import message_helper as mh
 from tinytuya.core.exceptions import DecodeError
+from tinytuya.core.error_helper import ERR_CONNECT, ERR_TIMEOUT
 
 LOCAL_KEY = '0123456789abcdef'
 
@@ -832,82 +833,6 @@ class TestMonitorReliability(unittest.TestCase):
         self.assertTrue(_accepts_nowait(lambda x, nowait=False: None))
         self.assertTrue(_accepts_nowait(lambda x, **kw: None))
         self.assertFalse(_accepts_nowait(lambda x: None))
-
-
-class TestSendRetryLimit(unittest.TestCase):
-    """send_retry_limit must bound payload re-sends after a receive timeout,
-    independently of socketRetryLimit (connection establishment).  A write
-    that gets no reply must be sent exactly once when sendRetryLimit is 0.
-    Regression test for issue #753."""
-
-    def _make(self, **kw):
-        d = tinytuya.OutletDevice(
-            "0123456789abcdef0123", "127.0.0.1", "0123456789abcdef",
-            version=3.3, connection_timeout=0.05, connection_retry_delay=0,
-            **kw)
-        # local socketpair: peer accepts but never replies -> receive timeout
-        sock, peer = _socket_mod.socketpair()
-        self.addCleanup(sock.close)
-        self.addCleanup(peer.close)
-        sock.settimeout(0.05)
-        sends = []
-
-        class _CountingSock:
-            # socket attributes are read-only; wrap instead to count sends
-            def __init__(self, inner):
-                self._inner = inner
-            def sendall(self, data):
-                sends.append(data)
-                self._inner.sendall(data)
-            def recv(self, *a):
-                return self._inner.recv(*a)
-            def settimeout(self, *a):
-                return self._inner.settimeout(*a)
-            def close(self):
-                return self._inner.close()
-
-        d._get_socket = MagicMock(return_value=True)
-        d.socket = _CountingSock(sock)
-        d._check_socket_close = MagicMock()
-        payload = d.generate_payload(18, {"1": True})  # CT.CONTROL
-        return d, payload, sends
-
-    def test_default_send_retry_matches_connection_retry(self):
-        d, payload, sends = self._make(connection_retry_limit=1)
-        res = d._send_receive(payload)
-        self.assertEqual(res["Err"], "902")
-        # default keeps historical behavior: initial send + 1 retry = 2 frames
-        self.assertEqual(len(sends), 2)
-
-    def test_send_retry_limit_zero_sends_exactly_once(self):
-        d, payload, sends = self._make(send_retry_limit=0)
-        res = d._send_receive(payload)
-        self.assertEqual(res["Err"], "902")
-        self.assertEqual(len(sends), 1)
-
-
-    def test_default_send_retry_follows_later_socketRetryLimit(self):
-        # regression: default must track socketRetryLimit set AFTER construction
-        d, payload, sends = self._make()
-        d.set_socketRetryLimit(1)
-        res = d._send_receive(payload)
-        self.assertEqual(res["Err"], "902")
-        self.assertEqual(len(sends), 2)
-
-    def test_set_send_retry_limit(self):
-        d, payload, sends = self._make(send_retry_limit=2)
-        d.set_sendRetryLimit(0)
-        res = d._send_receive(payload)
-        self.assertEqual(res["Err"], "902")
-        self.assertEqual(len(sends), 1)
-
-    def test_send_retry_limit_counts_resends(self):
-        d, payload, sends = self._make(send_retry_limit=2)
-        res = d._send_receive(payload)
-        self.assertEqual(res["Err"], "902")
-        # initial send + 2 retries = 3 frames
-        self.assertEqual(len(sends), 3)
-
 
 
 class _FakeScanClock:
@@ -2081,6 +2006,134 @@ class TestWireBehavior(_WireTestCase):
                 self.assertEqual(fake.children['cidB'], {'1': False})
 
 
+class TestSendRetryLimitWire(_WireTestCase):
+    """send_retry_limit must bound payload re-sends after a lost reply or a
+    network error, independently of socketRetryLimit (connection establishment).
+    A write that gets no reply must be sent exactly once when sendRetryLimit is
+    0, while connection retries still work.  Real set_value() writes against a
+    FakeTuyaDevice, counting connection attempts and writes separately.
+    Regression test for issue #753."""
+
+    VERSION = 3.3
+
+    def _writes(self, fake):
+        return [r for r in fake.requests if r[0] in (CMD.CONTROL, CMD.CONTROL_NEW)]
+
+    def _dev(self, **device_kw):
+        """Like make(), but passes kwargs to tinytuya.Device, not the fake."""
+        fake = self.attach(FakeTuyaDevice(self.VERSION))
+        d = tinytuya.Device('DEVICE_ID_HERE', '192.0.2.10', LOCAL_KEY, version=self.VERSION, **device_kw)
+        self.addCleanup(d.close)
+        return d, fake
+
+    def test_lost_reply_with_send_retry_zero_sends_exactly_once(self):
+        d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
+        fake.silent = True  # accept writes, never answer
+        res = d.set_value(2, 77)
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        self.assertEqual(len(self._writes(fake)), 1)
+        self.assertEqual(fake.connections, 1)
+
+    def test_lost_reply_default_follows_connection_retry(self):
+        d, fake = self._dev(connection_retry_limit=1)
+        fake.silent = True
+        res = d.set_value(2, 77)
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        # default keeps historical behavior: initial send + 1 retry = 2 frames
+        self.assertEqual(len(self._writes(fake)), 2)
+
+    def test_set_send_retry_limit_after_construction(self):
+        d, fake = self._dev(send_retry_limit=2)
+        d.set_sendRetryLimit(0)
+        fake.silent = True
+        res = d.set_value(2, 77)
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        self.assertEqual(len(self._writes(fake)), 1)
+
+    def test_failed_first_connect_then_success_still_retries_connection(self):
+        # send retries off must not turn off connection retries
+        d, fake = self._dev(connection_retry_limit=2, send_retry_limit=0)
+        attempts = []
+        real_connect = fake.connect
+        def flaky_connect():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise OSError('connection refused')
+            real_connect()
+        fake.connect = flaky_connect
+        result = d.set_value(2, 77)
+        self.assertEqual(result['dps'], {'2': 77})
+        self.assertEqual(fake.dps['2'], 77)
+        # connection retried after the refusal, but the write went out once
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(len(self._writes(fake)), 1)
+
+    def test_generic_network_error_with_send_retry_zero_sends_once(self):
+        d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
+        fake.send_error = OSError('broken pipe')
+        attempts = []
+        real_error = fake.send_error
+        def exploding_rx(data):
+            attempts.append(1)
+            raise real_error
+        fake.receive_bytes = exploding_rx
+        res = d.set_value(2, 77)
+        self.assertEqual(res['Err'], str(ERR_CONNECT))
+        # one connection, and the payload handed to sendall exactly once
+        # (the write never parses, so count socket-level sends)
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(fake.connections, 1)
+
+    def test_child_send_retry_limit_honored_through_gateway(self):
+        # a child's explicit send_retry_limit wins over the gateway's limit
+        fake = self.attach(FakeTuyaDevice(3.3, dev_id='GATEWAY_ID', children={'cidA': {'1': True}}))
+        gw = tinytuya.Device('GATEWAY_ID', '192.0.2.10', LOCAL_KEY, version=3.3, persist=True)
+        self.addCleanup(gw.close)
+        child = tinytuya.Device('CHILD_A', cid='cidA', parent=gw, send_retry_limit=0)
+        fake.silent = True
+        res = child.set_value(1, False)
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        child_writes = [r for r in fake.requests
+                        if r[0] in (CMD.CONTROL, CMD.CONTROL_NEW)
+                        and (r[1].get('cid') or (r[1].get('data') or {}).get('cid')) == 'cidA']
+        self.assertEqual(len(child_writes), 1)
+
+    def test_child_without_explicit_limit_uses_gateway_limit(self):
+        fake = self.attach(FakeTuyaDevice(3.3, dev_id='GATEWAY_ID', children={'cidA': {'1': True}}))
+        gw = tinytuya.Device('GATEWAY_ID', '192.0.2.10', LOCAL_KEY, version=3.3, persist=True)
+        gw.set_socketRetryLimit(1)  # also the default send limit
+        self.addCleanup(gw.close)
+        child = tinytuya.Device('CHILD_A', cid='cidA', parent=gw)
+        fake.silent = True
+        res = child.set_value(1, False)
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        child_writes = [r for r in fake.requests
+                        if r[0] in (CMD.CONTROL, CMD.CONTROL_NEW)
+                        and (r[1].get('cid') or (r[1].get('data') or {}).get('cid')) == 'cidA']
+        self.assertEqual(len(child_writes), 2)
+
+    def test_set_multiple_values_no_resend_policy_returns_error(self):
+        # with send retries off, a lost reply must not trigger the single-DP
+        # fallback: the write may already have landed, so re-sending the first
+        # DP could apply a relative command twice
+        d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
+        fake.silent = True
+        res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        self.assertEqual(len(self._writes(fake)), 1)
+        self.assertEqual(fake.dps, {'1': False, '2': 0}, 'no DP was applied twice')
+
+    def test_set_multiple_values_fallback_still_works_with_retries_on(self):
+        d, fake = self._dev(connection_retry_limit=1)
+        fake.silent = True
+        res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        # historical behavior with retry limit 1: the multi-DP frame goes out
+        # twice (initial + retry), then the fallback re-sends the first DP twice
+        self.assertEqual(len(self._writes(fake)), 4)
+        self.assertEqual(fake.connections, 4)
+
+
 # ---------------------------------------------------------------------------
 # Cloud tests: requests is replaced by a scripted fake Tuya Cloud
 # ---------------------------------------------------------------------------
@@ -2514,7 +2567,6 @@ API_BASELINE = {
 
 # file:line in the code for each, so the list can be acted on directly
 API_SIGNATURE_DEVIATIONS = {
-    'XenonDevice.__init__': 'XenonDevice.py:243 has an undocumented max_simultaneous_dps=0',
     'XenonDevice.add_dps_to_request': 'XenonDevice.py:1154 names the parameter dp_indicies, not index',
     'XenonDevice.heartbeat': 'documented under XenonDevice, but only Device (core/Device.py:47) has it',
     'XenonDevice.updatedps': 'documented under XenonDevice with index=[1]; core/Device.py:62 is Device.updatedps(index=None)',

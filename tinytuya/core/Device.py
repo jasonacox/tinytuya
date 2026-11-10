@@ -5,6 +5,7 @@ import logging
 import time
 
 from .XenonDevice import XenonDevice, merge_dps_results
+from .error_helper import ERR_CONNECT, ERR_TIMEOUT
 from . import command_types as CT
 
 
@@ -139,6 +140,11 @@ class Device(XenonDevice):
         result = self._send_receive(payload, getresponse=(not nowait))
 
         if result and 'Err' in result and len(out) > 1:
+            if self._send_retry_limit() == 0 and result['Err'] in (str(ERR_CONNECT), str(ERR_TIMEOUT)):
+                # no-resend policy: a lost reply may mean the write already
+                # landed, so re-sending the first DP could apply it twice.
+                # Return the original error instead of falling back.
+                return result
             # sending failed! device might only be able to handle 1 DP at a time
             first_dp = next(iter( out ))
             res = self.set_value(first_dp, out[first_dp], nowait=nowait)
