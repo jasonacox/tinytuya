@@ -202,6 +202,57 @@ For commands (except those in skip list):
 
 `DP_QUERY` / `DP_QUERY_NEW` / `UPDATEDPS` / `HEART_BEAT` / `LAN_EXT_STREAM` are sent without the header (and for `DP_QUERY` may be empty JSON dict depending on device type). Some devices respond with encrypted payload that begins WITH the 3.3 header (clear) followed by ciphertext.
 
+### Observed Camera Signalling (0x20 / decimal 32)
+
+A JVS GRANT HD WiFi video intercom (network firmware 2.2.20, main
+firmware 3.06, advertising LAN protocol 3.3) was observed exchanging local
+camera session signalling over TCP/6668 using command **0x20 (decimal 32)**.
+This is distinct from `LAN_EXT_STREAM` (**0x40 / decimal 64**), which TinyTuya
+uses for extended gateway operations.
+
+The working client used the following wire format:
+
+```text
+Client -> device:
+55AA header (cmd=0x20) | AES-ECB(local_key, PKCS#7(JSON)) | CRC32 | 0000AA55
+
+Device -> client:
+55AA header (cmd=0x20) | retcode (4 bytes, big-endian) | ciphertext | CRC32 | 0000AA55
+```
+
+Here "55AA header" is the normal 16-byte prefix/sequence/command/length
+header. The request has no return-code field and no 15-byte `3.3` version
+header before the ciphertext. Successful responses had return code zero;
+after removing that field, the ciphertext decrypted with the device's local
+key to UTF-8 JSON. Length and CRC32 follow the usual 55AA rules above.
+This records a working header-free exchange; it does not establish that the
+device rejects requests with a version header.
+
+Signalling JSON uses `header` and `msg` objects rather than a DPS map. The
+`header` includes a message `type` and `sessionid`; observed session messages
+include `offer`, `answer`, `candidate`, and `disconnect`. Responses must be
+associated with the current `sessionid`, independently of the frame sequence.
+Local offer/answer exchange and SD media reception were verified with a
+separate experimental client. A subsequent independent local client also
+received and decoded H.264 video at 1280x720 and PCM signed-16 little-endian
+mono audio at 8 kHz using the observed IMM/AES-KCP media transport. Physical
+speech reception was confirmed in the downstream Home Assistant integration.
+This does not add media support to TinyTuya. These signalling frames carry session metadata;
+they are not themselves video frames or an RTSP URL.
+
+This is a single-device observation, not a portable camera API or a complete
+signalling/authentication specification. Other firmware was not tested.
+The media credential was recovered from an existing authorized app session;
+its lifetime and cloud-free provisioning remain unknown. SD capture also worked with WAN forwarding blocked after the
+device was initialized; a fully offline cold start was not established.
+The experiment used existing device credentials; it did not establish
+cloud-free credential provisioning. TinyTuya does not currently define command 0x20 or implement
+this camera session workflow. Its normal 3.3 encoder adds a version header
+for commands outside `NO_PROTOCOL_HEADER_CMDS`, so this note should not be
+read as an example supported by `Device.generate_payload()`.
+
+For related camera-streaming scope discussion, see [issue #459](https://github.com/jasonacox/tinytuya/issues/459).
+
 ### "Version Protocol" Source Header (v3.3)
 Format (clear, at start of the payload, 15 bytes total):
 
