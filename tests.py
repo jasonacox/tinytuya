@@ -2317,6 +2317,32 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
         self.assertEqual(fake.dps, {'1': True, '2': 50}, 'the batch was applied before the unreadable ack')
 
+    def test_set_multiple_values_no_resend_after_post_ack_reconnect_failure(self):
+        # empty ACK (the batch landed), a reset, then a reconnect timeout (ERR_OFFLINE):
+        # the fallback must not send the first DP again once the device is back
+        d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
+        ack = mh.TuyaMessage(1, CMD.CONTROL, 0, b'', 0, True, mh.H.PREFIX_55AA_VALUE, None)
+        connect, refuse_next = fake.connect, []
+
+        def flaky_connect():
+            if refuse_next:
+                refuse_next.pop()
+                raise _socket_mod.timeout('timed out')
+            connect()
+        fake.connect = flaky_connect
+        replies = iter([ack])
+
+        def receive():
+            reply = next(replies, None)
+            if reply is None:
+                refuse_next.append(True)  # the reconnect after this reset times out once
+                raise ConnectionResetError(54, 'reset')
+            return reply
+        with patch.object(d, '_receive', side_effect=receive), self.assertLogs(_xenon_mod.log, logging.DEBUG):
+            result = d.set_multiple_values({1: True, '2': 50})
+        self.assertEqual(result['Err'], str(tinytuya.ERR_OFFLINE))
+        self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
+
     def test_set_multiple_values_fallback_still_works_with_retries_on(self):
         d, fake = self._dev(connection_retry_limit=1)
         fake.silent = True
