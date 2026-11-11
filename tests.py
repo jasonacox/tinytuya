@@ -2153,6 +2153,24 @@ class TestSendRetryLimitWire(_WireTestCase):
             counts.append(fake.connections)
         self.assertEqual(counts, [3, 3])  # first connect + socketRetryLimit (2) reconnects
 
+    def test_reset_after_empty_ack_still_recovers_without_resending(self):
+        # an empty ACK means the write landed, and payload is cleared, so a connection
+        # reset afterwards only listens again (socketRetryLimit), never re-sends
+        d, fake = self._dev(connection_retry_limit=2, send_retry_limit=0)
+        ack = mh.TuyaMessage(1, CMD.CONTROL, 0, b'', 0, True, mh.H.PREFIX_55AA_VALUE, None)
+        replies = iter([ack, ConnectionResetError(54, 'reset'), _socket_mod.timeout('timed out')])
+
+        def receive():
+            reply = next(replies)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        with patch.object(d, '_receive', side_effect=receive), self.assertLogs(_xenon_mod.log, logging.DEBUG):
+            result = d.set_value(2, 77)
+        self.assertIsNone(result)  # reconnected and listened, rather than ERR_CONNECT
+        self.assertEqual(len(self._writes(fake)), 1)
+        self.assertEqual(fake.connections, 2)
+
     def test_lost_reply_default_follows_connection_retry(self):
         d, fake = self._dev(connection_retry_limit=1)
         fake.silent = True
