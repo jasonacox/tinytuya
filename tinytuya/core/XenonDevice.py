@@ -200,10 +200,10 @@ payload_dict = {
         },
         CT.DP_QUERY: {
             "command_override": CT.DP_QUERY_NEW,
-            "command": {}
+            "command": {"data": {"dps": {}}}  # some IR/RF hubs reject {} with "json obj data unvalid"
         },
         CT.DP_QUERY_NEW: {
-            "command": {}
+            "command": {"data": {"dps": {}}}
         },
     },
     # placeholders, not yet needed

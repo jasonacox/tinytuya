@@ -143,6 +143,46 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(d.payload_dict[tinytuya.CONTROL]['command']['data'], {})
         msg = d.generate_payload(tinytuya.CONTROL)
         self.assertNotIn('dps', json.loads(msg.payload.decode('utf-8'))['data'])
+    def test_status_v35_payload(self):
+        # arrange
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.5)
+        d._send_receive = MagicMock(return_value={"dps":{"1":False}})
+
+        # act
+        d.status()
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # assert
+        self.assertEqual(result_cmd, tinytuya.DP_QUERY_NEW)
+        self.assertDictEqual(result_payload, {"data": {"dps": {}}, "t": ""})
+
+    def test_status_v34_payload_unchanged(self):
+        # arrange
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.4)
+        d._send_receive = MagicMock(return_value={"dps":{"1":False}})
+
+        # act
+        d.status()
+
+        # gather results
+        result_cmd, result_payload = get_results_from_mock(d)
+
+        # assert
+        self.assertEqual(result_cmd, tinytuya.DP_QUERY_NEW)
+        self.assertDictEqual(result_payload, {"t": ""})
+
+    def test_generate_payload_does_not_modify_template(self):
+        # arrange
+        d = tinytuya.OutletDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.5)
+        d.generate_payload(tinytuya.DP_QUERY, data={"1": None})
+
+        # act
+        result = d.generate_payload(tinytuya.DP_QUERY)
+
+        # assert
+        self.assertDictEqual(json.loads(result.payload), {"data": {"dps": {}}})
 
     def test_set_colour_A(self):
         # arrange
