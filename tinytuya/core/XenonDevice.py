@@ -1217,6 +1217,16 @@ class XenonDevice(object):
             return child_limit
         return self._send_retry_limit()
 
+    def _effective_send_retry_limit(self):
+        """The send-retry limit that governs this device's own writes.
+
+        Mirrors _send_retry_limit_for(): when this device is a child sending
+        through its gateway, the child's explicit send_retry_limit wins and
+        otherwise the sending gateway's limit applies."""
+        if self.parent is not None:
+            return self.parent._send_retry_limit_for(self)
+        return self._send_retry_limit()
+
     def set_socketRetryDelay(self, delay):
         self.socketRetryDelay = delay
 

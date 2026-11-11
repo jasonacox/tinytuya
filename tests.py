@@ -22,7 +22,7 @@ import tinytuya
 from tinytuya.Contrib.RFRemoteControlDevice import RFRemoteControlDevice
 from tinytuya.core import message_helper as mh
 from tinytuya.core.exceptions import DecodeError
-from tinytuya.core.error_helper import ERR_CONNECT, ERR_TIMEOUT
+from tinytuya.core.error_helper import ERR_CONNECT, ERR_JSON, ERR_PAYLOAD, ERR_TIMEOUT
 
 LOCAL_KEY = '0123456789abcdef'
 
@@ -2122,6 +2122,42 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(res['Err'], str(ERR_TIMEOUT))
         self.assertEqual(len(self._writes(fake)), 1)
         self.assertEqual(fake.dps, {'1': False, '2': 0}, 'no DP was applied twice')
+
+    def test_child_default_limit_inherits_gateway_no_resend_in_fallback(self):
+        # regression: the fallback guard used to read the child's own
+        # _send_retry_limit() (its socketRetryLimit), not the effective limit
+        # the gateway actually enforces, so a gateway no-resend policy was
+        # bypassed and the first DP of a failed batch was sent again
+        fake = self.attach(FakeTuyaDevice(3.3, dev_id='GATEWAY_ID', children={'cidA': {'1': True, '2': 50}}))
+        gw = tinytuya.Device('GATEWAY_ID', '192.0.2.10', LOCAL_KEY, version=3.3, persist=True,
+                             send_retry_limit=0)
+        self.addCleanup(gw.close)
+        child = tinytuya.Device('CHILD_A', cid='cidA', parent=gw)
+        fake.silent = True
+        res = child.set_multiple_values({'1': True, '2': 60})
+        self.assertEqual(res['Err'], str(ERR_TIMEOUT))
+        child_writes = [r for r in fake.requests
+                        if r[0] in (CMD.CONTROL, CMD.CONTROL_NEW)
+                        and (r[1].get('cid') or (r[1].get('data') or {}).get('cid')) == 'cidA']
+        self.assertEqual(len(child_writes), 1,
+                         'no-resend gateway policy must suppress the single-DP fallback')
+
+    def test_set_multiple_values_no_resend_on_unreadable_response(self):
+        # regression: ERR_JSON/ERR_PAYLOAD are local decode failures, not
+        # device rejections — the batch may have been applied, so a
+        # send_retry_limit=0 device must not fall back and resend DP 1
+        from tinytuya.core.error_helper import error_json
+        d, fake = self._dev(send_retry_limit=0)
+        calls = []
+        real = d._send_receive
+        def unreadable(payload, **kw):
+            calls.append(payload)
+            return error_json(ERR_JSON, b'garbage')  # write may have landed; reply undecodable
+        d._send_receive = unreadable
+        res = d.set_multiple_values({1: True, 2: 50})
+        d._send_receive = real
+        self.assertEqual(res['Err'], str(ERR_JSON))
+        self.assertEqual(len(calls), 1, 'no-resend policy must not fall back to a single-DP re-send')
 
     def test_set_multiple_values_fallback_still_works_with_retries_on(self):
         d, fake = self._dev(connection_retry_limit=1)
