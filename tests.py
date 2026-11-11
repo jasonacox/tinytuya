@@ -2343,6 +2343,17 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(result['Err'], str(tinytuya.ERR_OFFLINE))
         self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
 
+    def test_set_multiple_values_fallback_unchanged_without_send_retry_limit(self):
+        # send_retry_limit unset keeps the historical single-DP fallback, even when
+        # connection retries are 0 (the batch fails on an open, persistent socket)
+        d, fake = self._dev(persist=True)
+        self.assertNotIn('Err', d.status())
+        d.set_socketRetryLimit(0)
+        fake.raw_ack = b'{"dps": tru'
+        res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(res['Err'], str(ERR_JSON))
+        self.assertEqual(len(self._writes(fake)), 2, 'batch, then the first DP alone')
+
     def test_set_multiple_values_fallback_still_works_with_retries_on(self):
         d, fake = self._dev(connection_retry_limit=1)
         fake.silent = True

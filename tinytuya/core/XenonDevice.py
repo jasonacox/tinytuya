@@ -250,7 +250,7 @@ class XenonDevice(object):
             address (str): The network address.
             local_key (str, optional): The encryption key. Defaults to None.
             send_retry_limit (int, optional): Times a payload may be re-sent
-                after a receive timeout in _send_receive(). None (default)
+                after a receive timeout or connection error. None (default)
                 keeps the historical behavior (same as connection_retry_limit);
                 0 sends each payload exactly once.
             cid (str: Optional sub device id. Default to None.
@@ -573,7 +573,8 @@ class XenonDevice(object):
             # A retry re-sends the payload, so a pending send is bounded by the send-retry
             # limit.  Once any reply arrives (even an empty ACK) payload is cleared and the
             # retries only listen again, like a receive-only call: socketRetryLimit applies.
-            return self._send_retry_limit_for(from_child) if payload is not None else self.socketRetryLimit
+            limit = self._send_retry_limit_for(from_child) if payload is not None else None
+            return self.socketRetryLimit if limit is None else limit
 
         if (not payload) and getresponse and self.received_wrong_cid_queue:
             if (not self.children) or (not from_child):
@@ -1210,17 +1211,18 @@ class XenonDevice(object):
         self.sendRetryLimit = limit
 
     def _send_retry_limit_for(self, from_child=None):
-        """Payload re-send limit for a send by this device, possibly on behalf of a
-        child: the child's explicit send_retry_limit wins, then this device's, and
-        None follows socketRetryLimit (the historical behavior)."""
+        """The send_retry_limit for a send by this device, possibly on behalf of a
+        child: the child's wins, then this device's.  None when neither is set
+        (re-sends then follow socketRetryLimit, the historical behavior)."""
         for dev in (from_child, self):
             limit = getattr(dev, 'sendRetryLimit', None)
             if limit is not None:
                 return limit
-        return self.socketRetryLimit
+        return None
 
-    def _effective_send_retry_limit(self):
-        """The send-retry limit for this device's own writes (a child sends through its gateway)."""
+    def _explicit_send_retry_limit(self):
+        """The send_retry_limit for this device's own writes (a child sends through
+        its gateway), or None when unset."""
         sender = self.parent if self.parent is not None else self
         return sender._send_retry_limit_for(self)
 
