@@ -75,6 +75,14 @@ from .message_helper import (
 
 log = logging.getLogger(__name__)
 
+# Retry-limit setters queued for a monitored device.  Calling them would undo the
+# fail-fast limits Monitor forces while it owns the device (#713), so the value is
+# kept in the device state instead and applied when the device leaves Monitor.
+_DEFERRED_LIMIT_SETTERS = {
+    'set_socketRetryLimit': 'saved_retry_limit',
+    'set_sendRetryLimit': 'saved_send_retry_limit',
+}
+
 
 def _accepts_nowait(method):
     """Return True if ``method`` accepts a ``nowait`` keyword argument.
@@ -849,6 +857,14 @@ class Monitor:
                 log.warning('Monitor: queued command for unknown device %s', device_id)
                 continue
             device = state.device
+            saved_attr = _DEFERRED_LIMIT_SETTERS.get(method_name)
+            if saved_attr:
+                # kept even while the device is reconnecting
+                limit = args[0] if args else kwargs.get('limit')
+                setattr(state, saved_attr, limit)
+                log.debug('Monitor: %s(%r) on %s applies when the device leaves the monitor',
+                          method_name, limit, device_id)
+                continue
             # Only dispatch to a fully-registered, active device.  Gating on
             # state.fileno (set only after selector registration) — rather than
             # device.socket — avoids sending on a socket the connector thread is

@@ -708,6 +708,12 @@ class _FakeDevice:
             except Exception:
                 pass
 
+    def set_socketRetryLimit(self, limit):
+        self.socketRetryLimit = limit
+
+    def set_sendRetryLimit(self, limit):
+        self.sendRetryLimit = limit
+
     def heartbeat(self, nowait=True):
         self.heartbeat_calls += 1
         if self.heartbeat_should_fail:
@@ -766,6 +772,20 @@ class TestMonitorReliability(unittest.TestCase):
         mon.remove(dev)
         self.assertEqual(dev.socketRetryLimit, 5)
         self.assertEqual(dev.sendRetryLimit, 3)
+
+    def test_queued_retry_limit_setters_apply_after_removal(self):
+        """Retry-limit setters queued through the proxy must not undo the
+        fail-fast limits while monitored (a stalled write would retry inside the
+        reactor thread, the #713 stall); they take effect on removal."""
+        mon = self._make()
+        dev = _FakeDevice('devQ', retry_limit=5, send_retry_limit=3)
+        handle = mon.add(dev)
+        handle.set_sendRetryLimit(2)
+        mon.command(dev, 'set_socketRetryLimit', limit=4)
+        mon._drain_queue()
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (4, 2))
 
     def test_heartbeat_failure_disconnects_and_enqueues_reconnect(self):
         disconnects = []
