@@ -1158,6 +1158,50 @@ class TestConfiguredDeviceScanner(unittest.TestCase):
                 dev.close()
                 self.assertIs(dev.found, expected)
 
+class TestServerStaticFiles(unittest.TestCase):
+    """server/server.py get_static() must only serve files inside the web folder."""
+
+    @classmethod
+    def setUpClass(cls):
+        # compile just get_static(): importing server.py loads devices.json and installs signal handlers
+        import ast, os
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server', 'server.py')
+        tree = ast.parse(open(path, encoding='utf-8').read())
+        func = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'get_static')
+        namespace = {'os': os}
+        exec(compile(ast.Module(body=[func], type_ignores=[]), path, 'exec'), namespace)
+        cls.get_static = staticmethod(namespace['get_static'])
+
+    def setUp(self):
+        import os, tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.web = os.path.join(self.tmp.name, 'web')
+        os.makedirs(os.path.join(self.web, 'css'))
+        for name, body in (('web/index.html', b'<html>'), ('web/css/site.css', b'body{}'), ('tinytuya.json', b'{"apiSecret": "s"}')):
+            with open(os.path.join(self.tmp.name, name), 'wb') as f:
+                f.write(body)
+
+    def test_serves_files_in_the_web_folder(self):
+        self.assertEqual(self.get_static(self.web, '/'), (b'<html>', 'text/html'))
+        self.assertEqual(self.get_static(self.web, '/index.html?v=2'), (b'<html>', 'text/html'))
+        self.assertEqual(self.get_static(self.web, '/css/site.css'), (b'body{}', 'text/css'))
+        self.assertEqual(self.get_static(self.web, '/missing.js'), (None, None))
+        self.assertEqual(self.get_static(self.web, '/css'), (None, None))  # a directory is not a file
+
+    def test_refuses_paths_outside_the_web_folder(self):
+        import os
+        for path in ('/../tinytuya.json', '/css/../../tinytuya.json', '//' + os.path.join(self.tmp.name, 'tinytuya.json').lstrip('/'),
+                     '//etc/passwd', '/' + os.path.join(self.tmp.name, 'tinytuya.json')):
+            with self.subTest(path=path):
+                self.assertEqual(self.get_static(self.web, path), (None, None))
+
+    def test_refuses_a_symlink_that_leaves_the_web_folder(self):
+        import os
+        os.symlink(os.path.join(self.tmp.name, 'tinytuya.json'), os.path.join(self.web, 'creds.json'))
+        self.assertEqual(self.get_static(self.web, '/creds.json'), (None, None))
+
+
 class TestScannerRobustness(unittest.TestCase):
     """scanner.devices() must not crash on malformed devices.json rows or an early
     Ctrl-C, and must not dispatch events for a socket a device has replaced."""
