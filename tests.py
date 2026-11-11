@@ -2154,6 +2154,8 @@ class TestSendRetryLimitWire(_WireTestCase):
         # retry=False makes the first decode failure terminal
         # (max_recv_retries=0) instead of a read timeout.  A send_retry_limit=0
         # device must return the error and never fall back to a single-DP re-send
+        if not HAS_GCM:
+            self.skipTest('crypto backend has no GCM support')
         fake = self.attach(FakeTuyaDevice(3.5))
         d = tinytuya.Device('DEVICE_ID_HERE', '192.0.2.10', LOCAL_KEY, version=3.5,
                             connection_retry_limit=1, send_retry_limit=0)
