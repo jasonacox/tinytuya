@@ -214,6 +214,8 @@ def formatreturn(value):
 def get_static(web_root, fpath):
     """Return (content, content type) for a file under web_root, or (None, None)."""
     fpath = fpath.split("?")[0].lstrip("/") or "index.html"
+    if "\0" in fpath:
+        return None, None  # realpath() raises ValueError on an embedded NUL
     # Refuse anything outside web_root, such as "/../tinytuya.json" or "//etc/passwd"
     # (an absolute path, or another drive on Windows, would replace web_root).
     root = os.path.realpath(web_root)

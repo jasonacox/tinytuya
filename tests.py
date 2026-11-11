@@ -1210,6 +1210,10 @@ class TestServerStaticFiles(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(win_get_static('C:\\tinytuya\\server\\web', path), (None, None))
 
+    def test_refuses_an_embedded_nul_without_raising(self):
+        # BaseHTTPRequestHandler passes a raw NUL through; realpath() would raise ValueError
+        self.assertEqual(self.get_static(self.web, '/index.html\x00.js'), (None, None))
+
     def test_refuses_a_sibling_folder_with_the_same_prefix(self):
         # "web2" starts with "web"; the check must compare whole path components
         import os
