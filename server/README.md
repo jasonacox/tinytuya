@@ -113,6 +113,10 @@ The UI at http://localhost:8888 allows you to view and control the devices.
 
 ## Release Notes
 
+### p18 - Static Files Stay Inside the Web Folder
+
+* The control panel's static file handler now resolves each requested path and refuses anything outside `server/web`. Before, a request such as `/../tinytuya.json` or `//etc/passwd` could read files outside the web folder, including the cloud credentials and device keys. Via [#767](https://github.com/jasonacox/tinytuya/pull/767).
+
 ### p17 - Keep tuyalisten UDP Discovery Thread Alive
 
 * Wrapped `send_discovery_request()` in a `try/except` block so transient network errors (e.g. `OSError` during a brief outage) no longer kill the UDP listener thread permanently. Protocol 3.5 devices are now rediscovered after network interruptions without requiring a server restart. Fixes #726. (Credit: @mschlenstedt)

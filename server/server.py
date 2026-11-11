@@ -72,7 +72,7 @@ except:
 import tinytuya
 from tinytuya import scanner
 
-BUILD = "p17"
+BUILD = "p18"
 
 # Defaults from Environment
 APIPORT = int(os.getenv("APIPORT", "8888"))
@@ -212,13 +212,21 @@ def formatreturn(value):
     return(json.dumps(result))
 
 def get_static(web_root, fpath):
-    if fpath.split('?')[0] == "/":
-        fpath = "index.html"
-    if fpath.startswith("/"):
-        fpath = fpath[1:]
-    fpath = fpath.split("?")[0]
-    freq = os.path.join(web_root, fpath)
-    if os.path.exists(freq):
+    """Return (content, content type) for a file under web_root, or (None, None)."""
+    fpath = fpath.split("?")[0].lstrip("/") or "index.html"
+    if "\0" in fpath:
+        return None, None  # realpath() raises ValueError on an embedded NUL
+    # Refuse anything outside web_root, such as "/../tinytuya.json" or "//etc/passwd"
+    # (an absolute path, or another drive on Windows, would replace web_root).
+    root = os.path.realpath(web_root)
+    freq = os.path.normpath(os.path.join(root, fpath))
+    if not freq.startswith(root + os.sep):
+        return None, None
+    # then resolve symlinks, which could also point outside web_root
+    freq = os.path.realpath(freq)
+    if not freq.startswith(root + os.sep):
+        return None, None
+    if os.path.isfile(freq):
         if freq.lower().endswith(".js"):
             ftype = "application/javascript"
         elif freq.lower().endswith(".css"):
