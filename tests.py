@@ -16,6 +16,7 @@ logging.basicConfig()  # TODO include function name/line numbers in log
 log.setLevel(level=logging.INFO)
 log.setLevel(level=logging.DEBUG)  # Debug hack!
 
+import weakref
 import base64
 
 import tinytuya
@@ -451,6 +452,166 @@ class TestCloudDeviceLog(unittest.TestCase):
         c, calls = self._cloud(pages=10)
         c.getdevicelog('0123456789abcdef', size=50)
         self.assertEqual(len(calls), 1)
+class TestDeviceLogContext(unittest.TestCase):
+    """Debug lines from device methods carry the device ID; logger names stay __name__ (#746)."""
+
+    def test_xenondevice_lines_tagged_with_device_id(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_1', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d.status()
+        self.assertTrue(cm.records)
+        for rec in cm.records:
+            self.assertEqual(rec.name, 'tinytuya.core.XenonDevice')
+            self.assertEqual(rec.device_id, 'LOGCTX_DEVICE_1')
+            self.assertTrue(rec.getMessage().startswith('[LOGCTX_DEVICE_1] '))
+            self.assertNotIn(LOCAL_KEY, rec.getMessage().split('] ', 1)[0])
+
+    def test_device_module_keeps_its_logger_name(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_2', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.Device', level='DEBUG') as cm:
+            d.set_status(True)
+        self.assertEqual(cm.records[0].name, 'tinytuya.core.Device')
+        self.assertEqual(cm.records[0].device_id, 'LOGCTX_DEVICE_2')
+        self.assertIn('[LOGCTX_DEVICE_2] set_status received', cm.output[0])
+
+    def test_two_devices_are_distinguishable(self):
+        d1 = tinytuya.OutletDevice('LOGCTX_A', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d2 = tinytuya.OutletDevice('LOGCTX_B', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        for d in (d1, d2):
+            d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d1.status()
+            d2.status()
+        ids = {rec.device_id for rec in cm.records}
+        self.assertEqual(ids, {'LOGCTX_A', 'LOGCTX_B'})
+
+    def test_device_id_read_at_emit_time(self):
+        """A device whose id is filled in later (e.g. by a force scan) logs the current id."""
+        d = tinytuya.OutletDevice('', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as first:
+            d._log.debug('before discovery')
+        self.assertIn('[] ', first.records[0].getMessage())
+        d.id = 'LATE_ASSIGNED_ID'
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as second:
+            d._log.debug('after discovery')
+        self.assertTrue(second.records[0].getMessage().startswith('[LATE_ASSIGNED_ID] '))
+        self.assertEqual(second.records[0].device_id, 'LATE_ASSIGNED_ID')
+
+    def test_dropped_device_is_freed(self):
+        """Logging must not leave a device -> adapter -> device cycle: dropping a
+        device frees it (and closes its socket) immediately, without the cycle
+        collector."""
+        import gc
+        d = tinytuya.OutletDevice('LOGCTX_GC', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG'):
+            d.status()
+        with self.assertLogs('tinytuya.core.Device', level='DEBUG'):
+            d.set_status(True)
+        del d._send_receive  # the mock holds call args, not the device
+        closed = []
+        d.close = lambda: closed.append(True)
+        ref = weakref.ref(d)
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            del d
+            self.assertIsNone(ref(), 'device must be freed by refcounting alone')
+            self.assertEqual(closed, [True])
+        finally:
+            if was_enabled:
+                gc.enable()
+
+    def test_pickled_and_copied_devices_log_their_own_id(self):
+        import copy, pickle
+        d = tinytuya.OutletDevice('LOGCTX_ORIG', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG'):
+            d._log.debug('logged before cloning')
+        for clone in (pickle.loads(pickle.dumps(d)), copy.copy(d), copy.deepcopy(d)):
+            clone.id = 'LOGCTX_CLONE'
+            with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+                clone._log.debug('hello')
+            self.assertEqual(cm.records[0].device_id, 'LOGCTX_CLONE')
+
+    def test_process_does_not_mutate_caller_extra(self):
+        d = tinytuya.OutletDevice('LOGCTX_EXTRA', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        caller_extra = {'custom': 'value'}
+        msg, kwargs = d._log.process('hello', {'extra': caller_extra})
+        self.assertEqual(caller_extra, {'custom': 'value'},
+                         'the dict passed by the caller must not be mutated')
+        self.assertEqual(kwargs['extra']['device_id'], 'LOGCTX_EXTRA')
+        self.assertEqual(kwargs['extra']['custom'], 'value')
+
+    def test_shared_formatter_needs_a_filter_default(self):
+        """Records that bypass the adapter have no device_id; a filter that
+        supplies a default makes '%(device_id)s' safe in a shared formatter."""
+        class DeviceIdFilter(logging.Filter):
+            def filter(self, record):
+                if not hasattr(record, 'device_id'):
+                    record.device_id = '-'
+                return True
+
+        logger = logging.getLogger('tinytuya.core.XenonDevice')
+        filt = DeviceIdFilter()
+        logger.addFilter(filt)
+        try:
+            with self.assertLogs(logger, level='DEBUG') as cm:
+                logger.debug('no device context here')  # e.g. load_devicefile()/find_device() paths
+            rec = cm.records[0]
+            self.assertEqual(rec.device_id, '-')
+            self.assertEqual(('%(device_id)s' % rec.__dict__), '-')
+        finally:
+            logger.removeFilter(filt)
+
+    def test_filter_belongs_on_the_handler_not_the_logger(self):
+        """Filters on the 'tinytuya' logger never run for records propagated
+        from child loggers (tinytuya.core.*), so the README's DeviceIdFilter
+        must be attached to the handler that formats the records."""
+        class DeviceIdFilter(logging.Filter):
+            def filter(self, record):
+                if not hasattr(record, 'device_id'):
+                    record.device_id = '-'
+                return True
+
+        root = logging.getLogger('tinytuya')
+        child = logging.getLogger('tinytuya.core.XenonDevice')
+        # no propagate-suppression or handlers on 'tinytuya' in the test env;
+        # use a private child logger so the setup is hermetic
+        child = logging.getLogger('tinytuya.core.LogFilterTest')
+        fmt = logging.Formatter('%(device_id)s %(message)s')
+
+        # logger-level filter: must NOT be consulted for the child's records
+        root_filter = DeviceIdFilter()
+        root.addFilter(root_filter)
+        try:
+            rec = logging.LogRecord(child.name, logging.DEBUG, __file__, 1,
+                                    'unadapted message', None, None)
+            self.assertFalse(hasattr(rec, 'device_id'),
+                             'a logger filter cannot run on propagated child records')
+
+            # handler-level filter: fills the default before the formatter runs
+            import io
+            stream = io.StringIO()
+            handler = logging.StreamHandler(stream)
+            handler.setFormatter(fmt)
+            handler.addFilter(DeviceIdFilter())
+            rec2 = logging.LogRecord(child.name, logging.DEBUG, __file__, 1,
+                                     'unadapted message', None, None)
+            # the handler pipeline renders what the logger pipeline cannot
+            handler.handle(rec2)
+            self.assertEqual(stream.getvalue(), '- unadapted message\n')
+        finally:
+            root.removeFilter(root_filter)
+
+    def test_caller_extra_is_merged(self):
+        d = tinytuya.OutletDevice('LOGCTX_DEVICE_3', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+            d._log.debug('hello %s', 'world', extra={'foo': 'bar'})
+        self.assertEqual(cm.records[0].foo, 'bar')
+        self.assertEqual(cm.records[0].device_id, 'LOGCTX_DEVICE_3')
+        self.assertEqual(cm.records[0].getMessage(), '[LOGCTX_DEVICE_3] hello world')
 
 
 class TestLoadDeviceFile(unittest.TestCase):
@@ -3059,12 +3220,24 @@ def _print_sites(path, tree):
     return sites
 
 
+def _log_receiver(func):
+    """'log' or 'self._log' when `func` calls one of those, else None."""
+    if isinstance(func.value, ast.Name) and func.value.id == 'log':
+        return 'log'
+    if (isinstance(func.value, ast.Attribute) and func.value.attr == '_log'
+            and isinstance(func.value.value, ast.Name) and func.value.value.id == 'self'):
+        return 'self._log'
+    return None
+
 def _unguarded_hexlify(path, tree):
-    """'path:function' of log calls that hexlify outside an isEnabledFor() check."""
+    """'path:function' of log calls (module `log` or the device adapter `self._log`) that hexlify outside an isEnabledFor() check."""
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     for node in ast.walk(tree):
         func = getattr(node, 'func', None)
-        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == 'log'):
+        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute)):
+            continue
+        receiver = _log_receiver(func)
+        if not receiver:
             continue
         if not any(getattr(getattr(n, 'func', None), 'attr', None) == 'hexlify' for arg in node.args for n in ast.walk(arg)):
             continue
@@ -3073,7 +3246,7 @@ def _unguarded_hexlify(path, tree):
             child, p = p, parents[p]
             # only the body of `if log.isEnabledFor(logging.DEBUG):` counts, not its else or another level
             guarded = guarded or (isinstance(p, ast.If) and child in p.body
-                                  and ast.unparse(p.test) == 'log.isEnabledFor(logging.DEBUG)')
+                                  and ast.unparse(p.test) == receiver + '.isEnabledFor(logging.DEBUG)')
         if not guarded:
             yield '%s:%s' % (path, getattr(p, 'name', '<module>'))
 
