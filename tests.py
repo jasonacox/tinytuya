@@ -787,6 +787,28 @@ class TestMonitorReliability(unittest.TestCase):
         mon.remove(dev)
         self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (4, 2))
 
+    def test_remove_or_stop_during_reconnect_keeps_the_restored_limits(self):
+        # remove()/stop() hand the device back with its own limits while the connector
+        # is mid-connect; the connector must not force them back to 0 afterwards
+        for hand_back in ('remove', 'stop'):
+            with self.subTest(hand_back=hand_back):
+                mon = self._make(reconnect_backoff=0)
+                dev = _FakeDevice('devR', retry_limit=5, send_retry_limit=3)
+                mon.add(dev)
+
+                def connect_during_hand_back(renew, mon=mon, dev=dev, hand_back=hand_back):
+                    if hand_back == 'remove':
+                        mon.remove(dev)
+                        mon._stop_event.set()  # end the connector loop, _running stays True
+                    else:
+                        mon.stop()
+                    return False
+                dev._get_socket = connect_during_hand_back
+                mon._running = True
+                mon._reconnect_queue.append(dev.id)
+                mon._run_connector()
+                self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
+
     def test_queued_retry_limit_setter_without_a_value_is_not_saved(self):
         # a malformed call must not store None as the limit restored on removal
         mon = self._make()
