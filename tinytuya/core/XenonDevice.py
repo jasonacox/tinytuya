@@ -44,8 +44,7 @@ class _DeviceLogAdapter(logging.LoggerAdapter):
         # Copy the caller's extra: mutating it in place would leak device_id
         # into a dict the caller may reuse for other records.
         extra = dict(kwargs.get('extra') or {})
-        device = self._device_ref()
-        extra['device_id'] = getattr(device, 'id', None) if device is not None else None
+        extra['device_id'] = getattr(self._device_ref(), 'id', None)  # None once the device is gone
         kwargs['extra'] = extra
         return '[%s] %s' % (extra['device_id'], msg), kwargs
 

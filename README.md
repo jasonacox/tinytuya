@@ -790,7 +790,7 @@ By default, the scan functions will listen for about 18 seconds to find new devi
   data =  a.status()
   print(data)
   ```
-* **Debugging several devices at once:** debug lines from device methods are prefixed with the device ID (e.g. `[0123456789abcdef] sending payload`) and each record carries a `device_id` attribute. Logger names are unchanged (`tinytuya.core.XenonDevice`, `tinytuya.core.Device`, ...). `device_id` is only present on records emitted by device methods, so a shared formatter using `%(device_id)s` must add a filter that supplies a default first. Attach the filter to the *handler* (not the `tinytuya` logger): filters on a logger do not run for records propagated up from child loggers like `tinytuya.core.XenonDevice`, so some records would still fail to format:
+* **Debugging several devices at once:** log lines from device methods are prefixed with the device ID (e.g. `[0123456789abcdef] sending payload`) and each record carries a `device_id` attribute. Logger names are unchanged (`tinytuya.core.XenonDevice`, `tinytuya.core.Device`, ...). `device_id` is only present on records emitted by device methods, so a shared formatter using `%(device_id)s` must add a filter that supplies a default first. Attach the filter to the *handler* (not the `tinytuya` logger): filters on a logger do not run for records propagated up from child loggers like `tinytuya.core.XenonDevice`, so some records would still fail to format:
   ```python
   import logging
   class DeviceIdFilter(logging.Filter):
