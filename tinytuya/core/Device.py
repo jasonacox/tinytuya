@@ -139,6 +139,12 @@ class Device(XenonDevice):
         result = self._send_receive(payload, getresponse=(not nowait))
 
         if result and 'Err' in result and len(out) > 1:
+            if self._explicit_send_retry_limit() == 0:
+                # send_retry_limit=0: whatever failed, the batch may already have landed
+                # (a lost or unreadable reply, a reset after an ACK), so never re-send its
+                # DPs one at a time.  Unset keeps the historical fallback, even when
+                # socketRetryLimit is 0.
+                return result
             # sending failed! device might only be able to handle 1 DP at a time
             first_dp = next(iter( out ))
             res = self.set_value(first_dp, out[first_dp], nowait=nowait)

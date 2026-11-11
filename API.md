@@ -189,6 +189,8 @@ XenonDevice(
     connection_retry_limit=5, # int
     connection_retry_delay=5, # int
     port=6668,                # int
+    max_simultaneous_dps=0,   # int  – Max DPs per CONTROL frame (0 = no limit)
+    send_retry_limit=None,    # int  – Payload re-sends after a timeout (None = connection_retry_limit)
 )
 ```
 
@@ -230,6 +232,20 @@ Maximum number of reconnect attempts. Default: `5`.
 
 ```python
 d.set_socketRetryLimit(3)
+```
+
+#### `set_sendRetryLimit(limit)`
+Number of times a payload may be re-sent after a receive timeout or connection
+error in `_send_receive()`. Use `0` to send each payload exactly once — useful
+for toggle or relative writes, where a duplicate send after a lost reply would
+apply the command twice. Connection retries are controlled separately by
+`set_socketRetryLimit()`. With `0`, `set_multiple_values()` also skips its
+one-DP-at-a-time fallback after a failed batch. Default: same value as
+`set_socketRetryLimit()` (historical behavior). Can also be set at construction
+with `send_retry_limit=`.
+
+```python
+d.set_sendRetryLimit(0)
 ```
 
 #### `set_socketRetryDelay(delay)`

@@ -199,6 +199,7 @@ TinyTuya Base Functions
     set_socketPersistent(False/True)              # False [default] or True
     set_socketNODELAY(False/True)                 # False or True [default]
     set_socketRetryLimit(integer)                 # retry count limit [default 5]
+    set_sendRetryLimit(integer)                  # payload resend limit after timeout [default: follows socketRetryLimit]
     set_socketRetryDelay(integer)                 # retry delay [default 5]
     set_socketTimeout(timeout)                    # set connection timeout in seconds [default 5]
     set_dpsUsed(dps_to_request)                   # add data points (DPS) to request
