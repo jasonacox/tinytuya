@@ -1168,9 +1168,15 @@ class TestServerStaticFiles(unittest.TestCase):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server', 'server.py')
         tree = ast.parse(open(path, encoding='utf-8').read())
         func = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'get_static')
-        namespace = {'os': os}
-        exec(compile(ast.Module(body=[func], type_ignores=[]), path, 'exec'), namespace)
-        cls.get_static = staticmethod(namespace['get_static'])
+        cls.code = compile(ast.Module(body=[func], type_ignores=[]), path, 'exec')
+        cls.get_static = staticmethod(cls.load(os))
+
+    @classmethod
+    def load(cls, os_module):
+        """get_static() bound to os_module, so it can run with Windows path rules too."""
+        namespace = {'os': os_module}
+        exec(cls.code, namespace)
+        return namespace['get_static']
 
     def setUp(self):
         import os, tempfile
@@ -1195,6 +1201,22 @@ class TestServerStaticFiles(unittest.TestCase):
                      '//etc/passwd', '/' + os.path.join(self.tmp.name, 'tinytuya.json')):
             with self.subTest(path=path):
                 self.assertEqual(self.get_static(self.web, path), (None, None))
+
+    def test_refuses_another_windows_drive_without_raising(self):
+        # on Windows, "D:/..." replaces web_root; os.path.commonpath() would raise ValueError here
+        import ntpath, types
+        win_get_static = self.load(types.SimpleNamespace(path=ntpath, sep='\\'))
+        for path in ('/D:/secret.txt', '//D:/secret.txt', '/C:/Windows/win.ini', '/../tinytuya.json'):
+            with self.subTest(path=path):
+                self.assertEqual(win_get_static('C:\\tinytuya\\server\\web', path), (None, None))
+
+    def test_refuses_a_sibling_folder_with_the_same_prefix(self):
+        # "web2" starts with "web"; the check must compare whole path components
+        import os
+        os.makedirs(os.path.join(self.tmp.name, 'web2'))
+        with open(os.path.join(self.tmp.name, 'web2', 'x.html'), 'wb') as f:
+            f.write(b'no')
+        self.assertEqual(self.get_static(self.web, '/../web2/x.html'), (None, None))
 
     def test_refuses_a_symlink_that_leaves_the_web_folder(self):
         import os
