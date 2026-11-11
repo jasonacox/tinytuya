@@ -857,6 +857,12 @@ class _FakeDevice:
             except Exception:
                 pass
 
+    def set_socketRetryLimit(self, limit):
+        self.socketRetryLimit = limit
+
+    def set_sendRetryLimit(self, limit):
+        self.sendRetryLimit = limit
+
     def heartbeat(self, nowait=True):
         self.heartbeat_calls += 1
         if self.heartbeat_should_fail:
@@ -915,6 +921,30 @@ class TestMonitorReliability(unittest.TestCase):
         mon.remove(dev)
         self.assertEqual(dev.socketRetryLimit, 5)
         self.assertEqual(dev.sendRetryLimit, 3)
+
+    def test_queued_retry_limit_setters_apply_after_removal(self):
+        """Retry-limit setters queued through the proxy must not undo the
+        fail-fast limits while monitored (a stalled write would retry inside the
+        reactor thread, the #713 stall); they take effect on removal."""
+        mon = self._make()
+        dev = _FakeDevice('devQ', retry_limit=5, send_retry_limit=3)
+        handle = mon.add(dev)
+        handle.set_sendRetryLimit(2)
+        mon.command(dev, 'set_socketRetryLimit', limit=4)
+        mon._drain_queue()
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (4, 2))
+
+    def test_queued_retry_limit_setter_without_a_value_is_not_saved(self):
+        # a malformed call must not store None as the limit restored on removal
+        mon = self._make()
+        dev = _FakeDevice('devN', retry_limit=5, send_retry_limit=3)
+        handle = mon.add(dev)
+        handle.set_socketRetryLimit()
+        mon._drain_queue()
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
 
     def test_heartbeat_failure_disconnects_and_enqueues_reconnect(self):
         disconnects = []
@@ -1579,6 +1609,7 @@ class FakeTuyaDevice(object):
 
     Knobs: dps / children ({cid: dps}) hold state; device22 answers DP_QUERY
     with "data unvalid"; raw_reply replaces the status body of query replies;
+    raw_ack replaces the payload of CONTROL acks (a non-JSON reply);
     retcode is put in CONTROL acks; silent records requests but never answers;
     corrupt_tags sends that many data replies with a broken GCM tag; push()
     queues unsolicited STATUS updates; noise is junk sent ahead of the next
@@ -1607,6 +1638,7 @@ class FakeTuyaDevice(object):
         self.children = children or {}
         self.device22 = device22
         self.raw_reply = None
+        self.raw_ack = None
         self.retcode = 0
         self.silent = False
         self.corrupt_tags = 0
@@ -1808,6 +1840,10 @@ class FakeTuyaDevice(object):
                 found = {k: state[k] for k in dps if k in state}
                 return self._frame(cmd, self._seal(self._status(found, cid)), seqno)
             state.update(dps)
+            if self.raw_ack is not None:
+                # the write landed, but the device answers with a payload the
+                # client will not be able to decode as JSON
+                return self._frame(cmd, self._seal(self.raw_ack), seqno)
             # empty ack carrying the retcode, then a STATUS push with the new values
             ack = self._frame(cmd, b'', seqno, self.retcode)
             return ack + self._frame(CMD.STATUS, self._seal(self._status(dps, cid), True), seqno)
@@ -2175,6 +2211,12 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.addCleanup(d.close)
         return d, fake
 
+    @staticmethod
+    def _exc_with(logs, needle):
+        # assertLogs also keeps these expected tracebacks off stderr, where CI's
+        # Python problem matcher would turn each one into a failure annotation
+        return sum(1 for r in logs.records if r.exc_info and needle in str(r.exc_info[1]))
+
     def test_lost_reply_with_send_retry_zero_sends_exactly_once(self):
         d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
         fake.silent = True  # accept writes, never answer
@@ -2210,7 +2252,11 @@ class TestSendRetryLimitWire(_WireTestCase):
                 raise OSError('connection refused')
             real_connect()
         fake.connect = flaky_connect
-        result = d.set_value(2, 77)
+        # assertLogs keeps the expected connect-refusal traceback off stderr,
+        # where CI's Python problem matcher would flag it as a failure
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            result = d.set_value(2, 77)
+        self.assertEqual(self._exc_with(logs, 'connection refused'), 1)
         self.assertEqual(result['dps'], {'2': 77})
         self.assertEqual(fake.dps['2'], 77)
         # connection retried after the refusal, but the write went out once
@@ -2226,7 +2272,9 @@ class TestSendRetryLimitWire(_WireTestCase):
             attempts.append(1)
             raise real_error
         fake.receive_bytes = exploding_rx
-        res = d.set_value(2, 77)
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            res = d.set_value(2, 77)
+        self.assertEqual(self._exc_with(logs, 'broken pipe'), 1)
         self.assertEqual(res['Err'], str(ERR_CONNECT))
         # one connection, and the payload handed to sendall exactly once
         # (the write never parses, so count socket-level sends)
@@ -2273,8 +2321,8 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(fake.dps, {'1': False, '2': 0}, 'no DP was applied twice')
 
     def test_child_default_limit_inherits_gateway_no_resend_in_fallback(self):
-        # regression: the fallback guard used to read the child's own
-        # _send_retry_limit() (its socketRetryLimit), not the effective limit
+        # regression: the fallback guard used to read the child's own limit
+        # (its socketRetryLimit), not the effective limit
         # the gateway actually enforces, so a gateway no-resend policy was
         # bypassed and the first DP of a failed batch was sent again
         fake = self.attach(FakeTuyaDevice(3.3, dev_id='GATEWAY_ID', children={'cidA': {'1': True, '2': 50}}))
@@ -2291,22 +2339,37 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(len(child_writes), 1,
                          'no-resend gateway policy must suppress the single-DP fallback')
 
-    def test_set_multiple_values_no_resend_on_unreadable_response(self):
-        # regression: ERR_JSON/ERR_PAYLOAD are local decode failures, not
-        # device rejections — the batch may have been applied, so a
-        # send_retry_limit=0 device must not fall back and resend DP 1
-        from tinytuya.core.error_helper import error_json
+    def test_set_multiple_values_no_resend_on_corrupt_reply_tag(self):
+        # ERR_PAYLOAD, real wire path: the fake applies the batch, then the
+        # CONTROL reply's GCM tag is broken, so the client cannot decode it.
+        # retry=False makes the first decode failure terminal
+        # (max_recv_retries=0) instead of a read timeout.  A send_retry_limit=0
+        # device must return the error and never fall back to a single-DP re-send
+        if not HAS_GCM:
+            self.skipTest('crypto backend has no GCM support')
+        fake = self.attach(FakeTuyaDevice(3.5))
+        d = tinytuya.Device('DEVICE_ID_HERE', '192.0.2.10', LOCAL_KEY, version=3.5,
+                            connection_retry_limit=1, send_retry_limit=0)
+        self.addCleanup(d.close)
+        fake.corrupt_tags = 1
+        d.set_retry(False)  # max_recv_retries=0: first decode failure is terminal
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(self._exc_with(logs, 'GCM authentication failed'), 1)
+        self.assertEqual(res['Err'], str(ERR_PAYLOAD))
+        self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
+        self.assertEqual(fake.dps, {'1': True, '2': 50}, 'the batch was applied before the reply broke')
+
+    def test_set_multiple_values_no_resend_on_non_json_ack(self):
+        # ERR_JSON, real wire path: the fake applies the batch, then answers
+        # the CONTROL with a payload that decrypts fine but is not valid JSON.
+        # The write may have landed, so no single-DP fallback re-send
         d, fake = self._dev(send_retry_limit=0)
-        calls = []
-        real = d._send_receive
-        def unreadable(payload, **kw):
-            calls.append(payload)
-            return error_json(ERR_JSON, b'garbage')  # write may have landed; reply undecodable
-        d._send_receive = unreadable
+        fake.raw_ack = b'{"dps": tru'
         res = d.set_multiple_values({1: True, 2: 50})
-        d._send_receive = real
         self.assertEqual(res['Err'], str(ERR_JSON))
-        self.assertEqual(len(calls), 1, 'no-resend policy must not fall back to a single-DP re-send')
+        self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
+        self.assertEqual(fake.dps, {'1': True, '2': 50}, 'the batch was applied before the unreadable ack')
 
     def test_set_multiple_values_fallback_still_works_with_retries_on(self):
         d, fake = self._dev(connection_retry_limit=1)
