@@ -2032,6 +2032,12 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.addCleanup(d.close)
         return d, fake
 
+    @staticmethod
+    def _exc_with(logs, needle):
+        # assertLogs also keeps these expected tracebacks off stderr, where CI's
+        # Python problem matcher would turn each one into a failure annotation
+        return sum(1 for r in logs.records if r.exc_info and needle in str(r.exc_info[1]))
+
     def test_lost_reply_with_send_retry_zero_sends_exactly_once(self):
         d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
         fake.silent = True  # accept writes, never answer
@@ -2067,7 +2073,11 @@ class TestSendRetryLimitWire(_WireTestCase):
                 raise OSError('connection refused')
             real_connect()
         fake.connect = flaky_connect
-        result = d.set_value(2, 77)
+        # assertLogs keeps the expected connect-refusal traceback off stderr,
+        # where CI's Python problem matcher would flag it as a failure
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            result = d.set_value(2, 77)
+        self.assertEqual(self._exc_with(logs, 'connection refused'), 1)
         self.assertEqual(result['dps'], {'2': 77})
         self.assertEqual(fake.dps['2'], 77)
         # connection retried after the refusal, but the write went out once
@@ -2083,7 +2093,9 @@ class TestSendRetryLimitWire(_WireTestCase):
             attempts.append(1)
             raise real_error
         fake.receive_bytes = exploding_rx
-        res = d.set_value(2, 77)
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            res = d.set_value(2, 77)
+        self.assertEqual(self._exc_with(logs, 'broken pipe'), 1)
         self.assertEqual(res['Err'], str(ERR_CONNECT))
         # one connection, and the payload handed to sendall exactly once
         # (the write never parses, so count socket-level sends)
@@ -2162,7 +2174,9 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.addCleanup(d.close)
         fake.corrupt_tags = 1
         d.set_retry(False)  # max_recv_retries=0: first decode failure is terminal
-        res = d.set_multiple_values({1: True, 2: 50})
+        with self.assertLogs(_xenon_mod.log, logging.DEBUG) as logs:
+            res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(self._exc_with(logs, 'GCM authentication failed'), 1)
         self.assertEqual(res['Err'], str(ERR_PAYLOAD))
         self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
         self.assertEqual(fake.dps, {'1': True, '2': 50}, 'the batch was applied before the reply broke')
