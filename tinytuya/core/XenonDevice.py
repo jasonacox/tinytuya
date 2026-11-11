@@ -569,6 +569,10 @@ class XenonDevice(object):
         if self.parent:
             return self.parent._send_receive(payload, minresponse, getresponse, decode_response, from_child=self)
 
+        # A timeout re-sends the payload, so a send is bounded by the send-retry limit;
+        # a receive-only call (payload None) re-sends nothing and keeps socketRetryLimit.
+        retry_limit = self._send_retry_limit_for(from_child) if payload is not None else self.socketRetryLimit
+
         if (not payload) and getresponse and self.received_wrong_cid_queue:
             if (not self.children) or (not from_child):
                 # queue entries are (child, result) tuples; return just the result
@@ -651,13 +655,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Timeout in _send_receive() - retry %s / %s",
-                    retries, self._send_retry_limit_for(from_child)
+                    retries, retry_limit
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self._send_retry_limit_for(from_child):
+                if retries > retry_limit:
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self._send_retry_limit_for(from_child)
+                        retry_limit
                     )
                     # timeout reached - return error
                     return error_json(ERR_TIMEOUT)
@@ -682,13 +686,13 @@ class XenonDevice(object):
                 self._check_socket_close(True)
                 log.debug(
                     "Network connection error in _send_receive() - retry %s/%s",
-                    retries, self._send_retry_limit_for(from_child), exc_info=True
+                    retries, retry_limit, exc_info=True
                 )
                 # if we exceed the limit of retries then lets get out of here
-                if retries > self._send_retry_limit_for(from_child):
+                if retries > retry_limit:
                     log.debug(
                         "Exceeded tinytuya send retry limit (%s)",
-                        self._send_retry_limit_for(from_child)
+                        retry_limit
                     )
                     log.debug("Unable to connect to device ")
                     # timeout reached - return error

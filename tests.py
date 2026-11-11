@@ -809,6 +809,49 @@ class TestMonitorReliability(unittest.TestCase):
                 mon._run_connector()
                 self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
 
+    def test_reconnect_uses_real_limits_then_fail_fast_again(self):
+        # the blocking connect runs with the device's own limits; afterwards the
+        # monitored device is fail-fast again
+        mon = self._make(reconnect_backoff=0)
+        dev = _FakeDevice('devC2', retry_limit=5, send_retry_limit=3)
+        mon.add(dev)
+        during = []
+
+        def connect(renew):
+            during.append((dev.socketRetryLimit, dev.sendRetryLimit))
+            mon._stop_event.set()  # one attempt, then end the connector loop
+            return False
+        dev._get_socket = connect
+        mon._running = True
+        mon._reconnect_queue.append(dev.id)
+        mon._run_connector()
+        self.assertEqual(during, [(5, 3)])
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+
+    def test_readded_during_reconnect_backoff_stays_fail_fast(self):
+        # removed and added again while the connector waits out its backoff: the
+        # stale attempt must not put the old real limits on the monitored device
+        mon = self._make(reconnect_backoff=0)
+        dev = _FakeDevice('devA2', retry_limit=5, send_retry_limit=3)
+        mon.add(dev)
+        mon._running = True
+        mon._reconnect_queue.append(dev.id)
+
+        stale_connects = []
+
+        def readd_during_backoff(timeout):
+            mon.remove(dev)
+            mon.add(dev)
+            dev._get_socket = lambda renew: stale_connects.append(renew) or False
+            mon._stop_event.wait = lambda timeout: True  # then end the connector loop
+            return False
+        mon._stop_event.wait = readd_during_backoff
+        mon._run_connector()
+        self.assertEqual(stale_connects, [], 'the stale attempt must not connect')
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
+
     def test_queued_retry_limit_setter_without_a_value_is_not_saved(self):
         # a malformed call must not store None as the limit restored on removal
         mon = self._make()
@@ -2097,6 +2140,18 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(res['Err'], str(ERR_TIMEOUT))
         self.assertEqual(len(self._writes(fake)), 1)
         self.assertEqual(fake.connections, 1)
+
+    def test_receive_only_is_not_bounded_by_send_retry_limit(self):
+        # receive() re-sends nothing, so send_retry_limit=0 must not cut short its
+        # reconnects after a network error (a receive-only timeout returns None at once)
+        counts = []
+        for send_retry_limit in (None, 0):
+            d, fake = self._dev(connection_retry_limit=2, send_retry_limit=send_retry_limit)
+            with patch.object(d, '_receive', side_effect=ConnectionResetError(54, 'reset')), \
+                    self.assertLogs(_xenon_mod.log, logging.DEBUG):
+                self.assertEqual(d.receive()['Err'], str(ERR_CONNECT))
+            counts.append(fake.connections)
+        self.assertEqual(counts, [3, 3])  # first connect + socketRetryLimit (2) reconnects
 
     def test_lost_reply_default_follows_connection_retry(self):
         d, fake = self._dev(connection_retry_limit=1)

@@ -783,15 +783,23 @@ class Monitor:
             # Blocking connect (this is why we're on a separate thread).  Restore
             # the device's real retry limit for the connect, then put it back to
             # the reactor-safe fail-fast value before handing the socket back.
-            device.socketRetryLimit = state.saved_retry_limit
-            device.sendRetryLimit = state.saved_send_retry_limit
+            with self._limits_lock:
+                current = self._id_to_state.get(device_id) is state
+                if current:
+                    device.socketRetryLimit = state.saved_retry_limit
+                    device.sendRetryLimit = state.saved_send_retry_limit
+            if not current:
+                # removed, or removed and added again, during the backoff: drop this attempt
+                with self._reconnect_lock:
+                    self._devices_in_reconnect.discard(device_id)
+                continue
             try:
                 result = device._get_socket(False)
             except Exception as exc:
                 result = str(exc)
             finally:
-                # Back to fail-fast only while still monitored: remove() or stop() may
-                # have handed the device back, with its own limits, during the connect.
+                # Back to fail-fast, unless remove() or stop() handed the device back
+                # (with its own limits) during the connect.
                 with self._limits_lock:
                     if self._id_to_state.get(device_id) is state:
                         device.socketRetryLimit = 0
