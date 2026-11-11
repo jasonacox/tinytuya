@@ -11,7 +11,6 @@ import socket
 import struct
 import time
 import sys
-import weakref
 
 from .const import DEVICEFILE, TCPPORT
 from .crypto_helper import AESCipher
@@ -31,20 +30,19 @@ class _DeviceLogAdapter(logging.LoggerAdapter):
     whose id is filled in or changed after construction (e.g. by a force scan)
     are tagged correctly.
 
-    The adapter holds only a weak reference to the device: a strong reference
-    would create a device -> adapter -> device cycle, so a dropped device
-    (and its socket, closed in ``__del__``) would linger until the cycle
-    collector ran instead of being freed immediately by refcounting.
+    XenonDevice._device_logger() makes one per call and the device never stores
+    it, so there is no device -> adapter -> device cycle (a dropped device is
+    freed, and its socket closed, by refcounting) and devices stay picklable.
     """
     def __init__(self, logger, device):
         super(_DeviceLogAdapter, self).__init__(logger, None)
-        self._device_ref = weakref.ref(device)
+        self._device = device
 
     def process(self, msg, kwargs):
         # Copy the caller's extra: mutating it in place would leak device_id
         # into a dict the caller may reuse for other records.
         extra = dict(kwargs.get('extra') or {})
-        extra['device_id'] = getattr(self._device_ref(), 'id', None)  # None once the device is gone
+        extra['device_id'] = getattr(self._device, 'id', None)
         kwargs['extra'] = extra
         return '[%s] %s' % (extra['device_id'], msg), kwargs
 
@@ -262,10 +260,6 @@ payload_dict = {
 }
 
 class XenonDevice(object):
-    # fallbacks in case a subclass logs before XenonDevice.__init__() has run
-    _log = log
-    _log_adapters = None
-
     def __init__(
             self, dev_id, address=None, local_key="", dev_type="default", connection_timeout=5,
             version=3.1, # pylint: disable=W0621
@@ -293,8 +287,6 @@ class XenonDevice(object):
         """
 
         self.id = dev_id
-        self._log_adapters = {}
-        self._log = self._device_logger(log)
         self.cid = cid if cid else node_id
         self.address = address
         self.auto_ip = False
@@ -377,13 +369,13 @@ class XenonDevice(object):
             XenonDevice.set_version(self, 3.1)
 
     def _device_logger(self, logger):
-        """Return a cached LoggerAdapter for `logger` that tags messages with this device's ID"""
-        if self._log_adapters is None:
-            return logger
-        adapter = self._log_adapters.get(logger.name)
-        if adapter is None:
-            adapter = self._log_adapters[logger.name] = _DeviceLogAdapter(logger, self)
-        return adapter
+        """Return a LoggerAdapter for `logger` that tags messages with this device's ID"""
+        return _DeviceLogAdapter(logger, self)
+
+    @property
+    def _log(self):
+        """This module's logger, tagged with this device's ID"""
+        return self._device_logger(log)
 
     def __del__(self):
         self.close()

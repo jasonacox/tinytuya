@@ -499,13 +499,18 @@ class TestDeviceLogContext(unittest.TestCase):
         self.assertTrue(second.records[0].getMessage().startswith('[LATE_ASSIGNED_ID] '))
         self.assertEqual(second.records[0].device_id, 'LATE_ASSIGNED_ID')
 
-    def test_dropped_device_is_freed_and_adapter_logs_none(self):
-        """The adapter must not keep the device alive: dropping a device frees
-        it (and closes its socket) immediately, without the cycle collector,
-        and a record emitted after that logs [None]."""
+    def test_dropped_device_is_freed(self):
+        """Logging must not leave a device -> adapter -> device cycle: dropping a
+        device frees it (and closes its socket) immediately, without the cycle
+        collector."""
         import gc
         d = tinytuya.OutletDevice('LOGCTX_GC', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
-        adapter = d._log
+        d._send_receive = MagicMock(return_value={'dps': {'1': True}})
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG'):
+            d.status()
+        with self.assertLogs('tinytuya.core.Device', level='DEBUG'):
+            d.set_status(True)
+        del d._send_receive  # the mock holds call args, not the device
         closed = []
         d.close = lambda: closed.append(True)
         ref = weakref.ref(d)
@@ -518,10 +523,17 @@ class TestDeviceLogContext(unittest.TestCase):
         finally:
             if was_enabled:
                 gc.enable()
-        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
-            adapter.debug('emitted after the device was dropped')
-        self.assertIn('[None] ', cm.records[0].getMessage())
-        self.assertIsNone(cm.records[0].device_id)
+
+    def test_pickled_and_copied_devices_log_their_own_id(self):
+        import copy, pickle
+        d = tinytuya.OutletDevice('LOGCTX_ORIG', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
+        with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG'):
+            d._log.debug('logged before cloning')
+        for clone in (pickle.loads(pickle.dumps(d)), copy.copy(d), copy.deepcopy(d)):
+            clone.id = 'LOGCTX_CLONE'
+            with self.assertLogs('tinytuya.core.XenonDevice', level='DEBUG') as cm:
+                clone._log.debug('hello')
+            self.assertEqual(cm.records[0].device_id, 'LOGCTX_CLONE')
 
     def test_process_does_not_mutate_caller_extra(self):
         d = tinytuya.OutletDevice('LOGCTX_EXTRA', 'IP_ADDRESS_HERE', LOCAL_KEY, version=3.3)
