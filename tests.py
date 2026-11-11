@@ -936,6 +936,71 @@ class TestMonitorReliability(unittest.TestCase):
         mon.remove(dev)
         self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (4, 2))
 
+    def test_remove_or_stop_during_reconnect_keeps_the_restored_limits(self):
+        # remove()/stop() hand the device back with its own limits while the connector
+        # is mid-connect; the connector must not force them back to 0 afterwards
+        for hand_back in ('remove', 'stop'):
+            with self.subTest(hand_back=hand_back):
+                mon = self._make(reconnect_backoff=0)
+                dev = _FakeDevice('devR', retry_limit=5, send_retry_limit=3)
+                mon.add(dev)
+
+                def connect_during_hand_back(renew, mon=mon, dev=dev, hand_back=hand_back):
+                    if hand_back == 'remove':
+                        mon.remove(dev)
+                        mon._stop_event.set()  # end the connector loop, _running stays True
+                    else:
+                        mon.stop()
+                    return False
+                dev._get_socket = connect_during_hand_back
+                mon._running = True
+                mon._reconnect_queue.append(dev.id)
+                mon._run_connector()
+                self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
+
+    def test_reconnect_uses_real_limits_then_fail_fast_again(self):
+        # the blocking connect runs with the device's own limits; afterwards the
+        # monitored device is fail-fast again
+        mon = self._make(reconnect_backoff=0)
+        dev = _FakeDevice('devC2', retry_limit=5, send_retry_limit=3)
+        mon.add(dev)
+        during = []
+
+        def connect(renew):
+            during.append((dev.socketRetryLimit, dev.sendRetryLimit))
+            mon._stop_event.set()  # one attempt, then end the connector loop
+            return False
+        dev._get_socket = connect
+        mon._running = True
+        mon._reconnect_queue.append(dev.id)
+        mon._run_connector()
+        self.assertEqual(during, [(5, 3)])
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+
+    def test_readded_during_reconnect_backoff_stays_fail_fast(self):
+        # removed and added again while the connector waits out its backoff: the
+        # stale attempt must not put the old real limits on the monitored device
+        mon = self._make(reconnect_backoff=0)
+        dev = _FakeDevice('devA2', retry_limit=5, send_retry_limit=3)
+        mon.add(dev)
+        mon._running = True
+        mon._reconnect_queue.append(dev.id)
+
+        stale_connects = []
+
+        def readd_during_backoff(timeout):
+            mon.remove(dev)
+            mon.add(dev)
+            dev._get_socket = lambda renew: stale_connects.append(renew) or False
+            mon._stop_event.wait = lambda timeout: True  # then end the connector loop
+            return False
+        mon._stop_event.wait = readd_during_backoff
+        mon._run_connector()
+        self.assertEqual(stale_connects, [], 'the stale attempt must not connect')
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (0, 0))
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
+
     def test_queued_retry_limit_setter_without_a_value_is_not_saved(self):
         # a malformed call must not store None as the limit restored on removal
         mon = self._make()
@@ -2225,6 +2290,36 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(len(self._writes(fake)), 1)
         self.assertEqual(fake.connections, 1)
 
+    def test_receive_only_is_not_bounded_by_send_retry_limit(self):
+        # receive() re-sends nothing, so send_retry_limit=0 must not cut short its
+        # reconnects after a network error (a receive-only timeout returns None at once)
+        counts = []
+        for send_retry_limit in (None, 0):
+            d, fake = self._dev(connection_retry_limit=2, send_retry_limit=send_retry_limit)
+            with patch.object(d, '_receive', side_effect=ConnectionResetError(54, 'reset')), \
+                    self.assertLogs(_xenon_mod.log, logging.DEBUG):
+                self.assertEqual(d.receive()['Err'], str(ERR_CONNECT))
+            counts.append(fake.connections)
+        self.assertEqual(counts, [3, 3])  # first connect + socketRetryLimit (2) reconnects
+
+    def test_reset_after_empty_ack_still_recovers_without_resending(self):
+        # an empty ACK means the write landed, and payload is cleared, so a connection
+        # reset afterwards only listens again (socketRetryLimit), never re-sends
+        d, fake = self._dev(connection_retry_limit=2, send_retry_limit=0)
+        ack = mh.TuyaMessage(1, CMD.CONTROL, 0, b'', 0, True, mh.H.PREFIX_55AA_VALUE, None)
+        replies = iter([ack, ConnectionResetError(54, 'reset'), _socket_mod.timeout('timed out')])
+
+        def receive():
+            reply = next(replies)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+        with patch.object(d, '_receive', side_effect=receive), self.assertLogs(_xenon_mod.log, logging.DEBUG):
+            result = d.set_value(2, 77)
+        self.assertIsNone(result)  # reconnected and listened, rather than ERR_CONNECT
+        self.assertEqual(len(self._writes(fake)), 1)
+        self.assertEqual(fake.connections, 2)
+
     def test_lost_reply_default_follows_connection_retry(self):
         d, fake = self._dev(connection_retry_limit=1)
         fake.silent = True
@@ -2370,6 +2465,43 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(res['Err'], str(ERR_JSON))
         self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
         self.assertEqual(fake.dps, {'1': True, '2': 50}, 'the batch was applied before the unreadable ack')
+
+    def test_set_multiple_values_no_resend_after_post_ack_reconnect_failure(self):
+        # empty ACK (the batch landed), a reset, then a reconnect timeout (ERR_OFFLINE):
+        # the fallback must not send the first DP again once the device is back
+        d, fake = self._dev(connection_retry_limit=1, send_retry_limit=0)
+        ack = mh.TuyaMessage(1, CMD.CONTROL, 0, b'', 0, True, mh.H.PREFIX_55AA_VALUE, None)
+        connect, refuse_next = fake.connect, []
+
+        def flaky_connect():
+            if refuse_next:
+                refuse_next.pop()
+                raise _socket_mod.timeout('timed out')
+            connect()
+        fake.connect = flaky_connect
+        replies = iter([ack])
+
+        def receive():
+            reply = next(replies, None)
+            if reply is None:
+                refuse_next.append(True)  # the reconnect after this reset times out once
+                raise ConnectionResetError(54, 'reset')
+            return reply
+        with patch.object(d, '_receive', side_effect=receive), self.assertLogs(_xenon_mod.log, logging.DEBUG):
+            result = d.set_multiple_values({1: True, '2': 50})
+        self.assertEqual(result['Err'], str(tinytuya.ERR_OFFLINE))
+        self.assertEqual(len(self._writes(fake)), 1, 'no-resend policy must not fall back to a single-DP re-send')
+
+    def test_set_multiple_values_fallback_unchanged_without_send_retry_limit(self):
+        # send_retry_limit unset keeps the historical single-DP fallback, even when
+        # connection retries are 0 (the batch fails on an open, persistent socket)
+        d, fake = self._dev(persist=True)
+        self.assertNotIn('Err', d.status())
+        d.set_socketRetryLimit(0)
+        fake.raw_ack = b'{"dps": tru'
+        res = d.set_multiple_values({1: True, 2: 50})
+        self.assertEqual(res['Err'], str(ERR_JSON))
+        self.assertEqual(len(self._writes(fake)), 2, 'batch, then the first DP alone')
 
     def test_set_multiple_values_fallback_still_works_with_retries_on(self):
         d, fake = self._dev(connection_retry_limit=1)

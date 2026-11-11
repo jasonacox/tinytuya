@@ -5,7 +5,6 @@ import logging
 import time
 
 from .XenonDevice import XenonDevice, merge_dps_results
-from .error_helper import ERR_CONNECT, ERR_JSON, ERR_PAYLOAD, ERR_TIMEOUT
 from . import command_types as CT
 
 
@@ -140,13 +139,11 @@ class Device(XenonDevice):
         result = self._send_receive(payload, getresponse=(not nowait))
 
         if result and 'Err' in result and len(out) > 1:
-            if self._effective_send_retry_limit() == 0 and result['Err'] in (
-                str(ERR_CONNECT), str(ERR_TIMEOUT), str(ERR_JSON), str(ERR_PAYLOAD)):
-                # no-resend policy: a lost reply or an unreadable response may
-                # mean the write already landed, so re-sending the first DP
-                # could apply it twice.  ERR_JSON/ERR_PAYLOAD are local decode
-                # failures, not device rejections.  Return the original error
-                # instead of falling back.
+            if self._explicit_send_retry_limit() == 0:
+                # send_retry_limit=0: whatever failed, the batch may already have landed
+                # (a lost or unreadable reply, a reset after an ACK), so never re-send its
+                # DPs one at a time.  Unset keeps the historical fallback, even when
+                # socketRetryLimit is 0.
                 return result
             # sending failed! device might only be able to handle 1 DP at a time
             first_dp = next(iter( out ))
