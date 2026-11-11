@@ -1203,29 +1203,20 @@ class XenonDevice(object):
         set_socketRetryLimit())."""
         self.sendRetryLimit = limit
 
-    def _send_retry_limit(self):
-        """Resolve the payload re-send limit: None follows socketRetryLimit
-        (historical behavior), otherwise the explicit send_retry_limit."""
-        return self.socketRetryLimit if self.sendRetryLimit is None else self.sendRetryLimit
-
     def _send_retry_limit_for(self, from_child=None):
-        """Resolve the payload re-send limit for a send that may be running on
-        behalf of a child device: a child's explicit send_retry_limit wins, and
-        otherwise the limit of the device actually sending (the gateway)."""
-        child_limit = getattr(from_child, 'sendRetryLimit', None) if from_child is not None else None
-        if child_limit is not None:
-            return child_limit
-        return self._send_retry_limit()
+        """Payload re-send limit for a send by this device, possibly on behalf of a
+        child: the child's explicit send_retry_limit wins, then this device's, and
+        None follows socketRetryLimit (the historical behavior)."""
+        for dev in (from_child, self):
+            limit = getattr(dev, 'sendRetryLimit', None)
+            if limit is not None:
+                return limit
+        return self.socketRetryLimit
 
     def _effective_send_retry_limit(self):
-        """The send-retry limit that governs this device's own writes.
-
-        Mirrors _send_retry_limit_for(): when this device is a child sending
-        through its gateway, the child's explicit send_retry_limit wins and
-        otherwise the sending gateway's limit applies."""
-        if self.parent is not None:
-            return self.parent._send_retry_limit_for(self)
-        return self._send_retry_limit()
+        """The send-retry limit for this device's own writes (a child sends through its gateway)."""
+        sender = self.parent if self.parent is not None else self
+        return sender._send_retry_limit_for(self)
 
     def set_socketRetryDelay(self, delay):
         self.socketRetryDelay = delay

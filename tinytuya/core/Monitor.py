@@ -858,9 +858,9 @@ class Monitor:
                 continue
             device = state.device
             saved_attr = _DEFERRED_LIMIT_SETTERS.get(method_name)
-            if saved_attr:
+            if saved_attr and (args or 'limit' in kwargs):
                 # kept even while the device is reconnecting
-                limit = args[0] if args else kwargs.get('limit')
+                limit = args[0] if args else kwargs['limit']
                 setattr(state, saved_attr, limit)
                 log.debug('Monitor: %s(%r) on %s applies when the device leaves the monitor',
                           method_name, limit, device_id)

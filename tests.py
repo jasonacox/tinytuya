@@ -787,6 +787,16 @@ class TestMonitorReliability(unittest.TestCase):
         mon.remove(dev)
         self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (4, 2))
 
+    def test_queued_retry_limit_setter_without_a_value_is_not_saved(self):
+        # a malformed call must not store None as the limit restored on removal
+        mon = self._make()
+        dev = _FakeDevice('devN', retry_limit=5, send_retry_limit=3)
+        handle = mon.add(dev)
+        handle.set_socketRetryLimit()
+        mon._drain_queue()
+        mon.remove(dev)
+        self.assertEqual((dev.socketRetryLimit, dev.sendRetryLimit), (5, 3))
+
     def test_heartbeat_failure_disconnects_and_enqueues_reconnect(self):
         disconnects = []
         mon = self._make(auto_reconnect=True,
@@ -2162,8 +2172,8 @@ class TestSendRetryLimitWire(_WireTestCase):
         self.assertEqual(fake.dps, {'1': False, '2': 0}, 'no DP was applied twice')
 
     def test_child_default_limit_inherits_gateway_no_resend_in_fallback(self):
-        # regression: the fallback guard used to read the child's own
-        # _send_retry_limit() (its socketRetryLimit), not the effective limit
+        # regression: the fallback guard used to read the child's own limit
+        # (its socketRetryLimit), not the effective limit
         # the gateway actually enforces, so a gateway no-resend policy was
         # bypassed and the first DP of a failed batch was sent again
         fake = self.attach(FakeTuyaDevice(3.3, dev_id='GATEWAY_ID', children={'cidA': {'1': True, '2': 50}}))
