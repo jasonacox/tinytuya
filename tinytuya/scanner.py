@@ -24,6 +24,7 @@ import sys
 import time
 import errno
 import base64
+import threading
 import traceback
 import tinytuya
 
@@ -98,6 +99,26 @@ FSCAN_v33_BRUTE_FORCE_ACQUIRE = 6
 FSCAN_v31_PASSIVE_LISTEN = 7
 #FSCAN_ = 8
 FSCAN_FINAL_POLL = 100
+
+# Force-scan finds a v3.4/3.5 device's key by opening a connection and starting a session
+# negotiation with each candidate key.  Repeated failed negotiations were reported to lock
+# devices until power-cycled (#581), so a key that failed at an IP is not tried there again
+# for this many seconds, in this scan or any later one in the same process.
+_FAILED_NEGOTIATION_TTL = 3600
+_failed_negotiations = {}  # (ip, key) -> time of the failed attempt
+_failed_negotiations_lock = threading.Lock()
+
+def _negotiation_failed_recently( ip, key ):
+    with _failed_negotiations_lock:
+        failed_at = _failed_negotiations.get( (ip, key) )
+    return failed_at is not None and time.time() - failed_at < _FAILED_NEGOTIATION_TTL
+
+def _record_failed_negotiation( ip, key ):
+    now = time.time()
+    with _failed_negotiations_lock:
+        for pair in [p for p, t in _failed_negotiations.items() if now - t >= _FAILED_NEGOTIATION_TTL]:
+            del _failed_negotiations[pair]
+        _failed_negotiations[(ip, key)] = now
 
 
 # Logging
@@ -267,9 +288,10 @@ def send_discovery_request( iface_list=None ):
     return iface_list
 
 class KeyObj(object):
-    def __init__( self, gwId, key ):
+    def __init__( self, gwId, key, ip='' ):
         self.gwId = gwId
         self.key = key
+        self.ip = ip  # the devices.json IP saved with this key
         self.key_encoded = key.encode('utf8')
         self.used = False
 
@@ -411,9 +433,10 @@ class DeviceDetect(object):
             print('v3.4/5 trying key', self.ip, self.device.real_local_key)
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
-        if self.try_v35_with_v34 and self.device.version == 3.4:
+        if self.try_v35_with_v34 and self.device.version == 3.4 and tinytuya.AESCipher.CRYPTOLIB_HAS_GCM:
+            # (a 3.5 hello needs AES-GCM) same hello (and nonce) in 3.5 framing: a fresh step 1 would replace the nonce
+            # the 3.4 reply is checked against, so a correct key would be rejected
             self.device.version = 3.5
-            step1 = self.device._negotiate_session_key_generate_step_1()
             self.sock.sendall( self.device._encode_message( step1 ) )
             self.device.version = 3.4
         if self.debug:
@@ -440,6 +463,7 @@ class ForceScannedDevice(DeviceDetect):
         self.brute_force_data = []
         self.try_v35_with_v34 = True
         self.v34_connect_ok = False
+        self.second_pass = False    # brute force has moved on to already-used keys
 
         self.connect()
 
@@ -502,12 +526,24 @@ class ForceScannedDevice(DeviceDetect):
                 self.step = FSCAN_v34_BRUTE_FORCE_ACTIVE
                 self.deviceinfo['version'] = 3.4  # Assume 3.4 to start, but don't mark as confirmed
                 # Don't set ver_found = True here - only set it when we get actual response
-                self.keygen = (i for i in self.options['keylist'] if not i.used)
+                self.keygen = self._candidate_keys( include_used=False )
                 self.cur_key = next( self.keygen, None )
+                cooled_down = self.cur_key is None and any(
+                    not k.used and _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] )
+                if cooled_down:
+                    # every unused key failed here recently: go straight to the already-used keys
+                    self.second_pass = True
+                    self.keygen = self._candidate_keys( include_used=True )
+                    self.cur_key = next( self.keygen, None )
                 if self.debug:
                     print('ForceScannedDevice: Keygen gave:', self.cur_key, self.ip)
                 if self.cur_key is None:
                     self.remove = True
+                    if cooled_down:
+                        self.deviceinfo['version'] = 0.0
+                        self.message = "%s    Polling %s Skipped: every key recently failed negotiation at this IP (likely v3.4 or v3.5)" % (self.options['termcolors'].alertdim, self.ip)
+                        _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'] )
+                        self.displayed = True
                 else:
                     self.connect()
                     self.v34_connect_ok = False
@@ -697,8 +733,8 @@ class ForceScannedDevice(DeviceDetect):
 
             if msg.cmd == tinytuya.SESS_KEY_NEG_RESP:
                 if not self.v34_negotiate_sess_key_step_2( msg ):
-                    #if self.debug:
-                    print('odata:', odata)
+                    if self.debug:
+                        print('odata:', odata)
                     self.timeout()
                     return
                 self.read = False
@@ -747,7 +783,7 @@ class ForceScannedDevice(DeviceDetect):
                         if self.debug:
                             print( 'Trying brute force!' )
 
-                        self.keygen = (i for i in self.options['keylist'] if not i.used)
+                        self.keygen = self._candidate_keys( include_used=False )
                         self.v3x_brute_force_try_next_key()
                         #self.sock.sendall( self.device._encode_message( self.device.generate_payload(tinytuya.DP_QUERY) ) )
                         #self.step = FSCAN_FINAL_POLL
@@ -841,18 +877,30 @@ class ForceScannedDevice(DeviceDetect):
         self.brute_force_data = []
         return False
 
+    def _candidate_keys( self, include_used ):
+        """Keys to try, the one saved with this IP first.  For v3.4/3.5 (a negotiation per key),
+        keys that recently failed negotiation at this IP are skipped."""
+        negotiates = self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE
+        keys = sorted( self.options['keylist'], key=lambda k: k.ip != self.ip )
+        return (k for k in keys if (include_used or not k.used)
+                and not (negotiates and _negotiation_failed_recently( self.ip, k.key )))
+
     def v3x_brute_force_try_next_key( self ):
+        if self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE and self.cur_key:
+            # the device answered the connection but did not accept this key
+            _record_failed_negotiation( self.ip, self.cur_key.key )
         self.cur_key = next( self.keygen, None )
 
-        if not self.passive:
+        second_pass = self.passive or self.second_pass
+        if not second_pass:
             while self.cur_key and self.cur_key.used:
                 self.cur_key = next( self.keygen, None )
         #if self.debug and self.cur_key:
         #    print( 'ForceScannedDevice: v3.x', self.step, 'brute force got key', self.cur_key.key )
         if self.cur_key is None:
             # Keep trying.  Go through the list again but include "already-used" keys as well
-            if not self.passive:
-                self.keygen = (i for i in self.options['keylist'])
+            if not second_pass:
+                self.keygen = self._candidate_keys( include_used=True )
                 try:
                     self.cur_key = next( self.keygen, None )
                 except:
@@ -1439,7 +1487,7 @@ def devices(verbose=False, scantime=None, color=True, poll=True, forcescan=False
     for i in tuyadevices:
         # skip malformed devices.json rows instead of crashing the scan
         if isinstance(i, dict) and isinstance(i.get('id'), str) and isinstance(i.get('key'), str):
-            options['keylist'].append( KeyObj( i['id'], i['key'] ) )
+            options['keylist'].append( KeyObj( i['id'], i['key'], i.get('ip') or '' ) )
 
     configured = _ConfiguredPass( bool(poll and poll_configured), tuyadevices, options, debug_ips )
 
