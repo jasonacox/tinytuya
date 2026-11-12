@@ -434,8 +434,9 @@ class DeviceDetect(object):
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
         if self.try_v35_with_v34 and self.device.version == 3.4:
+            # same hello (and nonce) in 3.5 framing: a fresh step 1 would replace the nonce
+            # the 3.4 reply is checked against, so a correct key would be rejected
             self.device.version = 3.5
-            step1 = self.device._negotiate_session_key_generate_step_1()
             self.sock.sendall( self.device._encode_message( step1 ) )
             self.device.version = 3.4
         if self.debug:
@@ -526,6 +527,11 @@ class ForceScannedDevice(DeviceDetect):
                 # Don't set ver_found = True here - only set it when we get actual response
                 self.keygen = self._candidate_keys( include_used=False )
                 self.cur_key = next( self.keygen, None )
+                if self.cur_key is None and any( not k.used and _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] ):
+                    # every unused key failed here recently: go straight to the second pass, already-used keys
+                    self.passive = True
+                    self.keygen = self._candidate_keys( include_used=True )
+                    self.cur_key = next( self.keygen, None )
                 if self.debug:
                     print('ForceScannedDevice: Keygen gave:', self.cur_key, self.ip)
                 if self.cur_key is None:

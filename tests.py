@@ -1662,6 +1662,30 @@ class TestScannerRobustness(unittest.TestCase):
             other_ip.timeout()
             self.assertIsNotNone(other_ip.cur_key)
 
+    def test_force_scan_falls_back_to_used_keys_when_unused_ones_failed_here(self):
+        # with every unused key on cooldown at this IP, a key already matched elsewhere is still tried
+        from tinytuya import scanner
+        with patch.object(scanner, '_failed_negotiations', {}):
+            dev = self._force_scanned([('a' * 16, ''), ('b' * 16, '')])
+            dev.options['keylist'][0].used = True
+            scanner._record_failed_negotiation(dev.ip, 'b' * 16)
+            dev.timeout()
+            self.assertEqual(dev.cur_key.key, 'a' * 16)
+            dev.connect.assert_called_once()
+
+    def test_force_scan_sends_one_nonce_in_both_hello_framings(self):
+        # the 3.4 reply is checked against device.local_nonce, so both hellos must carry that nonce
+        from tinytuya import scanner
+        dev = self._force_scanned([('a' * 16, '')])
+        dev.timeout()
+        dev.device = tinytuya.OutletDevice('x' * 20, dev.ip, dev.cur_key.key, version=3.4)  # as connect() builds it
+        sent = []
+        dev.sock = MagicMock()
+        with patch.object(dev.device, '_encode_message', side_effect=lambda m: sent.append((dev.device.version, m.payload)) or b''):
+            dev.v34_negotiate_sess_key_start()
+        self.assertEqual([v for v, _ in sent], [3.4, 3.5])
+        self.assertEqual({p for _, p in sent}, {dev.device.local_nonce})
+
     def test_force_scan_connect_timeout_is_not_a_failed_negotiation(self):
         # a key is only remembered as failed when the device answered: an unreachable device is not throttled
         from tinytuya import scanner
