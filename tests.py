@@ -1584,6 +1584,26 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertEqual(scan.call_args.kwargs['wantids'], [self.DEV_ID])
         self.assertIs(scan.call_args.kwargs['tuyadevices'], rows)
 
+    def test_unfound_device_names_the_device_now_at_its_saved_ip(self):
+        # a stale saved IP that another device now answers on is named, so a key/payload error isn't misread
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+        found = {'id': 'f' * 20, 'key': LOCAL_KEY, 'name': 'Kitchen', 'ip': '192.0.2.10'}
+        rows = [found,
+                {'id': 's' * 20, 'key': LOCAL_KEY, 'name': 'Stale', 'ip': '192.0.2.10'},
+                {'id': 'g' * 20, 'key': LOCAL_KEY, 'name': 'Sub', 'ip': '192.0.2.10', 'parent': 'f' * 20, 'node_id': 'n1'},
+                {'id': 'o' * 20, 'key': LOCAL_KEY, 'name': 'Offline', 'ip': '192.0.2.99'}]
+        result = {found['id']: {'gwId': found['id'], 'name': 'Kitchen', 'ip': '192.0.2.10', 'version': '3.3',
+                                'key': LOCAL_KEY, 'mac': '', 'dps': {'dps': {'1': True}}}}
+        out = io.StringIO()
+        with patch.object(scanner, 'devices', return_value=result), redirect_stdout(out):
+            scanner.poll_and_display(rows, color=False)
+        lines = {line.split(']')[0].strip(' ['): line for line in out.getvalue().splitlines() if line.startswith('    [')}
+        self.assertTrue(lines['Stale'].endswith('No Response - saved IP now used by Kitchen (rescan or update its IP)'))
+        self.assertTrue(lines['Sub'].endswith('No Response'))      # sub-devices share the gateway IP
+        self.assertTrue(lines['Offline'].endswith('No Response'))  # nothing else at that IP: unchanged
+
     def test_poll_send_failure_is_logged_not_printed(self):
         # a device that drops the connection mid-poll is reported as "Send Poll failed", without a traceback on stdout
         import io
