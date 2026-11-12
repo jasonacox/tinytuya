@@ -2017,7 +2017,18 @@ def _build_item( old, new ):
             item[itm] = items[itm]
     return item
 
-def _display_status( item, dps, term ):
+def _stale_ip_note( row, item, found_at ):
+    """For a device not found: name the other device the scan found at its saved IP, if any.
+    Sub-devices are skipped because they share their gateway's IP."""
+    if row.get('sub') or row.get('parent') or row.get('node_id') or not item['ip']:
+        return ''
+    other = found_at.get( item['ip'] )
+    # an unidentified force-scan result (no gwId) may be this same device with a wrong key
+    if not other or not other.get('gwId') or other['gwId'] == item['gwId']:
+        return ''
+    return ' - saved IP now used by %s (rescan or update its IP)' % (other.get('name') or other.get('gwId'))
+
+def _display_status( item, dps, term, note='' ):
     name = item['name']
     if name == "":
         name = item['gwId']
@@ -2026,8 +2037,8 @@ def _display_status( item, dps, term ):
         print("    %s[%-25.25s] %sNo IP found - Battery-powered or offline%s" %
               (term.subbold, name, term.alertdim, term.normal))
     elif not dps:
-        print("    %s[%-25.25s] %s%-18s - %sNo Response" %
-              (term.subbold, name, term.dim, ip, term.alert))
+        print("    %s[%-25.25s] %s%-18s - %sNo Response%s" %
+              (term.subbold, name, term.dim, ip, term.alert, note))
     else:
         if '1' in dps or '20' in dps:
             state = term.alertdim + "[Off]" + term.dim
@@ -2246,7 +2257,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
 
     polling = []
     print("Polling local devices...")
-    # devices = sorted(data["devices"], key=lambda x: x['name'])
+    found_at = {dev['ip']: dev for dev in result.values() if dev.get('ip')}
     for idx in sorted(rows, key=_row_name):
         gwId = _get_gwid( idx )
         if gwId and gwId in result:
@@ -2257,7 +2268,7 @@ def poll_and_display( tuyadevices, color=True, scantime=None, snapshot=False, fo
                 _display_status( item, None, term )
         else:
             item = _build_item( idx, None )
-            _display_status( item, None, term )
+            _display_status( item, None, term, _stale_ip_note( idx, item, found_at ) )
         polling.append(item)
     # for loop
 

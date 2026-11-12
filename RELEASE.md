@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## Unreleased
+
+### Bug fixes
+* **Scanner output**: when a device isn't found but another device now answers at its saved IP (the router reassigned the address), the device listing from `python -m tinytuya devices` and the Wizard now says `No Response - saved IP now used by <other device>` instead of a bare `No Response`. Connecting to that saved IP fails with a confusing key, version or payload error (914/904), because a different device answers there. Sub-devices are skipped (they share their gateway's IP).
+
 ## v1.21.0 - Send Retry Control, Silent-Device Discovery & Server Security Fix
 
 ### Security
