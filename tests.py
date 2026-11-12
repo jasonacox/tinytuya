@@ -1661,15 +1661,19 @@ class TestScannerRobustness(unittest.TestCase):
             retry.connect.assert_called_once()
 
     def test_force_scan_falls_back_to_used_keys_when_unused_ones_failed_here(self):
-        # with every unused key on cooldown at this IP, a key already matched elsewhere is still tried
+        # with every unused key on cooldown at this IP, keys already matched elsewhere are still tried,
+        # without going passive (a passive device doesn't keep the scan running for its reply)
         from tinytuya import scanner
         with patch.object(scanner, '_failed_negotiations', {}):
-            dev = self._force_scanned([('a' * 16, ''), ('b' * 16, '')])
-            dev.options['keylist'][0].used = True
+            dev = self._force_scanned([('a' * 16, ''), ('b' * 16, ''), ('c' * 16, '')])
+            dev.options['keylist'][0].used = dev.options['keylist'][2].used = True
             scanner._record_failed_negotiation(dev.ip, 'b' * 16)
             dev.timeout()
             self.assertEqual(dev.cur_key.key, 'a' * 16)
-            dev.connect.assert_called_once()
+            self.assertFalse(dev.passive)
+            dev.timeout(True)  # rejected: on to the next used key
+            self.assertEqual(dev.cur_key.key, 'c' * 16)
+            self.assertEqual(dev.connect.call_count, 2)
 
     def _negotiate(self, fake):
         # one real force-scan key negotiation against `fake`: both hellos in, its reply through read_data()
@@ -1691,7 +1695,7 @@ class TestScannerRobustness(unittest.TestCase):
     def test_force_scan_negotiates_the_right_key_on_the_wire(self):
         # both hellos must carry the nonce the reply is checked against (a second step 1 replaced it)
         from tinytuya import scanner
-        for version in (3.4, 3.5):
+        for version in (3.4, 3.5) if HAS_GCM else (3.4,):  # 3.5 needs AES-GCM
             with self.subTest(version=version), patch.object(scanner, '_failed_negotiations', {}):
                 fake = FakeTuyaDevice(version)
                 dev = self._negotiate(fake)

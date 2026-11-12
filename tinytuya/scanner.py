@@ -433,8 +433,8 @@ class DeviceDetect(object):
             print('v3.4/5 trying key', self.ip, self.device.real_local_key)
         step1 = self.device._negotiate_session_key_generate_step_1()
         self.sock.sendall( self.device._encode_message( step1 ) )
-        if self.try_v35_with_v34 and self.device.version == 3.4:
-            # same hello (and nonce) in 3.5 framing: a fresh step 1 would replace the nonce
+        if self.try_v35_with_v34 and self.device.version == 3.4 and tinytuya.AESCipher.CRYPTOLIB_HAS_GCM:
+            # (a 3.5 hello needs AES-GCM) same hello (and nonce) in 3.5 framing: a fresh step 1 would replace the nonce
             # the 3.4 reply is checked against, so a correct key would be rejected
             self.device.version = 3.5
             self.sock.sendall( self.device._encode_message( step1 ) )
@@ -463,6 +463,7 @@ class ForceScannedDevice(DeviceDetect):
         self.brute_force_data = []
         self.try_v35_with_v34 = True
         self.v34_connect_ok = False
+        self.second_pass = False    # brute force has moved on to already-used keys
 
         self.connect()
 
@@ -530,9 +531,8 @@ class ForceScannedDevice(DeviceDetect):
                 cooled_down = self.cur_key is None and any(
                     not k.used and _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] )
                 if cooled_down:
-                    # every unused key failed here recently: go straight to the second pass
-                    # (already-used keys), setting passive as v3x_brute_force_try_next_key() does
-                    self.passive = True
+                    # every unused key failed here recently: go straight to the already-used keys
+                    self.second_pass = True
                     self.keygen = self._candidate_keys( include_used=True )
                     self.cur_key = next( self.keygen, None )
                 if self.debug:
@@ -891,14 +891,15 @@ class ForceScannedDevice(DeviceDetect):
             _record_failed_negotiation( self.ip, self.cur_key.key )
         self.cur_key = next( self.keygen, None )
 
-        if not self.passive:
+        second_pass = self.passive or self.second_pass
+        if not second_pass:
             while self.cur_key and self.cur_key.used:
                 self.cur_key = next( self.keygen, None )
         #if self.debug and self.cur_key:
         #    print( 'ForceScannedDevice: v3.x', self.step, 'brute force got key', self.cur_key.key )
         if self.cur_key is None:
             # Keep trying.  Go through the list again but include "already-used" keys as well
-            if not self.passive:
+            if not second_pass:
                 self.keygen = self._candidate_keys( include_used=True )
                 try:
                     self.cur_key = next( self.keygen, None )
