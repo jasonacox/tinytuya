@@ -2023,7 +2023,8 @@ def _stale_ip_note( row, item, found_at ):
     if row.get('sub') or row.get('parent') or row.get('node_id') or not item['ip']:
         return ''
     other = found_at.get( item['ip'] )
-    if not other or other.get('gwId') == item['gwId']:
+    # an unidentified force-scan result (no gwId) may be this same device with a wrong key
+    if not other or not other.get('gwId') or other['gwId'] == item['gwId']:
         return ''
     return ' - saved IP now used by %s (rescan or update its IP)' % (other.get('name') or other.get('gwId'))
 

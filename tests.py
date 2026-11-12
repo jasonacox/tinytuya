@@ -1593,9 +1593,12 @@ class TestScannerRobustness(unittest.TestCase):
         rows = [found,
                 {'id': 's' * 20, 'key': LOCAL_KEY, 'name': 'Stale', 'ip': '192.0.2.10'},
                 {'id': 'g' * 20, 'key': LOCAL_KEY, 'name': 'Sub', 'ip': '192.0.2.10', 'parent': 'f' * 20, 'node_id': 'n1'},
-                {'id': 'o' * 20, 'key': LOCAL_KEY, 'name': 'Offline', 'ip': '192.0.2.99'}]
+                {'id': 'o' * 20, 'key': LOCAL_KEY, 'name': 'Offline', 'ip': '192.0.2.99'},
+                {'id': 'u' * 20, 'key': LOCAL_KEY, 'name': 'WrongKey', 'ip': '192.0.2.20'}]
         result = {found['id']: {'gwId': found['id'], 'name': 'Kitchen', 'ip': '192.0.2.10', 'version': '3.3',
-                                'key': LOCAL_KEY, 'mac': '', 'dps': {'dps': {'1': True}}}}
+                                'key': LOCAL_KEY, 'mac': '', 'dps': {'dps': {'1': True}}},
+                  # a force-scan answer it could not identify: maybe WrongKey itself, so no reassignment claim
+                  '192.0.2.20': {'gwId': '', 'name': '', 'ip': '192.0.2.20', 'version': '3.3', 'key': '', 'mac': ''}}
         out = io.StringIO()
         with patch.object(scanner, 'devices', return_value=result), redirect_stdout(out):
             scanner.poll_and_display(rows, color=False)
@@ -1603,6 +1606,7 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertTrue(lines['Stale'].endswith('No Response - saved IP now used by Kitchen (rescan or update its IP)'))
         self.assertTrue(lines['Sub'].endswith('No Response'))      # sub-devices share the gateway IP
         self.assertTrue(lines['Offline'].endswith('No Response'))  # nothing else at that IP: unchanged
+        self.assertTrue(lines['WrongKey'].endswith('No Response'))  # unidentified answer at that IP: unchanged
 
     def test_poll_send_failure_is_logged_not_printed(self):
         # a device that drops the connection mid-poll is reported as "Send Poll failed", without a traceback on stdout
