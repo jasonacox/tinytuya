@@ -1608,6 +1608,71 @@ class TestScannerRobustness(unittest.TestCase):
         self.assertTrue(lines['Offline'].endswith('No Response'))  # nothing else at that IP: unchanged
         self.assertTrue(lines['WrongKey'].endswith('No Response'))  # unidentified answer at that IP: unchanged
 
+    def _force_scanned(self, keys, ip='192.0.2.40'):
+        # a ForceScannedDevice with its network calls stubbed out, ready to brute-force a v3.4 key
+        import io
+        from tinytuya import scanner
+        term = scanner.TermColors(*tinytuya.termcolor(False))
+        options = {'retries': 2, 'connect_timeout': 1, 'verbose': True, 'termcolors': term, 'tuyadevices': [],
+                   'keylist': [scanner.KeyObj(k, k, kip) for k, kip in keys]}
+        with patch.object(scanner.ForceScannedDevice, 'connect'):
+            dev = scanner.ForceScannedDevice(ip, None, options, False)
+        dev.connect = MagicMock()
+        dev.step = scanner.FSCAN_INITIAL_CONNECT
+        dev.retries = 2
+        dev.deviceinfo['dev_type'] = 'device22'  # skip the device22 retry: go straight to v3.4 key negotiation
+        return dev
+
+    def test_force_scan_does_not_renegotiate_a_failed_key(self):
+        # #581: each v3.4/3.5 key costs a connection and a session negotiation, and repeated
+        # failures can lock a device, so a key that failed at an IP is not retried there for an hour
+        import io
+        from contextlib import redirect_stdout
+        from tinytuya import scanner
+        keys = [('a' * 16, '192.0.2.9'), ('b' * 16, '192.0.2.40'), ('c' * 16, '')]
+        now = [1000.0]
+        with patch.object(scanner, '_failed_negotiations', {}), \
+                patch.object(scanner.time, 'time', side_effect=lambda: now[0]), redirect_stdout(io.StringIO()) as out:
+            dev = self._force_scanned(keys)
+            dev.timeout()
+            self.assertEqual(dev.cur_key.key, 'b' * 16)  # the key saved with this IP goes first
+            tried = [dev.cur_key.key]
+            while not dev.remove:
+                dev.timeout(True)  # the device closed the connection: key rejected
+                if dev.cur_key:
+                    tried.append(dev.cur_key.key)
+            self.assertEqual(tried, ['b' * 16, 'a' * 16, 'c' * 16])  # once each, no second pass of failed keys
+            self.assertEqual(dev.connect.call_count, 3)
+
+            later = self._force_scanned(keys)  # the next scan, 2 minutes later
+            now[0] += 120
+            later.timeout()
+            self.assertTrue(later.remove)
+            later.connect.assert_not_called()
+            self.assertIn('Skipped: its keys failed negotiation here within the last hour', out.getvalue())
+
+            now[0] += scanner._FAILED_NEGOTIATION_TTL  # after an hour the keys are tried again
+            retry = self._force_scanned(keys)
+            retry.timeout()
+            self.assertEqual(retry.cur_key.key, 'b' * 16)
+            retry.connect.assert_called_once()
+
+            other_ip = self._force_scanned(keys, ip='192.0.2.41')  # the memory is per IP
+            now[0] -= scanner._FAILED_NEGOTIATION_TTL
+            other_ip.timeout()
+            self.assertIsNotNone(other_ip.cur_key)
+
+    def test_force_scan_connect_timeout_is_not_a_failed_negotiation(self):
+        # a key is only remembered as failed when the device answered: an unreachable device is not throttled
+        from tinytuya import scanner
+        with patch.object(scanner, '_failed_negotiations', {}):
+            dev = self._force_scanned([('a' * 16, '')])
+            dev.timeout()
+            for _ in range(3):
+                dev.timeout()  # connect timed out
+            self.assertTrue(dev.remove)
+            self.assertEqual(scanner._failed_negotiations, {})
+
     def test_poll_send_failure_is_logged_not_printed(self):
         # a device that drops the connection mid-poll is reported as "Send Poll failed", without a traceback on stdout
         import io

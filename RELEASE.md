@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Bug fixes
+* **Force-scan no longer repeats failed key negotiations**: force-scan finds a v3.4/3.5 device's key by opening a connection and starting a session negotiation with each key in `devices.json`, and repeated failed negotiations can lock a device until it is power-cycled. A key that failed at an IP is now not tried there again for an hour, in the same scan or a later one in the same process. A service that force-scans every few minutes no longer re-knocks with every key each time. Force-scan also tries the key saved for that IP first, so a device at its saved address is usually identified on the first attempt. A stray debug print of raw device data on every rejected key is now shown only with debug on. See [#581](https://github.com/jasonacox/tinytuya/issues/581) (forensics by @MarkCupitt, reported by @hluhome).
 * **Scanner output**: when a device isn't found but another device now answers at its saved IP (the router reassigned the address), the device listing from `python -m tinytuya devices` and the Wizard now says `No Response - saved IP now used by <other device>` instead of a bare `No Response`. Connecting to that saved IP fails with a confusing key, version or payload error (914/904), because a different device answers there. Sub-devices are skipped (they share their gateway's IP).
 
 ## v1.21.0 - Send Retry Control, Silent-Device Discovery & Server Security Fix
