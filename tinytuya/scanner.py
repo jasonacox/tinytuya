@@ -101,9 +101,9 @@ FSCAN_v31_PASSIVE_LISTEN = 7
 FSCAN_FINAL_POLL = 100
 
 # Force-scan finds a v3.4/3.5 device's key by opening a connection and starting a session
-# negotiation with each candidate key.  Repeated failed negotiations can lock a device until
-# it is power-cycled (#581), so a key that failed at an IP is not tried there again for
-# this many seconds, in this scan or any later one in the same process.
+# negotiation with each candidate key.  Repeated failed negotiations were reported to lock
+# devices until power-cycled (#581), so a key that failed at an IP is not tried there again
+# for this many seconds, in this scan or any later one in the same process.
 _FAILED_NEGOTIATION_TTL = 3600
 _failed_negotiations = {}  # (ip, key) -> time of the failed attempt
 _failed_negotiations_lock = threading.Lock()
@@ -527,8 +527,11 @@ class ForceScannedDevice(DeviceDetect):
                 # Don't set ver_found = True here - only set it when we get actual response
                 self.keygen = self._candidate_keys( include_used=False )
                 self.cur_key = next( self.keygen, None )
-                if self.cur_key is None and any( not k.used and _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] ):
-                    # every unused key failed here recently: go straight to the second pass, already-used keys
+                cooled_down = self.cur_key is None and any(
+                    not k.used and _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] )
+                if cooled_down:
+                    # every unused key failed here recently: go straight to the second pass
+                    # (already-used keys), setting passive as v3x_brute_force_try_next_key() does
                     self.passive = True
                     self.keygen = self._candidate_keys( include_used=True )
                     self.cur_key = next( self.keygen, None )
@@ -536,9 +539,9 @@ class ForceScannedDevice(DeviceDetect):
                     print('ForceScannedDevice: Keygen gave:', self.cur_key, self.ip)
                 if self.cur_key is None:
                     self.remove = True
-                    if any( _negotiation_failed_recently( self.ip, k.key ) for k in self.options['keylist'] ):
+                    if cooled_down:
                         self.deviceinfo['version'] = 0.0
-                        self.message = "%s    Polling %s Skipped: its keys failed negotiation here within the last hour (likely v3.4 or v3.5)" % (self.options['termcolors'].alertdim, self.ip)
+                        self.message = "%s    Polling %s Skipped: every key recently failed negotiation at this IP (likely v3.4 or v3.5)" % (self.options['termcolors'].alertdim, self.ip)
                         _print_device_info( self.deviceinfo, 'Failed to Force-Scan', self.options['termcolors'], self.message, self.options['verbose'] )
                         self.displayed = True
                 else:
@@ -877,10 +880,10 @@ class ForceScannedDevice(DeviceDetect):
     def _candidate_keys( self, include_used ):
         """Keys to try, the one saved with this IP first.  For v3.4/3.5 (a negotiation per key),
         keys that recently failed negotiation at this IP are skipped."""
-        v34 = self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE
+        negotiates = self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE
         keys = sorted( self.options['keylist'], key=lambda k: k.ip != self.ip )
         return (k for k in keys if (include_used or not k.used)
-                and not (v34 and _negotiation_failed_recently( self.ip, k.key )))
+                and not (negotiates and _negotiation_failed_recently( self.ip, k.key )))
 
     def v3x_brute_force_try_next_key( self ):
         if self.step == FSCAN_v34_BRUTE_FORCE_ACTIVE and self.cur_key:

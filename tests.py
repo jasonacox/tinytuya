@@ -1610,7 +1610,6 @@ class TestScannerRobustness(unittest.TestCase):
 
     def _force_scanned(self, keys, ip='192.0.2.40'):
         # a ForceScannedDevice with its network calls stubbed out, ready to brute-force a v3.4 key
-        import io
         from tinytuya import scanner
         term = scanner.TermColors(*tinytuya.termcolor(False))
         options = {'retries': 2, 'connect_timeout': 1, 'verbose': True, 'termcolors': term, 'tuyadevices': [],
@@ -1625,7 +1624,7 @@ class TestScannerRobustness(unittest.TestCase):
 
     def test_force_scan_does_not_renegotiate_a_failed_key(self):
         # #581: each v3.4/3.5 key costs a connection and a session negotiation, and repeated
-        # failures can lock a device, so a key that failed at an IP is not retried there for an hour
+        # failures were reported to lock devices, so a key that failed at an IP is not retried there for an hour
         import io
         from contextlib import redirect_stdout
         from tinytuya import scanner
@@ -1649,18 +1648,17 @@ class TestScannerRobustness(unittest.TestCase):
             later.timeout()
             self.assertTrue(later.remove)
             later.connect.assert_not_called()
-            self.assertIn('Skipped: its keys failed negotiation here within the last hour', out.getvalue())
+            self.assertIn('Skipped: every key recently failed negotiation at this IP', out.getvalue())
+
+            other_ip = self._force_scanned(keys, ip='192.0.2.41')  # the memory is per IP
+            other_ip.timeout()
+            self.assertIsNotNone(other_ip.cur_key)
 
             now[0] += scanner._FAILED_NEGOTIATION_TTL  # after an hour the keys are tried again
             retry = self._force_scanned(keys)
             retry.timeout()
             self.assertEqual(retry.cur_key.key, 'b' * 16)
             retry.connect.assert_called_once()
-
-            other_ip = self._force_scanned(keys, ip='192.0.2.41')  # the memory is per IP
-            now[0] -= scanner._FAILED_NEGOTIATION_TTL
-            other_ip.timeout()
-            self.assertIsNotNone(other_ip.cur_key)
 
     def test_force_scan_falls_back_to_used_keys_when_unused_ones_failed_here(self):
         # with every unused key on cooldown at this IP, a key already matched elsewhere is still tried
@@ -1673,18 +1671,56 @@ class TestScannerRobustness(unittest.TestCase):
             self.assertEqual(dev.cur_key.key, 'a' * 16)
             dev.connect.assert_called_once()
 
-    def test_force_scan_sends_one_nonce_in_both_hello_framings(self):
-        # the 3.4 reply is checked against device.local_nonce, so both hellos must carry that nonce
-        from tinytuya import scanner
-        dev = self._force_scanned([('a' * 16, '')])
+    def _negotiate(self, fake):
+        # one real force-scan key negotiation against `fake`: both hellos in, its reply through read_data()
+        dev = self._force_scanned([(LOCAL_KEY, '')])
         dev.timeout()
-        dev.device = tinytuya.OutletDevice('x' * 20, dev.ip, dev.cur_key.key, version=3.4)  # as connect() builds it
+        dev.device = tinytuya.OutletDevice('x' * 20, dev.ip, LOCAL_KEY, version=3.4)  # as connect() builds it
+        dev.v34_connect_ok = True  # as write_data() sets once the connection is up
         sent = []
-        dev.sock = MagicMock()
-        with patch.object(dev.device, '_encode_message', side_effect=lambda m: sent.append((dev.device.version, m.payload)) or b''):
-            dev.v34_negotiate_sess_key_start()
-        self.assertEqual([v for v, _ in sent], [3.4, 3.5])
-        self.assertEqual({p for _, p in sent}, {dev.device.local_nonce})
+        dev.sock = MagicMock(sendall=sent.append)
+        fake.connect()
+        dev.v34_negotiate_sess_key_start()
+        dev.sock.recv.return_value = b''.join(fake.receive_bytes(frame) for frame in sent)
+        sent.clear()
+        dev.read_data()
+        for frame in sent:  # the client's finish step, which the fake checks
+            fake.receive_bytes(frame)
+        return dev
+
+    def test_force_scan_negotiates_the_right_key_on_the_wire(self):
+        # both hellos must carry the nonce the reply is checked against (a second step 1 replaced it)
+        from tinytuya import scanner
+        for version in (3.4, 3.5):
+            with self.subTest(version=version), patch.object(scanner, '_failed_negotiations', {}):
+                fake = FakeTuyaDevice(version)
+                dev = self._negotiate(fake)
+                self.assertEqual((dev.step, dev.deviceinfo['key'], dev.deviceinfo['version']),
+                                 (scanner.FSCAN_FINAL_POLL, LOCAL_KEY, version))
+                self.assertEqual(fake.negotiations, 1)
+                self.assertEqual(scanner._failed_negotiations, {})
+
+    def test_force_scan_records_a_rejected_negotiation(self):
+        from tinytuya import scanner
+        with patch.object(scanner, '_failed_negotiations', {}):
+            fake = FakeTuyaDevice(3.4)
+            fake.forge_hmac = True  # the device's reply doesn't prove it holds this key
+            dev = self._negotiate(fake)
+            self.assertNotEqual(dev.step, scanner.FSCAN_FINAL_POLL)
+            self.assertEqual(list(scanner._failed_negotiations), [(dev.ip, LOCAL_KEY)])
+
+    def test_force_scan_v31_keys_are_not_throttled(self):
+        # v3.1 brute force needs no negotiation, so it neither records nor skips failed keys
+        from tinytuya import scanner
+        with patch.object(scanner, '_failed_negotiations', {}):
+            dev = self._force_scanned([('a' * 16, ''), ('b' * 16, '')])
+            scanner._record_failed_negotiation(dev.ip, 'b' * 16)
+            dev.step = scanner.FSCAN_v31_BRUTE_FORCE_ACTIVE
+            dev.keygen = dev._candidate_keys(include_used=False)
+            dev.cur_key = next(dev.keygen)
+            dev.v3x_brute_force_try_next_key()
+            self.assertEqual(dev.cur_key.key, 'b' * 16)
+            self.assertEqual(list(scanner._failed_negotiations), [(dev.ip, 'b' * 16)])
 
     def test_force_scan_connect_timeout_is_not_a_failed_negotiation(self):
         # a key is only remembered as failed when the device answered: an unreachable device is not throttled
