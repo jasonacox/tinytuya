@@ -935,6 +935,9 @@ class BulbDevice(Device):
         for k in self.dpset:
             if k in mapping:
                 self.dpset[k] = mapping[k]
+            elif k[:6] == 'value_' and k in default_dpset:
+                # the value_* placeholders from __init__() are not None, so always take the type's defaults
+                self.dpset[k] = default_dpset[k]
             elif self.dpset[k] is None:
                 dp = default_dpset.get(k, None)
                 self.dpset[k] = str(dp) if (dp and k[:6] != 'value_') else dp

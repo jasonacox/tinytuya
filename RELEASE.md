@@ -1,5 +1,10 @@
 # RELEASE NOTES
 
+## Unreleased
+
+### Bug fixes
+* **BulbDevice**: `set_bulb_type()` now applies the bulb type's brightness range and colour format. Before, `set_white()`, `set_brightness()`, `set_colourtemp()` and the percentage helpers raised `ValueError` after a manual `set_bulb_type()`, and Type A/C bulbs were sent hsv16 colours. Via [#775](https://github.com/jasonacox/tinytuya/pull/775) by @imsurya26.
+
 ## v1.21.1 - Force-Scan Fixes
 
 ### Bug fixes
