@@ -268,6 +268,18 @@ class TestXenonDevice(unittest.TestCase):
         self.assertEqual(result_cmd, expected_cmd)
         self.assertDictEqual(result_payload, expected_payload)
 
+    def test_set_bulb_type_value_defaults(self):
+        # set_bulb_type() must apply the type's value range and colour format, not the -1/hsv16 placeholders
+        for bulb_type, vmin, vmax, fmt in (('A', 25, 255, 'rgb8'), ('B', 10, 1000, 'hsv16'), ('C', 25, 255, 'rgb8')):
+            d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
+            d.set_bulb_type(bulb_type)
+            self.assertEqual((d.dpset['value_min'], d.dpset['value_max'], d.dpset['value_hexformat']), (vmin, vmax, fmt))
+        d.set_version(3.1)
+        d._send_receive = MagicMock(return_value={})
+        d.set_white(vmax, 0)
+        _, result_payload = get_results_from_mock(d)
+        self.assertEqual(result_payload['dps']['2'], vmax)
+
     def test_not_a_bulb(self):
         d = tinytuya.BulbDevice('DEVICE_ID_HERE', 'IP_ADDRESS_HERE', LOCAL_KEY)
         d.status = lambda nowait=False: {"devId":"DEVICE_ID","dps":{"1": False}} # tell it which commands to support and which DPs need updating
